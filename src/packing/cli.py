@@ -1,0 +1,1126 @@
+"""Command line interface.
+
+Everything except ``run``/``pilot``/``select-model`` works with no API key, so the
+design, the estimators, and the cost projection can all be reviewed before any
+money is spent.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import click
+import pandas as pd
+from dotenv import load_dotenv
+from rich.console import Console
+from rich.table import Table
+
+from . import analyze, calibrate as calib, cost, design, power
+from .corrupt import CORRUPTIONS
+from .corrupt_extra import EXTRA_CORRUPTIONS
+from .criteria import HELPSTEER2_CRITERIA, get_criteria
+from .synthetic_criteria import SYNTHETIC_ONLY_CRITERIA
+from .dataset import (
+    build_corrupted_items,
+    fetch as fetch_dataset,
+    filter_min_scoreable,
+    read_jsonl,
+    scoreable_report,
+    write_jsonl,
+)
+from .partition import nominal_levels
+from .providers.base import CATALOG, get_provider
+from .runner import (
+    estimate,
+    execute,
+    execute_concurrent,
+    plan_balanced,
+    plan_targeted_blocks,
+    project_cost,
+    read_records,
+)
+from .score import tie_rates
+
+console = Console()
+DEFAULT_TARGET = 7
+
+
+def _run_dir(name: str) -> Path:
+    return Path("runs") / name
+
+
+def _load_run(name: str):
+    directory = _run_dir(name)
+    items_path = directory / "items.jsonl"
+    calls_path = directory / "calls.jsonl"
+    meta_path = directory / "meta.json"
+    if not items_path.exists() or not calls_path.exists():
+        raise click.ClickException(
+            f"run {name!r} is incomplete; expected {items_path} and {calls_path}"
+        )
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    items = read_jsonl(items_path)
+    dataset = meta.get("dataset", "helpsteer2")
+    criteria = ALL_CRITERIA if dataset == "synthetic" else get_criteria(dataset)
+    records = list(read_records(calls_path))
+    return items, criteria, records, meta
+
+
+def _show(frame: pd.DataFrame, title: str) -> None:
+    if frame is None or len(frame) == 0:
+        console.print(f"[yellow]{title}: no rows[/yellow]")
+        return
+    console.print(f"\n[bold]{title}[/bold]")
+    console.print(frame.to_string())
+
+
+# Loads a .env from the project root into the environment if present. Values are
+# never read back out or printed anywhere in this CLI -- `doctor` reports only
+# whether a variable is set, never any part of its contents.
+load_dotenv()
+
+
+@click.group()
+def cli() -> None:
+    """Does judge accuracy degrade as you pack more criteria into one call?"""
+
+
+# ---------------------------------------------------------------- doctor -----
+
+# Which env var each provider reads, so `doctor` can tell you what is missing
+# for the model you actually intend to use.
+PROVIDER_ENV: dict[str, tuple[str, ...]] = {
+    "openai": ("OPENAI_API_KEY",),
+    "gemini": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    "anthropic": ("ANTHROPIC_API_KEY",),
+    "mock": (),
+}
+
+
+@cli.command()
+def doctor() -> None:
+    """Pre-flight check: credentials, versions, and data, before spending anything.
+
+    Reports only whether a credential is SET. It never prints any part of a key,
+    and nothing here writes to the network.
+    """
+    import os
+    import sys
+    from importlib.metadata import PackageNotFoundError, version
+
+    console.print(f"python           {sys.version.split()[0]}")
+    console.print(f"env file         {'.env found' if Path('.env').exists() else 'no .env (using shell environment)'}")
+
+    console.print("\n[bold]credentials[/bold] (presence only; values are never read or shown)")
+    for provider, variables in PROVIDER_ENV.items():
+        if not variables:
+            continue
+        found = [v for v in variables if os.environ.get(v)]
+        if found:
+            console.print(f"  {provider:<10} [green]SET[/green]   via {', '.join(found)}")
+        else:
+            console.print(
+                f"  {provider:<10} [red]unset[/red] expected one of: {', '.join(variables)}"
+            )
+
+    console.print("\n[bold]sdk versions[/bold]")
+    for package in ("openai", "google-genai", "anthropic", "datasets", "statsmodels", "scipy", "pandas"):
+        try:
+            console.print(f"  {package:<14} {version(package)}")
+        except PackageNotFoundError:
+            optional = package in {"google-genai", "anthropic"}
+            note = "not installed (optional extra)" if optional else "[red]MISSING[/red]"
+            console.print(f"  {package:<14} {note}")
+
+    console.print("\n[bold]models available[/bold]")
+    for model, entry in CATALOG.items():
+        provider = entry["provider"]
+        variables = PROVIDER_ENV.get(provider, ())
+        ready = provider == "mock" or any(os.environ.get(v) for v in variables)
+        mark = "[green]ready[/green]" if ready else "[yellow]needs credential[/yellow]"
+        console.print(
+            f"  {model:<24} {provider:<10} ${entry['in']:.2f}/${entry['out']:.2f} per 1M  {mark}"
+        )
+
+    console.print("\n[bold]data[/bold]")
+    data_dir = Path("data")
+    files = sorted(data_dir.glob("*.jsonl")) if data_dir.exists() else []
+    if not files:
+        console.print("  [yellow]none; run `packing fetch --dataset helpsteer2 --min-scoreable 4`[/yellow]")
+    for path in files:
+        count = sum(1 for _ in path.open())
+        console.print(f"  {path}  {count} items")
+
+    console.print(
+        "\n[dim]Nothing above sent a request. Next: `packing run --dry-run` to cost a run, "
+        "then `packing select-model` for Gate 0.[/dim]"
+    )
+
+
+# ----------------------------------------------------------------- fetch -----
+
+
+@cli.command()
+@click.option("--dataset", default="helpsteer2", show_default=True)
+@click.option("--limit", type=int, default=None, help="Max items to keep.")
+@click.option("--out", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--min-scoreable",
+    type=int,
+    default=0,
+    show_default=True,
+    help="Keep only items with at least this many non-tied criteria (0 = keep all).",
+)
+def fetch(dataset: str, limit: int | None, out: Path | None, min_scoreable: int) -> None:
+    """Download a substrate and normalise it to paired items."""
+    out = out or Path("data") / f"{dataset}.jsonl"
+    criteria = get_criteria(dataset)
+    with console.status(f"fetching {dataset}..."):
+        items = fetch_dataset(dataset, limit=limit)
+
+    before = len(items)
+    if min_scoreable:
+        items = filter_min_scoreable(items, criteria, min_scoreable)
+        console.print(
+            f"filter >= {min_scoreable} scoreable criteria: kept "
+            f"[bold]{len(items)}[/bold] of {before} ({len(items)/max(1,before):.1%})"
+        )
+
+    write_jsonl(items, out)
+    console.print(f"[green]wrote {len(items)} paired items to {out}[/green]")
+
+
+# ---------------------------------------------------------------- design -----
+
+
+@cli.command()
+@click.option("--dataset", default="helpsteer2", show_default=True)
+@click.option("--target", type=int, default=DEFAULT_TARGET, show_default=True)
+def design_cmd(dataset: str, target: int) -> None:
+    """Show design balance across group sizes, and the replicate allocation."""
+    criteria = get_criteria(dataset)
+    k = len(criteria)
+
+    baseline = design.observations_per_replicate(k)
+    replicates = design.suggest_replicates(k, target)
+    projected = design.projected_observations(k, replicates)
+
+    table = Table(title=f"K={k} design balance (observations per item, per side)")
+    table.add_column("group size", justify="right")
+    table.add_column("naive (1 rep/level)", justify="right")
+    table.add_column(f"balanced (target {target})", justify="right")
+    for size in sorted(projected):
+        table.add_row(str(size), str(baseline.get(size, 0)), str(projected[size]))
+    console.print(table)
+    console.print(
+        f"naive imbalance max/min = [bold]{design.balance_ratio(baseline):.2f}[/bold]  ->  "
+        f"balanced = [bold]{design.balance_ratio(projected):.2f}[/bold]"
+    )
+    console.print(f"replicate allocation per nominal level: {replicates}")
+
+
+cli.add_command(design_cmd, name="design")
+
+
+# ------------------------------------------------------------------- run -----
+
+
+def _prepare(dataset: str, items_path: Path, limit: int | None):
+    if not items_path.exists():
+        raise click.ClickException(
+            f"{items_path} not found; run `packing fetch --dataset {dataset}` first"
+        )
+    items = read_jsonl(items_path)
+    if limit:
+        items = items[:limit]
+    if not items:
+        raise click.ClickException("no items to run")
+    return items, get_criteria(dataset)
+
+
+@cli.command()
+@click.option("--dataset", default="helpsteer2", show_default=True)
+@click.option("--items", "items_path", type=click.Path(path_type=Path), default=None)
+@click.option("--model", default="gpt-5-mini", show_default=True)
+@click.option("--name", default="run", show_default=True, help="Run directory name.")
+@click.option("--limit", type=int, default=None, help="Max items.")
+@click.option("--target", type=int, default=DEFAULT_TARGET, show_default=True)
+@click.option("--replicates", "replicate_spec", default="", help='e.g. "3:4,5:2"')
+@click.option("--levels", default="", help='Restrict nominal levels, e.g. "1,5"')
+@click.option("--dry-run", is_flag=True, help="Plan and cost only; no API calls.")
+@click.option("--max-failures", type=int, default=25, show_default=True)
+@click.option(
+    "--workers",
+    type=int,
+    default=8,
+    show_default=True,
+    help="Concurrent judge calls. Calls are IO-bound; 1 forces serial.",
+)
+def run(
+    dataset: str,
+    items_path: Path | None,
+    model: str,
+    name: str,
+    limit: int | None,
+    target: int,
+    replicate_spec: str,
+    levels: str,
+    dry_run: bool,
+    max_failures: int,
+    workers: int,
+) -> None:
+    """Execute (or cost out) the sweep."""
+    items_path = items_path or Path("data") / f"{dataset}.jsonl"
+    items, criteria = _prepare(dataset, items_path, limit)
+    k = len(criteria)
+
+    swept = (
+        tuple(int(x) for x in levels.split(",") if x.strip())
+        if levels.strip()
+        else nominal_levels(k)
+    )
+    if replicate_spec.strip():
+        allocation = design.parse_replicate_spec(replicate_spec, swept)
+    else:
+        suggested = design.suggest_replicates(k, target, levels=swept)
+        allocation = {n: suggested[n] for n in swept}
+
+    specs = plan_balanced(items, criteria, model=model, replicates=allocation)
+    est = estimate(specs)
+    entry = CATALOG.get(model, {"in": 0.0, "out": 0.0})
+    projection = project_cost(est, entry["in"], entry["out"])
+
+    console.print(f"[bold]{len(items)}[/bold] items, K={k}, levels={swept}")
+    console.print(f"replicates per level: {allocation}")
+    console.print(
+        f"observations per group size: "
+        f"{design.projected_observations(k, allocation, levels=swept)}"
+    )
+    console.print(f"calls: [bold]{est['calls']}[/bold]  ({est['calls']/len(items):.1f}/item)")
+    console.print(
+        f"est input tokens {est['est_input_tokens']:,}, "
+        f"output ceiling {est['est_output_tokens_ceiling']:,}"
+    )
+    console.print(
+        f"[bold]cost ceiling ${projection['usd_total_ceiling']:.2f}[/bold] "
+        f"(input ${projection['usd_input']:.2f} + output ceiling "
+        f"${projection['usd_output_ceiling']:.2f}); actual output will be lower"
+    )
+
+    if dry_run:
+        console.print("[yellow]dry run: nothing sent[/yellow]")
+        return
+
+    directory = _run_dir(name)
+    directory.mkdir(parents=True, exist_ok=True)
+    write_jsonl(items, directory / "items.jsonl")
+    (directory / "meta.json").write_text(
+        json.dumps(
+            {
+                "dataset": dataset,
+                "model": model,
+                "levels": list(swept),
+                "replicates": allocation,
+                "n_items": len(items),
+                "estimate": est,
+                "cost_ceiling": projection,
+            },
+            indent=2,
+        )
+    )
+
+    provider = get_provider(model)
+    with console.status("judging...") as status:
+
+        def progress(index: int, total: int) -> None:
+            if index % 25 == 0 or index == total:
+                status.update(f"judging... {index}/{total}")
+
+        stats = execute_concurrent(
+            specs,
+            provider,
+            directory / "calls.jsonl",
+            workers=max(1, workers),
+            on_progress=progress,
+            max_failures=max_failures,
+        )
+
+    console.print(
+        f"[green]written {stats.written}, skipped {stats.skipped}, "
+        f"failed {stats.failed}[/green]"
+    )
+    for error in stats.errors[:10]:
+        console.print(f"  [red]{error}[/red]")
+    if stats.failed:
+        console.print(
+            "[yellow]Check whether failures correlate with group size -- "
+            "missingness that tracks the treatment biases the estimand.[/yellow]"
+        )
+
+
+@cli.command()
+@click.option("--dataset", default="helpsteer2", show_default=True)
+@click.option("--items", "items_path", type=click.Path(path_type=Path), default=None)
+@click.option("--model", default="gpt-5-mini", show_default=True)
+@click.option("--limit", type=int, default=150, show_default=True)
+@click.option("--name", default="pilot", show_default=True)
+@click.option("--workers", type=int, default=8, show_default=True)
+@click.option("--dry-run", is_flag=True)
+@click.pass_context
+def pilot(ctx, dataset, items_path, model, limit, name, workers, dry_run) -> None:
+    """Gate 3: the cheap two-level pilot (group_size 1 vs K) that sizes the real run.
+
+    Only the extreme levels are run. The pilot's job is to measure the per-item
+    difference SD for the power calculation, and the 1-vs-K contrast is where that
+    signal is largest per dollar.
+    """
+    criteria = get_criteria(dataset)
+    ctx.invoke(
+        run,
+        dataset=dataset,
+        items_path=items_path,
+        model=model,
+        name=name,
+        limit=limit,
+        target=DEFAULT_TARGET,
+        levels=f"1,{len(criteria)}",
+        replicate_spec="",
+        dry_run=dry_run,
+        max_failures=25,
+        workers=workers,
+    )
+
+
+# ---------------------------------------------------------- select-model -----
+
+
+@cli.command("select-model")
+@click.option("--dataset", default="helpsteer2", show_default=True)
+@click.option("--items", "items_path", type=click.Path(path_type=Path), default=None)
+@click.option("--limit", type=int, default=100, show_default=True)
+@click.option(
+    "--models",
+    default="gpt-5-nano,gpt-5-mini,gemini-3.1-flash-lite",
+    show_default=True,
+)
+@click.option("--floor", type=float, default=0.62, show_default=True)
+@click.option("--workers", type=int, default=8, show_default=True)
+def select_model(
+    dataset: str,
+    items_path: Path | None,
+    limit: int,
+    models: str,
+    floor: float,
+    workers: int,
+) -> None:
+    """Gate 0: cheapest model with headroom to degrade.
+
+    Runs each candidate at group_size 1 only. A model already near the 0.5
+    pairwise baseline cannot show degradation, so picking on price alone would
+    produce a null result for the wrong reason.
+    """
+    items_path = items_path or Path("data") / f"{dataset}.jsonl"
+    items, criteria = _prepare(dataset, items_path, limit)
+    candidates = [m.strip() for m in models.split(",") if m.strip()]
+
+    if len(items) < 50:
+        console.print(
+            f"[yellow]{len(items)} items is too few to judge against the headroom "
+            f"floor; treat this run as an API request-shape check only.[/yellow]"
+        )
+
+    table = Table(title=f"Gate 0: group_size=1 headroom (floor {floor})")
+    table.add_column("model")
+    table.add_column("$/1M in", justify="right")
+    table.add_column("$/1M out", justify="right")
+    table.add_column("accuracy", justify="right")
+    table.add_column("n", justify="right")
+    table.add_column("verdict")
+
+    passing: list[tuple[float, str]] = []
+    for model in candidates:
+        entry = CATALOG.get(model)
+        if entry is None:
+            table.add_row(model, "-", "-", "-", "-", "[red]unknown model[/red]")
+            continue
+        directory = _run_dir(f"select-{model}")
+        directory.mkdir(parents=True, exist_ok=True)
+        write_jsonl(items, directory / "items.jsonl")
+        (directory / "meta.json").write_text(
+            json.dumps({"dataset": dataset, "model": model, "levels": [1]}, indent=2)
+        )
+        specs = plan_balanced(items, criteria, model=model, replicates={1: 1})
+        try:
+            provider = get_provider(model)
+            with console.status(f"{model}: judging {len(specs)} calls..."):
+                execute_concurrent(
+                    specs,
+                    provider,
+                    directory / "calls.jsonl",
+                    workers=max(1, workers),
+                    max_failures=20,
+                )
+            records = list(read_records(directory / "calls.jsonl"))
+            frame = analyze.to_frame(
+                analyze.build_outcomes(records, items, criteria)
+            )
+            accuracy = analyze.resolved(frame)["correct_num"].mean()
+            n = int(analyze.resolved(frame).shape[0])
+        except Exception as exc:
+            table.add_row(model, f"{entry['in']:.2f}", f"{entry['out']:.2f}", "-", "-", f"[red]{str(exc)[:40]}[/red]")
+            continue
+
+        ok = accuracy >= floor
+        if ok:
+            passing.append((entry["in"] + entry["out"], model))
+        table.add_row(
+            model,
+            f"{entry['in']:.2f}",
+            f"{entry['out']:.2f}",
+            f"{accuracy:.3f}",
+            str(n),
+            "[green]headroom[/green]" if ok else "[red]near the 0.5 baseline[/red]",
+        )
+
+    console.print(table)
+    if passing:
+        _, chosen = min(passing)
+        console.print(f"[bold green]choose: {chosen}[/bold green] (cheapest clearing the floor)")
+    else:
+        console.print(
+            "[red]no candidate cleared the floor. Either raise the model tier or "
+            "revisit the rubric anchors -- a judge at chance cannot show degradation."
+            "[/red]"
+        )
+
+
+@cli.command("ties")
+@click.option("--dataset", default="helpsteer2", show_default=True)
+@click.option("--items", "items_path", type=click.Path(path_type=Path), default=None)
+def ties(dataset: str, items_path: Path | None) -> None:
+    """Gate 2, label side: tie structure of the ground truth, before any judging.
+
+    Run this before spending anything. A criterion whose human labels tie more
+    often than they order cannot support a pairwise outcome no matter how good
+    the judge is.
+    """
+    items_path = items_path or Path("data") / f"{dataset}.jsonl"
+    items, criteria = _prepare(dataset, items_path, None)
+    report = scoreable_report(items, criteria)
+
+    table = Table(title=f"Gate 2: human label tie structure ({report['n_items']} items)")
+    table.add_column("criterion")
+    table.add_column("tie rate", justify="right")
+    table.add_column("usable n", justify="right")
+    table.add_column("primary outcome")
+    for key, stats in report["per_criterion"].items():
+        rate = stats["human_tie_rate"]
+        table.add_row(
+            key,
+            f"{rate:.1%}",
+            str(stats["usable_n"]),
+            "pairwise" if rate < 0.50 else "[yellow]QWK (pairwise unusable)[/yellow]",
+        )
+    console.print(table)
+
+    dist = report["scoreable_per_item_distribution"]
+    k = len(criteria)
+    console.print(f"\nscoreable criteria per item (of {k}):")
+    cumulative = 0
+    for count in range(k, -1, -1):
+        cumulative += dist.get(count, 0)
+        console.print(
+            f"  {count}: {dist.get(count, 0):>6}   cumulative >= {count}: "
+            f"{cumulative:>6} ({cumulative/report['n_items']:.1%})"
+        )
+    console.print(
+        f"\nmean scoreable per item: [bold]{report['mean_scoreable_per_item']:.2f}[/bold] of {k}"
+    )
+    console.print(
+        f"items contributing nothing to the pairwise outcome: "
+        f"[bold]{report['items_with_zero_scoreable']}[/bold]"
+    )
+    mean_scoreable = report["mean_scoreable_per_item"]
+    if report["items_with_zero_scoreable"] or mean_scoreable < k - 1:
+        console.print(
+            "\n[yellow]Per-item accuracy is the unit the paired estimator uses. "
+            "Items carrying only one or two usable criteria make it noisy -- "
+            "consider `fetch --min-scoreable 4`.[/yellow]"
+        )
+    else:
+        console.print(
+            "\n[green]Tie structure supports a pairwise primary outcome.[/green] "
+            "Note that a filtered population has mechanically low tie rates: this "
+            "is a property of the selection, not of the criteria. Report the filter "
+            "alongside any accuracy figure, and run the looser-filter sensitivity "
+            "analysis."
+        )
+
+
+ALL_CORRUPTIONS = CORRUPTIONS + EXTRA_CORRUPTIONS
+ALL_CRITERIA = HELPSTEER2_CRITERIA + SYNTHETIC_ONLY_CRITERIA
+# METHODS 3.4: a hypothesis, replaced by measurement here.
+SEMANTIC_KEYS = {
+    "shuffle", "numbers", "drop_answer", "contradict", "truncate", "rename",
+    "unsupport", "vague",
+}
+
+
+@cli.command("calibrate")
+@click.option("--items", "items_path", type=click.Path(path_type=Path),
+              default=Path("data/helpsteer2.jsonl"), show_default=True)
+@click.option("--model", default="gpt-5-mini", show_default=True)
+@click.option("--per-corruption", type=int, default=40, show_default=True,
+              help="Synthetic items per corruption.")
+@click.option("--name", default="calib", show_default=True)
+@click.option("--workers", type=int, default=16, show_default=True)
+@click.option("--only", default="", help="Comma-separated corruption keys.")
+@click.option("--severities", default="",
+              help='Severity ladder, e.g. "1,2,4,8". Empty = each op\'s default.')
+@click.option("--dry-run", is_flag=True)
+def calibrate_cmd(items_path, model, per_corruption, name, workers, only,
+                  severities, dry_run):
+    """Gate: detection rate per corruption at group_size=1, before any sweep.
+
+    Assigns each operation to test / positive-control / excluded by MEASURED
+    detection rate rather than by the hypothesised detection class.
+    """
+    if not items_path.exists():
+        raise click.ClickException(f"{items_path} not found; run `packing fetch` first")
+    bases = read_jsonl(items_path)
+    wanted = {k.strip() for k in only.split(",") if k.strip()}
+    corruptions = [c for c in ALL_CORRUPTIONS if not wanted or c.key in wanted]
+
+    directory = _run_dir(name)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    ladder = [int(x) for x in severities.split(",") if x.strip()] or [None]
+    all_items = []
+    for corruption in corruptions:
+        for sev in ladder:
+            built = build_corrupted_items(
+                bases, corruption, ALL_CRITERIA, limit=per_corruption, severity=sev
+            )
+            if len(built) < per_corruption:
+                console.print(
+                    f"[yellow]{corruption.key} sev={sev}: only {len(built)} of "
+                    f"{per_corruption} items (low applicability)[/yellow]"
+                )
+            all_items.extend(built)
+
+    # group_size = 1: each item is judged on its targeted criterion alone.
+    specs = []
+    for item in all_items:
+        criterion = next(c for c in ALL_CRITERIA if c.key == item.targeted_criterion)
+        specs.extend(
+            plan_balanced([item], (criterion,), model=model, replicates={1: 1})
+        )
+
+    est = estimate(specs)
+    entry = CATALOG.get(model, {"in": 0.0, "out": 0.0})
+    projection = project_cost(est, entry["in"], entry["out"])
+    console.print(
+        f"{len(corruptions)} corruptions, {len(all_items)} items, "
+        f"[bold]{est['calls']}[/bold] calls, cost ceiling "
+        f"[bold]${projection['usd_total_ceiling']:.2f}[/bold]"
+    )
+    if dry_run:
+        console.print("[yellow]dry run: nothing sent[/yellow]")
+        return
+
+    write_jsonl(all_items, directory / "items.jsonl")
+    (directory / "meta.json").write_text(json.dumps({
+        "dataset": "synthetic", "model": model, "levels": [1],
+        "per_corruption": per_corruption,
+        "corruptions": [c.key for c in corruptions],
+        "severities": ladder,
+    }, indent=2))
+
+    provider = get_provider(model)
+    with console.status("judging...") as status:
+        def progress(i, total):
+            if i % 50 == 0 or i == total:
+                status.update(f"judging... {i}/{total}")
+        stats = execute_concurrent(
+            specs, provider, directory / "calls.jsonl",
+            workers=max(1, workers), on_progress=progress, max_failures=60,
+        )
+    console.print(
+        f"[green]written {stats.written}, skipped {stats.skipped}, "
+        f"failed {stats.failed}[/green]"
+    )
+    for error in stats.errors[:5]:
+        console.print(f"  [red]{error}[/red]")
+    _report_calibration(name)
+
+
+@cli.command("calibration-report")
+@click.option("--run", "name", default="calib", show_default=True)
+def calibration_report(name):
+    """Re-print the calibration verdicts from an existing run."""
+    _report_calibration(name)
+
+
+def _report_calibration(name: str) -> None:
+    directory = _run_dir(name)
+    items = read_jsonl(directory / "items.jsonl")
+    records = list(read_records(directory / "calls.jsonl"))
+    by_id = {i.item_id: i for i in items}
+
+    detected: dict[str, dict[str, int]] = {}
+    for item_id, group in _group_by_item(records):
+        item = by_id.get(item_id)
+        if item is None or "a" not in group or "b" not in group:
+            continue
+        key = item.targeted_criterion
+        score_a = group["a"]["scores"].get(key)
+        score_b = group["b"]["scores"].get(key)
+        if score_a is None or score_b is None:
+            continue
+        expected = item.human_a[key] - item.human_b[key]
+        observed = score_a - score_b
+        bucket = detected.setdefault(
+            (item.meta["corruption"], item.meta["severity"]),
+            {"hit": 0, "wrong": 0, "tie": 0},
+        )
+        if observed == 0:
+            bucket["tie"] += 1
+        elif (observed > 0) == (expected > 0):
+            bucket["hit"] += 1
+        else:
+            bucket["wrong"] += 1
+
+    verdicts = []
+    for (key, sev), results in detected.items():
+        corruption = next((c for c in ALL_CORRUPTIONS if c.key == key), None)
+        if corruption is None:
+            continue
+        v = calib.verdict_for(
+            key, corruption.targeted_criterion,
+            "semantic" if key in SEMANTIC_KEYS else "surface",
+            results["hit"], results["wrong"], results["tie"],
+        )
+        verdicts.append((sev, v))
+    ladder_mode = len({s for s, _ in verdicts}) > 1
+
+    table = Table(title=f"Calibration at group_size=1 (band {calib.BAND_LOW}-{calib.BAND_HIGH})")
+    for col in ("corruption", "sev", "n", "detect", "tie", "discrim", "role"):
+        table.add_column(col, justify="right" if col not in ("corruption", "role") else "left")
+    colour = {"test": "green", "ceiling": "yellow", "insensitive": "cyan",
+              "unreliable": "red", "insufficient": "dim"}
+    order = sorted(verdicts, key=lambda sv: (sv[1].corruption, sv[0] or 0)) \
+        if ladder_mode else sorted(verdicts, key=lambda sv: -sv[1].rate)
+    for sev, v in order:
+        c = colour.get(v.role, "white")
+        disc = f"{v.discrimination:.2f}" if v.detected + v.wrong else "-"
+        table.add_row(v.corruption, str(sev), str(v.n), f"{v.rate:.2f}",
+                      f"{v.tie_rate:.2f}", disc, f"[{c}]{v.role}[/{c}]")
+    console.print(table)
+
+    if ladder_mode:
+        console.print(calib.window_report(verdicts))
+        return
+    summary = calib.agreement_with_hypothesis([v for _s, v in verdicts])
+    console.print("\n[bold]Hypothesis check (METHODS 3.4)[/bold]")
+    console.print(f"  surface operations at ceiling : {summary.get('surface_at_ceiling')}")
+    console.print(f"  semantic operations in band   : {summary.get('semantic_in_test_band')}")
+    if summary.get("insensitive_needing_severity"):
+        console.print(
+            f"\n[cyan]{len(summary['insensitive_needing_severity'])} operations "
+            f"insensitive at current severity (high ties, correct when they "
+            f"commit) -- raise severity rather than exclude:[/cyan]"
+        )
+        for row in summary["insensitive_needing_severity"]:
+            console.print(f"    {row['corruption']:<14} tie={row['tie_rate']:.2f} "
+                          f"discrim={row['discrimination']}")
+    if summary.get("unreliable"):
+        console.print(f"\n[red]{len(summary['unreliable'])} operations UNRELIABLE "
+                      f"(judges backwards when committing):[/red]")
+        for row in summary["unreliable"]:
+            console.print(f"    {row['corruption']:<14} discrim={row['discrimination']}")
+    if summary.get("discrepancies"):
+        console.print(f"  [yellow]{len(summary['discrepancies'])} discrepancies; "
+                      f"measurement governs[/yellow]")
+        for row in summary["discrepancies"]:
+            console.print(f"    {row['corruption']:<14} {row['hypothesised']:<9} "
+                          f"-> {row['role']} ({row['detection_rate']})")
+
+
+def _group_by_item(records):
+    grouped: dict[tuple, dict] = {}
+    for r in records:
+        grouped.setdefault(
+            (r["item_id"], r["partition_hash"], r["group_index"]), {}
+        )[r["side"]] = r
+    for (item_id, _ph, _gi), sides in grouped.items():
+        yield item_id, sides
+
+
+# Excluded from measurement by the calibration gate. `jargon` is MUTE (87-97% ties
+# at every severity 1-30), so `complexity` has no valid operation; it remains in the
+# criterion pool as packing load.
+MUTE_OPERATIONS = {"jargon"}
+SWEEP_LEVELS = (1, 2, 3, 5, 8, 12, 16, 20)
+
+
+@cli.command("sweep")
+@click.option("--items", "items_path", type=click.Path(path_type=Path),
+              default=Path("data/helpsteer2.jsonl"), show_default=True)
+@click.option("--model", default="gpt-5-mini", show_default=True)
+@click.option("--per-corruption", type=int, default=40, show_default=True)
+@click.option("--levels", default=",".join(str(x) for x in SWEEP_LEVELS), show_default=True)
+@click.option("--replicates", type=int, default=1, show_default=True)
+@click.option("--name", default="sweep", show_default=True)
+@click.option("--workers", type=int, default=16, show_default=True)
+@click.option("--dry-run", is_flag=True)
+def sweep_cmd(items_path, model, per_corruption, levels, replicates, name,
+              workers, dry_run):
+    """The packing sweep: does detection degrade as criteria per call rises?
+
+    K = 20 criteria form the packing load. Only the block containing each item's
+    targeted criterion is judged, which is what makes K = 20 affordable.
+    """
+    if not items_path.exists():
+        raise click.ClickException(f"{items_path} not found; run `packing fetch` first")
+    if model != "gpt-5-mini":
+        raise click.ClickException(
+            "synthetic operation roles are calibrated only for gpt-5-mini; "
+            "run a model-specific calibration before sweeping another model"
+        )
+    bases = read_jsonl(items_path)
+    swept = tuple(int(x) for x in levels.split(",") if x.strip())
+    measured = [c for c in ALL_CORRUPTIONS if c.key not in MUTE_OPERATIONS]
+
+    all_items = []
+    for corruption in measured:
+        built = build_corrupted_items(
+            bases, corruption, ALL_CRITERIA, limit=per_corruption
+        )
+        if len(built) < per_corruption:
+            console.print(
+                f"[yellow]{corruption.key}: {len(built)}/{per_corruption} items"
+                f"[/yellow]"
+            )
+        all_items.extend(built)
+
+    specs = plan_targeted_blocks(
+        all_items, ALL_CRITERIA, model=model, levels=swept, replicates=replicates
+    )
+    est = estimate(specs)
+    entry = CATALOG.get(model, {"in": 0.0, "out": 0.0})
+    projection = project_cost(est, entry["in"], entry["out"])
+
+    from collections import Counter
+    sizes = Counter(len(sp.group) for sp in specs)
+    console.print(
+        f"K={len(ALL_CRITERIA)} pool, {len(measured)} measured operations, "
+        f"{len(all_items)} items, levels={swept}"
+    )
+    console.print(f"observations per actual group size: {dict(sorted(sizes.items()))}")
+    console.print(f"calls: [bold]{est['calls']}[/bold]")
+    console.print(
+        f"est input {est['est_input_tokens']:,}, output ceiling "
+        f"{est['est_output_tokens_ceiling']:,}"
+    )
+    console.print(
+        f"[bold]cost ceiling ${projection['usd_total_ceiling']:.2f}[/bold] "
+        f"(actual output will be lower)"
+    )
+    if dry_run:
+        console.print("[yellow]dry run: nothing sent[/yellow]")
+        return
+
+    directory = _run_dir(name)
+    directory.mkdir(parents=True, exist_ok=True)
+    write_jsonl(all_items, directory / "items.jsonl")
+    (directory / "meta.json").write_text(json.dumps({
+        "dataset": "synthetic", "model": model, "levels": list(swept),
+        "per_corruption": per_corruption, "replicates": replicates,
+        "measured": [c.key for c in measured],
+        "mute_excluded": sorted(MUTE_OPERATIONS),
+        "k_pool": len(ALL_CRITERIA),
+        "operation_roles": {
+            **{key: "test" for key in analyze.SYNTHETIC_TEST_OPERATIONS},
+            **{
+                key: "positive_control"
+                for key in analyze.SYNTHETIC_POSITIVE_CONTROLS
+            },
+        },
+        "detection_classes": {
+            key: (
+                "semantic"
+                if key in analyze.SYNTHETIC_SEMANTIC_OPERATIONS
+                else "surface"
+            )
+            for key in (
+                analyze.SYNTHETIC_TEST_OPERATIONS
+                | analyze.SYNTHETIC_POSITIVE_CONTROLS
+            )
+        },
+        "calibration_provenance": {
+            "model": "gpt-5-mini",
+            "runs": ["calib", "ladder"],
+            "rule": "measured role at group_size=1; ladder-selected severity",
+        },
+    }, indent=2))
+
+    provider = get_provider(model)
+    with console.status("judging...") as status:
+        def progress(i, total):
+            if i % 100 == 0 or i == total:
+                status.update(f"judging... {i}/{total}")
+        stats = execute_concurrent(
+            specs, provider, directory / "calls.jsonl",
+            workers=max(1, workers), on_progress=progress, max_failures=150,
+        )
+    console.print(
+        f"[green]written {stats.written}, skipped {stats.skipped}, "
+        f"failed {stats.failed}[/green]"
+    )
+    for error in stats.errors[:8]:
+        console.print(f"  [red]{error}[/red]")
+
+
+# ----------------------------------------------------------------- score -----
+
+
+@cli.command()
+@click.option("--run", "name", default="pilot", show_default=True)
+def score(name: str) -> None:
+    """Gate 2: tie rates and descriptive accuracy."""
+    items, criteria, records, _ = _load_run(name)
+    outcomes = analyze.build_outcomes(records, items, criteria)
+    if not outcomes:
+        raise click.ClickException("no complete pairs; both sides of a pair are required")
+    frame = analyze.to_frame(outcomes)
+
+    rates = pd.DataFrame(tie_rates(outcomes)).T.sort_index()
+    _show(rates.round(4), "Gate 2: tie rates per criterion")
+    crippled = rates.index[rates["resolved_fraction"] < 0.5].tolist()
+    if crippled:
+        console.print(
+            f"[yellow]criteria with <50% resolvable observations: {crippled}. "
+            f"Use QWK as the primary outcome for these.[/yellow]"
+        )
+
+    desc = analyze.descriptives(frame)
+    _show(desc["by_group_size"].round(4), "Accuracy by group size (descriptive only)")
+    _show(
+        desc["judge_tie_by_group_size"].round(4),
+        "Judge tie rate by group size (co-primary outcome)",
+    )
+    _show(analyze.qwk_by_group_size(frame, criteria).round(4), "QWK by criterion and group size")
+
+
+# --------------------------------------------------------------- analyze -----
+
+
+@cli.command("analyze")
+@click.option("--run", "name", default="pilot", show_default=True)
+@click.option("--reference", type=int, default=1, show_default=True)
+@click.option("--mixed/--no-mixed", default=True, show_default=True)
+def analyze_cmd(name: str, reference: int, mixed: bool) -> None:
+    """Primary and secondary estimators."""
+    items, criteria, records, meta = _load_run(name)
+    frame = analyze.to_frame(analyze.build_outcomes(records, items, criteria))
+    if frame.empty:
+        raise click.ClickException("no outcomes to analyse")
+
+    if meta.get("dataset") == "synthetic":
+        frame = analyze.annotate_synthetic(
+            frame,
+            items,
+            operation_roles=meta.get("operation_roles"),
+            detection_classes=meta.get("detection_classes"),
+        )
+        _show(
+            analyze.synthetic_recovery(frame).round(4),
+            "Synthetic targeted recovery (stratified; hits, ties, and wrong directions)",
+        )
+        _show(
+            analyze.synthetic_specificity(frame).round(4),
+            "Untouched-companion specificity (construct-overlap diagnostic)",
+        )
+        _show(
+            analyze.synthetic_leakage_summary(frame).round(4),
+            "Leakage diagnostic (worst systematic companion shift vs target)",
+        )
+        _show(
+            analyze.synthetic_leakage_matrix(frame).round(4),
+            "Leakage matrix: mean corruption-aligned score shift",
+        )
+
+        # Calibration-defined test operations carry the primary estimand.
+        # Positive controls remain in the descriptive table above: their purpose
+        # is to detect wholesale disengagement, not estimate a gradual slope.
+        # Leakage is reported above as context; it does not drop operations.
+        primary = analyze.synthetic_recovery_frame(
+            frame[frame["calibration_role"] == "test"]
+        )
+        for detection_class, chunk in primary.groupby("detection_class"):
+            label = f"{detection_class} test operations"
+            _show(
+                analyze.paired_ladder(chunk, reference_size=reference),
+                f"PRIMARY ({label}): paired recovery contrast vs group_size={reference}",
+            )
+            try:
+                form = analyze.functional_form(chunk)
+                console.print(f"\n[bold]Functional form ({label})[/bold]")
+                console.print(json.dumps(form, indent=2, default=str))
+            except Exception as exc:
+                console.print(
+                    f"[yellow]functional form unavailable for {label}: {exc}[/yellow]"
+                )
+            try:
+                competition = analyze.position_competition(chunk)
+                console.print(
+                    f"\n[bold]Rival hypothesis for {label}: position, not count[/bold]"
+                )
+                console.print(json.dumps(competition, indent=2, default=str))
+            except Exception as exc:
+                console.print(
+                    f"[yellow]position competition unavailable for {label}: {exc}[/yellow]"
+                )
+            _show(
+                analyze.by_criterion_slopes(chunk).round(4),
+                f"Per-operation slopes ({label}; Holm-corrected)",
+            )
+            if mixed:
+                try:
+                    fit = analyze.fit_mixed(chunk)
+                    console.print(
+                        f"\n[bold]Crossed mixed model ({label}; variational)[/bold]"
+                    )
+                    console.print(str(fit.summary()))
+                except Exception as exc:
+                    console.print(
+                        f"[yellow]crossed mixed model unavailable for {label}: "
+                        f"{str(exc)[:120]}[/yellow]"
+                    )
+
+        usage = cost.usage_frame(records)
+        entry = CATALOG.get(meta.get("model", ""), {"in": 0.0, "out": 0.0})
+        cost_table = cost.cost_per_criterion(usage, entry["in"], entry["out"])
+        _show(
+            cost_table.round(6),
+            "Cost per criterion by group size",
+        )
+        _show(
+            analyze.synthetic_frontier(frame, cost_table).round(6),
+            "Synthetic recovery/cost frontier (descriptive Pareto set)",
+        )
+        console.print("\n[bold]Cache check[/bold]")
+        console.print(json.dumps(cost.cache_report(usage), indent=2))
+        return
+
+    _show(
+        analyze.paired_ladder(frame, reference_size=reference),
+        f"PRIMARY: within-item paired contrast vs group_size={reference} (Holm-corrected)",
+    )
+
+    try:
+        form = analyze.functional_form(frame)
+        console.print("\n[bold]Functional form[/bold]")
+        console.print(json.dumps(form, indent=2, default=str))
+    except Exception as exc:
+        console.print(f"[yellow]functional form unavailable: {exc}[/yellow]")
+
+    try:
+        competition = analyze.position_competition(frame)
+        console.print("\n[bold]Rival hypothesis: position, not count[/bold]")
+        console.print(json.dumps(competition, indent=2, default=str))
+    except Exception as exc:
+        console.print(f"[yellow]position competition unavailable: {exc}[/yellow]")
+
+    _show(
+        analyze.by_criterion_slopes(frame).round(4),
+        "ACTIONABLE: per-criterion group-size slope (Holm-corrected)",
+    )
+
+    if mixed:
+        try:
+            fit = analyze.fit_mixed(frame)
+            console.print("\n[bold]Crossed mixed model (variational; approximate SDs)[/bold]")
+            console.print(str(fit.summary()))
+        except Exception as exc:
+            console.print(
+                f"[yellow]crossed mixed model unavailable ({str(exc)[:120]}); "
+                f"the paired contrast and cluster-robust logit above stand alone[/yellow]"
+            )
+
+    usage = cost.usage_frame(records)
+    entry = CATALOG.get(meta.get("model", ""), {"in": 0.0, "out": 0.0})
+    cost_table = cost.cost_per_criterion(usage, entry["in"], entry["out"])
+    _show(cost_table.round(6), "Cost per criterion by group size")
+    console.print("\n[bold]Cache check[/bold]")
+    console.print(json.dumps(cost.cache_report(usage), indent=2))
+
+    accuracy_table = analyze.descriptives(frame)["by_group_size"]
+    _show(
+        cost.frontier(accuracy_table, cost_table).round(6),
+        "Accuracy vs cost frontier (knee = cheapest packing indistinguishable from best)",
+    )
+
+
+# ----------------------------------------------------------------- power -----
+
+
+@cli.command("power")
+@click.option("--run", "name", default="pilot", show_default=True)
+@click.option("--reference", type=int, default=1, show_default=True)
+@click.option("--comparison", type=int, default=None)
+def power_cmd(name: str, reference: int, comparison: int | None) -> None:
+    """Gate 3: size the confirmatory run from pilot variance."""
+    items, criteria, records, meta = _load_run(name)
+    frame = analyze.to_frame(analyze.build_outcomes(records, items, criteria))
+    comparison = comparison or len(criteria)
+
+    if meta.get("dataset") == "synthetic":
+        frame = analyze.annotate_synthetic(
+            frame,
+            items,
+            operation_roles=meta.get("operation_roles"),
+            detection_classes=meta.get("detection_classes"),
+        )
+        frame = analyze.synthetic_recovery_frame(
+            frame[frame["calibration_role"] == "test"]
+        )
+        found = False
+        for detection_class, chunk in frame.groupby("detection_class"):
+            result = power.plan_from_pilot(chunk, reference, comparison)
+            if result is None:
+                continue
+            found = True
+            console.print(
+                f"\n[bold]Power planning ({detection_class} test operations): "
+                f"group_size {reference} vs {comparison}[/bold]"
+            )
+            console.print(json.dumps(result.as_dict(), indent=2))
+        if not found:
+            raise click.ClickException(
+                f"not enough paired synthetic base items at group sizes "
+                f"{reference} and {comparison}"
+            )
+        console.print(
+            "\n[yellow]Size the confirmatory run from the MDE grid, not from the "
+            "observed effect.[/yellow]"
+        )
+        return
+
+    result = power.plan_from_pilot(frame, reference, comparison)
+    if result is None:
+        raise click.ClickException(
+            f"not enough paired items at group sizes {reference} and {comparison}"
+        )
+    console.print(f"\n[bold]Power planning: group_size {reference} vs {comparison}[/bold]")
+    console.print(json.dumps(result.as_dict(), indent=2))
+    console.print(
+        "\n[yellow]Size the confirmatory run from the MDE grid, not from the "
+        "observed effect: a pilot that reached significance is more likely to have "
+        "overshot the true effect than undershot it.[/yellow]"
+    )
+
+
+if __name__ == "__main__":
+    cli()
