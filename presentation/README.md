@@ -1,4 +1,4 @@
-# Packing talk — 30 minutes
+# Packing talk: 30 minutes
 
 Two self-contained HTML files. No build step, no bundler, no charting library,
 no data fetched at runtime: every number on stage is baked into the markup, so
@@ -8,8 +8,8 @@ stack behind each, so a dead network costs you the typeface and nothing else.
 
 | File | Role |
 |---|---|
-| `index.html` | Projector view — 16 full-screen slides |
-| `presenter.html` | Presenter view — say/direction notes, next slide, 30-minute timer, pace |
+| `index.html` | Projector view, 16 full-screen slides |
+| `presenter.html` | Presenter view: say/direction notes, next slide, 30-minute timer, pace |
 
 ## Presenting
 
@@ -44,11 +44,16 @@ minutes, leaving ~4 for questions.
 
 ## Editing
 
+Slides carry the claim and the number, nothing an audience has to read while
+you talk. Every supporting sentence, caveat and source figure belongs in the
+presenter notes instead, so adding prose to a slide is almost always the wrong
+move.
+
 Slide copy lives in `index.html`; the notes for slide *n* live at index *n-1* of
 `TITLES`, `GOALS`, `WINDOWS`, `NOTES` and `ENDS` in `presenter.html`. Those
 arrays are positional, so **adding a slide to one file without the other
 silently misaligns every note after it**. `tests/test_presentation.py` pins the
-alignment — it checks that each slide's `data-title` matches `TITLES` in order,
+alignment. It checks that each slide's `data-title` matches `TITLES` in order,
 that all five arrays are the same length, that both views name the same channel,
 and that neither view makes a network call at runtime.
 
@@ -61,7 +66,7 @@ stack has a system fallback, so the deck degrades rather than breaking offline.
 
 ## Where the numbers come from
 
-**The headline claim on slide 5 is `METHODS.md` §8.1** — the K = 5 human-stratum
+**The headline claim on slide 5 is `METHODS.md` §8.1**, the K = 5 human-stratum
 pilot: accuracy, tie rate, cost, tokens per criterion, and the paired contrast
 with its clustered interval. This is the best-evidenced result in the study and
 the deck now leads with it. Scale-anchoring figures (slide 9) are §3.3;
@@ -69,8 +74,8 @@ calibration findings (slides 10-11) are §8.2. Controls, randomisation and the o
 §4.1–4.3. The operation catalogue and detection classes are §3.4; the
 calibration results that reduced 20 operations to 17 measured are §8.2. The
 operation-recovery estimand and the exploratory label are `PREREGISTRATION.md`
-§1a and `METHODS.md` §10.0c. Sweep-level figures — 10,880 calls, the design
-table, the cost endpoints, the recovery endpoints, Holm outcomes and the MDE —
+§1a and `METHODS.md` §10.0c. Sweep-level figures (10,880 calls, the design
+table, the cost endpoints, the recovery endpoints, Holm outcomes and the MDE)
 are `METHODS.md` §8.3, with §8.3.1 recording exactly which of them were
 regenerated (the design, reproducible any time via `packing sweep --dry-run`)
 and which are transcribed from the original analysis because `runs/` was not

@@ -54,12 +54,15 @@ em.hl{font-style:normal;color:var(--lime)}
 .card.accent{border-color:#2e4a1f;background:linear-gradient(180deg,#131c10,var(--panel))}
 .card.rival{border-color:#4a3a1c;background:linear-gradient(180deg,#1c170f,var(--panel))}
 
-.stat{font-family:var(--font-mono);font-weight:500;color:var(--lime);
-      font-size:clamp(1.8rem,3.6vw,2.9rem);line-height:1;margin:0 0 .35rem}
-.stat.cy{color:var(--cyan)}
-.stat small{font-size:.42em;color:var(--faint);letter-spacing:.04em}
-.slab{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.16em;
-      text-transform:uppercase;color:var(--faint);margin:0}
+/* Element-qualified, and it has to be: `.card p` above is (0,1,1) and would
+   otherwise win on specificity regardless of order, collapsing every headline
+   number inside a card to body size. */
+p.stat{font-family:var(--font-mono);font-weight:500;color:var(--lime);
+       font-size:clamp(1.8rem,3.6vw,2.9rem);line-height:1;margin:0 0 .35rem}
+p.stat.cy{color:var(--cyan)}
+p.stat small{font-size:.42em;color:var(--faint);letter-spacing:.04em}
+p.slab{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.16em;
+       text-transform:uppercase;color:var(--faint);margin:0;line-height:1.45}
 
 ul.points{margin:0;padding:0;list-style:none;max-width:70ch}
 ul.points li{position:relative;padding-left:1.5rem;margin-bottom:.85rem;
@@ -141,7 +144,9 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   ul.points li{font-size:clamp(.9rem,1.15vw,1.04rem);margin-bottom:.6rem}
   ul.points.tight li{margin-bottom:.42rem}
   .note{margin-top:1.1rem;font-size:.92rem}
-  .card p{font-size:.92rem}
+  /* Same specificity trap: exempt the number and label roles, or the
+     max-height rule below re-collapses them. */
+  .card p:not(.stat):not(.slab){font-size:.92rem}
   .kicker{margin-bottom:.8rem}
 }
 @media (prefers-reduced-motion:reduce){
@@ -153,16 +158,13 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 <body>
 <div id="progress"></div>
 <main id="deck">
-
 <section class="slide" id="titleslide" data-title="Does packing criteria into one judge call degrade them">
   <div class="wrap">
     <p class="kicker">LLM-as-a-judge &middot; measurement study</p>
     <h1>Does packing criteria<br>into one judge call<br>quietly degrade them?</h1>
     <div class="rule"></div>
-    <p class="lede">You pay for your judge to read the full input once. Stack judges for
-      multiple quality dimensions and you re-pay that read every time. The obvious fix is
-      to score everything in one call &mdash; and the obvious worry is that something breaks
-      when you do.</p>
+    <p class="lede">Stack judges for five quality dimensions and you re-pay to read
+      the same input five times.</p>
     <div class="meta">
       <span>judge <b>gpt-5-mini</b></span>
       <span>gold <b>HelpSteer2 + synthetic corruption</b></span>
@@ -175,25 +177,21 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">01 &middot; the cost structure</p>
     <h2>You pay to read the input every time</h2>
-    <p class="lede">A judge cannot score anything until it has read the prompt and the
-      response. Score five dimensions in five calls and you buy that read
-      <strong>five times</strong>. The content is identical each time. Only the question changes.</p>
     <div class="cols">
       <div class="card">
         <p class="stat">791<small> tok</small></p>
-        <p class="slab">input per criterion, one per call</p>
+        <p class="slab">per criterion &middot; one per call</p>
       </div>
       <div class="card accent">
         <p class="stat">323<small> tok</small></p>
-        <p class="slab">input per criterion, five per call</p>
+        <p class="slab">per criterion &middot; five per call</p>
       </div>
       <div class="card">
         <p class="stat cy">2.4&times;</p>
-        <p class="slab">reduction in what you re-read</p>
+        <p class="slab">less input re-read</p>
       </div>
     </div>
-    <p class="note"><b>Measured, not modelled.</b> Observed input tokens from a 150-item
-      run on <code>gpt-5-mini</code>: 3,599 of 3,600 calls completed.</p>
+    <p class="slab" style="margin-top:1.4rem">measured &middot; <code>gpt-5-mini</code> &middot; 150 items</p>
   </div>
 </section>
 
@@ -203,22 +201,17 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <h2>Two hypotheses, both plausible</h2>
     <div class="cols two">
       <div class="card rival">
-        <h3>Packing hurts &mdash; divided attention</h3>
-        <p>Attention is split across criteria. One shared reasoning budget now covers five
-          judgements instead of one. Each score gets less of the model than it used to.
-          <em class="hl">Per-criterion accuracy declines as group size rises.</em></p>
+        <h3>Packing hurts</h3>
+        <p><em class="hl">Divided attention.</em> One reasoning budget, now five
+          judgements.</p>
       </div>
       <div class="card accent">
-        <h3>Packing helps &mdash; criteria in context</h3>
-        <p>The judge sees the whole rubric at once and can trade dimensions off coherently
-          rather than scoring each in isolation. A response is verbose <em>relative to</em>
-          how helpful it is. Splitting the call hides that.</p>
+        <h3>Packing helps</h3>
+        <p><em class="hl">Criteria in context.</em> Verbose <em>relative to</em> helpful.</p>
       </div>
     </div>
-    <p class="note"><b>Pre-registered rival:</b> any apparent effect is really about
-      <em class="hl">where a criterion sits</em> in the prompt, not how many share the call.
-      That implies a different fix &mdash; order your criteria &mdash; so it is modelled
-      alongside, not treated as a nuisance.</p>
+    <p class="note"><b>Pre-registered rival:</b> position in the prompt, not how many
+      share the call.</p>
   </div>
 </section>
 
@@ -226,20 +219,12 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">03 &middot; the design decision that shapes everything</p>
     <h2>Why not judge versus judge</h2>
-    <p class="lede">The cheap way to answer this is to run a packed judge against an unpacked
-      one and measure disagreement. That measures <strong>agreement between two fallible
-      instruments</strong>, and it cannot tell you which one moved. If both degrade together
-      it reports a clean null.</p>
     <ul class="points">
-      <li>So: <strong>ground truth on both sides.</strong> Human labels where they exist,
-        corruption applied by construction where they do not.</li>
-      <li><strong>HelpSteer2</strong> gives the human side: 10,681 prompts &times; 2 responses,
-        five criteria, Likert 0&ndash;4, at least three annotators each. Two responses per
-        prompt gives pairwise ground truth with a clean 0.5 baseline.</li>
-      <li>The closest published result leans pessimistic &mdash; <strong>LongJudgeBench</strong>
-        found a rubric added on top of a reference gave no improvement
-        (<span class="mono">0.578</span> vs <span class="mono">0.584</span>). But that varied
-        <strong>whether a rubric was present</strong>, not how many criteria shared a call.</li>
+      <li>Packed vs unpacked measures <strong>two fallible instruments</strong>.</li>
+      <li>Both degrade together, it reports a <strong>clean null</strong>.</li>
+      <li>So: <strong>ground truth on both sides.</strong></li>
+      <li><strong>HelpSteer2</strong> &middot; 10,681 prompts &times; 2 responses &middot;
+        five criteria &middot; 0.5 baseline</li>
     </ul>
   </div>
 </section>
@@ -266,22 +251,17 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <p class="slab" style="margin-top:.5rem">accuracy change, K = 1 &rarr; K = 5 &middot; 95% CI, clustered on item</p>
       </div>
       <div>
-        <p class="lede" style="margin-bottom:1.1rem">Five criteria in one call instead of five,
-          on real human labels: <em class="hl">no detectable accuracy cost</em>, and the
-          interval is tight enough to rule out anything worse than
-          <strong>3.4 points</strong>.</p>
         <table class="data">
           <tr><th></th><th>K = 1</th><th>K = 5</th></tr>
           <tr><td>Accuracy</td><td class="num">0.8051</td><td class="num">0.8039</td></tr>
           <tr><td>Judge tie rate</td><td class="num">0.4800</td><td class="num">0.4796</td></tr>
           <tr><td>Cost / 10&sup3; criteria</td><td class="num">$0.593</td><td class="num up">$0.318</td></tr>
         </table>
-        <p class="slab" style="margin-top:.7rem">paired contrast +0.0047 &middot; SE 0.0194 &middot; p = 0.81 &middot; n = 144 items</p>
+        <p class="slab" style="margin-top:.7rem">n = 144 items &middot; p = 0.81</p>
       </div>
     </div>
     <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">46% cheaper,
-      for nothing measurable.</b> That is the finding. The rest of this talk is why you should
-      believe it, and where it stops.</p>
+      for nothing measurable.</b></p>
   </div>
 </section>
 
@@ -290,48 +270,31 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <p class="kicker">05 &middot; why you should believe it</p>
     <h2>What is held constant</h2>
     <ul class="points">
-      <li><strong>The criteria themselves.</strong> Every condition scores all of them. Only
-        the packing changes.</li>
-      <li><strong>Three randomisations, all required.</strong> Partition membership, criterion
-        order within the call, and response order &mdash; each seeded from
-        <code>SHA-256(base_seed, item_id, nominal_n, replicate)</code>. Drop any one and a
-        group-size effect is confounded with criterion pairing or with position.</li>
-      <li><strong>Per-criterion output budget.</strong> Content budget is
-        <code>40 + 220 &times; group_size</code>. If a five-criterion call had to emit five
-        scores and five rationales under a one-criterion ceiling, accuracy would drop for a
-        completely uninteresting reason and I would have measured my own token limit.</li>
+      <li><strong>The criteria.</strong> Every condition scores all five.</li>
+      <li><strong>Three randomisations.</strong> Partition, criterion order, response order.</li>
+      <li><strong>Per-criterion output budget.</strong>
+        <code>40 + 220 &times; group_size</code></li>
     </ul>
-    <p class="note"><b>Had the effect vanished when that control went in, that would have
-      been the finding.</b> Report it and stop. Acknowledged and uncontrolled: a
-      five-criterion prompt is genuinely longer, so this is not a pure test of divided
-      attention and is not described as one.</p>
+    <p class="note"><b>Otherwise you measure your own token ceiling.</b></p>
   </div>
 </section>
 
 <section class="slide" id="s7" data-title="The tie rate is co-primary, and it is flat">
   <div class="wrap">
     <p class="kicker">06 &middot; the outcome nobody reports</p>
-    <h2>The tie rate is co-primary, and it is flat</h2>
-    <p class="lede">When the judge scores both responses equally it has expressed no
-      preference. Those observations have no correct answer, so they leave the accuracy
-      outcome. <strong>Excluding them is only defensible if you report them.</strong></p>
-    <div class="cols two">
+    <h2>The tie rate is co-primary,<br>and it is flat</h2>
+    <div class="cols two" style="align-items:center">
       <div class="card rival">
         <h3>The trap</h3>
-        <p>If packing makes a judge flatter and more indecisive, that <em>is</em> degradation
-          &mdash; and dropping ties silently hides it, biasing the contrast in exactly the
-          direction you were hoping to find.</p>
+        <p>A judge that stops committing looks <em class="hl">identical to one that
+          got better</em>, if you drop the ties.</p>
       </div>
       <div class="card accent">
-        <h3>What happened</h3>
-        <p><span class="mono">0.4800 &rarr; 0.4796</span>. Resolution does not vary with
-          treatment, so conditioning on resolved observations is not a collider here. The
-          selection concern is discharged empirically rather than argued away.</p>
+        <p class="stat">0.4800 &rarr; 0.4796</p>
+        <p class="slab">tie rate, K = 1 &rarr; K = 5</p>
       </div>
     </div>
-    <p class="note"><b>Report it next to accuracy, always.</b> A judge that stops committing
-      looks identical to a judge that got better, if you only ever look at the rows where it
-      committed.</p>
+    <p class="note"><b>Report it next to accuracy. Always.</b></p>
   </div>
 </section>
 
@@ -339,23 +302,14 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">07 &middot; why you should believe it</p>
     <h2>Estimators tested against a known answer</h2>
-    <ul class="points tight">
-      <li><strong>Clustered standard errors, always.</strong> Observations cluster by source
-        prompt. Clustered SEs have been measured at over <span class="mono">3&times;</span>
-        naive ones on comparable eval data. Naive SEs appear nowhere in this work.</li>
-      <li><strong>Within-item paired contrasts as primary.</strong> Every item is judged at
-        every group size, so item difficulty differences out exactly rather than being
-        modelled &mdash; roughly a third of the variance at &rho; = 0.5.</li>
-      <li><strong>Three estimators reported together</strong>, because they fail differently:
-        paired contrast, cluster-robust logistic regression, and a crossed mixed model with
-        random intercepts for item and criterion. All three agree here.</li>
-      <li><strong>And the suite is validated against planted effects.</strong> It recovers a
-        known degradation with the correct sign and significance, and produces
-        <em>no</em> significant curve on a judge with nothing planted.</li>
+    <ul class="points">
+      <li><strong>Clustered standard errors.</strong> Always.</li>
+      <li><strong>Within-item paired contrasts.</strong> Primary.</li>
+      <li><strong>Three estimators.</strong> They fail differently. All agree here.</li>
+      <li><strong>Validated against planted effects.</strong></li>
     </ul>
-    <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">An estimator
-      suite that has never been tested against a known answer is not evidence of anything.</b>
-      Plant an effect. Check you find it. Plant nothing. Check you do not.</p>
+    <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">Plant an
+      effect. Check you find it. Plant nothing. Check you do not.</b></p>
   </div>
 </section>
 
@@ -363,28 +317,23 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">08 &middot; what it took to measure this</p>
     <h2>Anchor every scale point,<br>or the judge invents a shorter one</h2>
-    <p class="lede">With the rubric anchored only at <span class="mono">0</span>,
-      <span class="mono">2</span> and <span class="mono">4</span>, <code>gpt-5-mini</code>
-      used only 0, 2 and 4. <strong>Never 1. Never 3.</strong> A partially anchored scale
-      becomes the scale.</p>
+    <p class="lede">Anchored at <span class="mono">0</span>, <span class="mono">2</span>,
+      <span class="mono">4</span>, it used only 0, 2 and 4. <strong>Never 1. Never 3.</strong></p>
     <div class="cols">
       <div class="card rival">
         <p class="stat" style="color:var(--warn)">66%</p>
-        <p class="slab">tie rate, anchored at 0 / 2 / 4</p>
+        <p class="slab">tie rate &middot; anchored 0 / 2 / 4</p>
       </div>
       <div class="card accent">
         <p class="stat">43%</p>
-        <p class="slab">tie rate, all five points anchored</p>
+        <p class="slab">tie rate &middot; all five anchored</p>
       </div>
       <div class="card">
         <p class="stat cy">29 &rarr; 49</p>
         <p class="slab">usable observations per 100</p>
       </div>
     </div>
-    <p class="note"><b>You lose most of your data to a formatting decision.</b> Two thirds of
-      pairs unscoreable, 29 usable observations out of 100 &mdash; not because the judge is
-      weak, but because it was handed a three-point scale and told it was a five-point one.
-      The class now rejects any criterion with an undescribed scale point.</p>
+    <p class="note"><b>A formatting decision cost most of the data.</b></p>
   </div>
 </section>
 
@@ -392,24 +341,20 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">09 &middot; what it took to measure this</p>
     <h2>Your difficulty classification will be wrong</h2>
-    <p class="lede">I sorted twenty corruption operations into <em class="hl">surface</em>
-      (detectable without comprehension) and <em class="hl">semantic</em> (requires reading
-      and reasoning), then measured them. <strong>Eight of twenty contradicted the class I
-      had assigned.</strong></p>
-    <ul class="points tight">
-      <li>Only <strong>5 of 12</strong> operations predicted to sit at ceiling actually
-        reached it.</li>
-      <li><code>contradict</code> &mdash; hypothesised semantic and difficult &mdash; reached
-        <span class="mono">0.93</span>.</li>
-      <li><code>jargon</code> is <strong>mute</strong>: lexical jargon substitution does not
-        move this judge's complexity score at <em>any</em> severity tested. That is a finding
-        about the judge &mdash; its notion of complexity tracks conceptual depth, not
-        vocabulary.</li>
-    </ul>
-    <p class="note"><b>The classification was pre-committed as a hypothesis, and measurement
-      governs.</b> This is why the calibration gate exists at all: it runs every operation at
-      group size 1 before a penny is spent on the sweep, and it reassigns them by what they
-      actually do.</p>
+    <div class="cols two" style="align-items:center">
+      <div class="card rival">
+        <p class="stat" style="color:var(--warn)">8 of 20</p>
+        <p class="slab">operations contradicted the class I assigned</p>
+      </div>
+      <div>
+        <ul class="points tight">
+          <li>Only <strong>5 of 12</strong> predicted ceilings held.</li>
+          <li><code>contradict</code>, hypothesised hard: <span class="mono">0.93</span></li>
+          <li><code>jargon</code> is <strong>mute</strong> at every severity.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><b>Pre-committed as a hypothesis. Measurement governs.</b></p>
   </div>
 </section>
 
@@ -417,26 +362,15 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">10 &middot; what it took to measure this</p>
     <h2>Detection rate hides two different failures</h2>
-    <p class="lede">A low detection rate can mean the judge <strong>judged backwards</strong>,
-      or that it <strong>saw no difference at all</strong>. Those need opposite remedies, and
-      one number cannot tell them apart.</p>
+    <p class="lede">Judged <strong>backwards</strong>, or saw <strong>no difference at
+      all</strong>. Opposite remedies. One number cannot tell them apart.</p>
     <div class="cols">
       <div class="card"><h3>detection</h3><p>hits / n</p></div>
       <div class="card"><h3>tie rate</h3><p>ties / n</p></div>
-      <div class="card accent"><h3>discrimination</h3><p>hits / (hits + wrong) &mdash; accuracy
-        <em>given</em> the judge committed</p></div>
+      <div class="card accent"><h3>discrimination</h3><p>hits / (hits + wrong)</p></div>
     </div>
-    <ul class="points tight" style="margin-top:1.4rem">
-      <li>Wrong-direction rates were near <strong>zero</strong> across all twenty operations
-        while tie rates reached <span class="mono">0.95</span>. Every low-detection operation
-        was <em>insensitive</em>, not <em>inaccurate</em>.</li>
-      <li>A rule treating detection below 0.60 as near-chance would have thrown out
-        <strong>five operations that were directionally perfect</strong> and simply needed
-        more severity. Chance looks like 50% wrong; these were 0&ndash;10%.</li>
-    </ul>
-    <p class="note"><b>And severity is not monotone in validity.</b> Raising it on the five
-      insensitive operations improved one and damaged three &mdash; so it needs a ladder, not
-      a guess. <code>vague</code> reversed direction outright and was removed.</p>
+    <p class="note"><b>Insensitive, not inaccurate.</b> Wrong-direction rates near zero,
+      tie rates to <span class="mono">0.95</span>.</p>
   </div>
 </section>
 
@@ -444,24 +378,12 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">11 &middot; how far it pushes</p>
     <h2>Past the labelled ceiling</h2>
-    <p class="lede">Five is where the labels stop. No public corpus offers more than about
-      five fixed, fully-labelled criteria per item &mdash; FLASK annotates three of twelve
-      skills; BiGGen uses per-instance rubrics, so criteria differ across items and cannot be
-      packed at all. <strong>A null at five with no located breaking point is weak evidence.</strong></p>
-    <ul class="points tight">
-      <li><strong>Corruption ground truth is not bound by that ceiling.</strong> Seed a known
-        edit with a known direction and you have a label for free. Fifteen synthetic-only
-        criteria join the five anchors &mdash; <em class="hl">K = 20</em>, 17 operations
-        measured, three load-only.</li>
-      <li><strong>The estimand narrows to match.</strong> Did the targeted score move in the
-        seeded direction? Ties and wrong directions are both misses.</li>
-      <li><strong>Conclusions attach to operations, not criteria.</strong> I can speak about
-        detecting injected typos and recovering a deleted answer. Not about judging verbosity
-        the way a human does.</li>
+    <ul class="points">
+      <li><strong>Five is where the labels stop.</strong></li>
+      <li>Seed a known edit, get a label free. <em class="hl">K = 20.</em></li>
+      <li>Narrower estimand: <strong>did the targeted score move?</strong></li>
+      <li>Conclusions attach to <strong>operations, not criteria</strong>.</li>
     </ul>
-    <p class="note"><b>Leakage is reported, not used as a gate.</b> Deleting an answer
-      sentence necessarily hurts coherence too. That is a fact about text, and excluding
-      operations because their observed leakage looked bad would be selecting on the outcome.</p>
   </div>
 </section>
 
@@ -503,14 +425,9 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       </div>
       <div>
         <ul class="points">
-          <li><strong>Semantic operations did not decline</strong>
-            (<span class="mono">70.5 &rarr; 72.0</span>). The class that was supposed to break
-            under load is the one that held.</li>
-          <li><strong>Surface operations fell</strong>
-            (<span class="mono">78.8 &rarr; 68.3</span>) &mdash; the class predicted to sit at
-            ceiling and stay there.</li>
-          <li><strong>Neither contrast survives Holm correction</strong>, and both movements
-            sit inside the shaded band. Which is the honest headline of this slide.</li>
+          <li><strong>Semantic held.</strong> The class that was supposed to break.</li>
+          <li><strong>Surface fell.</strong> The class predicted to sit at ceiling.</li>
+          <li><strong>Neither survives Holm.</strong> Both inside the band.</li>
         </ul>
       </div>
     </div>
@@ -526,18 +443,10 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       <div class="card"><p class="stat cy">~4<small> pts</small></p><p class="slab">MDE at K = 5</p></div>
       <div class="card"><p class="stat" style="color:var(--warn)">2.87&times;</p><p class="slab">observation imbalance in the sweep</p></div>
     </div>
-    <p class="lede" style="margin-top:1.6rem"><strong>The two halves of this talk are not
-      equally powered, and I am not going to pretend otherwise.</strong> The K = 5 result has
-      an interval you can act on. The K = 20 sweep does not.</p>
-    <ul class="points tight">
-      <li>Every movement in the sweep sits inside the band it could resolve. <strong>Absence
-        of a significant effect there is not evidence of absence.</strong></li>
-      <li>The surface decline has two candidate explanations &mdash; load, or position in the
-        prompt &mdash; and this design cannot separate them. Position was pre-registered as
-        the rival so the reading could not be built after seeing the curve.</li>
-      <li>Detection class is a property of the <strong>operation</strong>, not the criterion.
-        Separating the two needs a second operation of the opposite class on the same
-        criterion. Not implemented, so not claimed.</li>
+    <ul class="points tight" style="margin-top:1.8rem">
+      <li><strong>The two halves are not equally powered.</strong></li>
+      <li>At K = 20, <strong>absence of an effect is not evidence of absence</strong>.</li>
+      <li>Load or position? <strong>This design cannot separate them.</strong></li>
     </ul>
   </div>
 </section>
@@ -547,19 +456,16 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <p class="kicker">14 &middot; the defensible claim</p>
     <h2>What I will actually claim</h2>
     <div class="claim">
-      <p>On human-labelled data, packing five criteria into one judge call changed accuracy by
-        <em class="hl">+0.005 (95% CI &minus;0.034 to +0.043)</em> while cutting cost
-        <em class="hl">46%</em>. Extending the load to twenty criteria with synthetic
-        corruption showed no degradation that survives correction &mdash; but was not powered
-        to find one smaller than 13 points.</p>
+      <p>Packing five criteria into one judge call changed accuracy by
+        <em class="hl">+0.005 (95% CI &minus;0.034 to +0.043)</em> and cut cost
+        <em class="hl">46%</em>. At twenty, no degradation survives correction, and
+        nothing under 13 points was findable.</p>
     </div>
     <p class="slab" style="margin:1.7rem 0 .8rem">And what I am not claiming</p>
     <ul class="points tight notclaim">
-      <li>Not that packing is safe at twenty. That it was <em>not shown</em> to be unsafe is a
-        weaker statement, and it is the one the data supports.</li>
-      <li>Not that each corruption isolates a human quality dimension.</li>
-      <li>Not generalisation past this judge and this corpus. Per-dataset variance across
-        published benchmark suites is large enough that judges need validating per use case.</li>
+      <li>Not that packing is <strong>safe</strong> at twenty.</li>
+      <li>Not that a corruption <strong>is</strong> a human quality dimension.</li>
+      <li>Not <strong>generalisation</strong> past this judge, this corpus.</li>
     </ul>
   </div>
 </section>
@@ -569,23 +475,17 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <p class="kicker">15 &middot; takeaway</p>
     <h2>If you run judges in production</h2>
     <ul class="points">
-      <li><strong>Pack them, up to about five.</strong> That range is measured, the saving is
-        metered, and the interval is tight. Past that you are extrapolating &mdash; as am I.</li>
-      <li><strong>Anchor every scale point.</strong> Skip one and the judge quietly adopts a
-        shorter scale and ties on two thirds of your pairs.</li>
-      <li><strong>Report the tie rate next to accuracy.</strong> A judge that stops committing
-        is degrading, and dropping ties hides it in the direction you want to find.</li>
-      <li><strong>Hold the per-criterion output budget constant</strong>, or you will measure
-        your own token ceiling and call it divided attention.</li>
-      <li><strong>Randomise criterion order</strong>, and <strong>plant an effect in your
-        estimators</strong> before you trust them on real data.</li>
+      <li><strong>Pack them, up to about five.</strong></li>
+      <li><strong>Anchor every scale point.</strong></li>
+      <li><strong>Report the tie rate next to accuracy.</strong></li>
+      <li><strong>Hold the per-criterion output budget constant.</strong></li>
+      <li><strong>Randomise criterion order.</strong></li>
+      <li><strong>Plant an effect in your estimators</strong> before you trust them.</li>
     </ul>
     <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">Questions.</b>
-      Methods, pre-registration and the corruption catalogue are in the repo:
-      <code>METHODS.md</code>, <code>PREREGISTRATION.md</code>.</p>
+      <code>METHODS.md</code>, <code>PREREGISTRATION.md</code></p>
   </div>
 </section>
-
 </main>
 <nav id="dots" aria-label="Slide navigation"></nav>
 <div id="counter"><b id="cnum">1</b> / <span id="ctot">16</span></div>

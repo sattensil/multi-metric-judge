@@ -1,4 +1,4 @@
-# 30-minute packing talk — design
+# 30-minute packing talk: design
 
 **Date:** 2026-09-03  
 **Status:** approved; **narrative revised 2026-09-07** (see Revision below)  
@@ -66,7 +66,7 @@ No new provider calls. Numbers come from the completed `runs/sweep` reanalysis a
 
 ---
 
-## Revision, 2026-09-07 — claim-first reordering
+## Revision, 2026-09-07: claim-first reordering
 
 The narrative above led with the K = 20 synthetic sweep and demoted the K = 5
 human-stratum pilot to "a supporting beat". That inverted the evidence: the
@@ -81,7 +81,7 @@ The deck was reordered so the claim matches the evidence:
 2. You pay to read the input every time
 3. Two hypotheses, both plausible
 4. Why not judge versus judge
-5. **The answer: at five criteria, packing is free** — the claim, up front
+5. **The answer: at five criteria, packing is free**, the claim, up front
 6. What is held constant
 7. The tie rate is co-primary, and it is flat
 8. Estimators tested against a known answer
