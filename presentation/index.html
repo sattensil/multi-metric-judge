@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Does packing criteria into one judge call degrade them?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media=&#39;all&#39;" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --font-display:"Sora","Trebuchet MS",system-ui,sans-serif;
+  --font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"Roboto Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --bg:#080b0f; --panel:#0e151b; --panel2:#121b23;
+  --ink:#e9eff3; --dim:#8ea3b1; --faint:#5d7280;
+  --lime:#c8f751; --cyan:#5ad2ea; --warn:#f0a35e;
+  --line:#1d2b35;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);
+     -webkit-font-smoothing:antialiased}
+
+/* Proximity, not mandatory: a slide that outgrows the viewport on a 720p
+   projector must still be scrollable to its last line. Mandatory snapping
+   makes that content unreachable. */
+#deck{height:100vh;overflow-y:scroll;scroll-snap-type:y proximity;scroll-behavior:smooth}
+#deck::-webkit-scrollbar{width:0}
+.slide{min-height:100vh;scroll-snap-align:start;display:grid;align-content:center;
+       padding:7vh 7vw 9vh;position:relative}
+.wrap{width:min(1180px,100%);margin:0 auto}
+
+.kicker{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;
+        text-transform:uppercase;color:var(--cyan);margin:0 0 1.1rem}
+h1{font-family:var(--font-display);font-weight:700;line-height:1.02;margin:0;
+   font-size:clamp(2.3rem,5.6vw,4.6rem);letter-spacing:-.02em}
+h2{font-family:var(--font-display);font-weight:600;line-height:1.06;margin:0 0 1.4rem;
+   font-size:clamp(1.9rem,4.2vw,3.3rem);letter-spacing:-.015em}
+.lede{font-size:clamp(1.02rem,1.6vw,1.42rem);line-height:1.5;color:var(--dim);
+      max-width:64ch;margin:0 0 1.8rem}
+.lede strong{color:var(--ink);font-weight:600}
+em.hl{font-style:normal;color:var(--lime)}
+
+.cols{display:grid;gap:clamp(.9rem,1.6vw,1.5rem);
+      grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr))}
+.cols.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+      padding:1.2rem 1.35rem}
+.card h3{font-family:var(--font-display);font-size:1rem;letter-spacing:.01em;
+         margin:0 0 .6rem;color:var(--ink)}
+.card p{margin:0;color:var(--dim);font-size:.98rem;line-height:1.5}
+.card.accent{border-color:#2e4a1f;background:linear-gradient(180deg,#131c10,var(--panel))}
+.card.rival{border-color:#4a3a1c;background:linear-gradient(180deg,#1c170f,var(--panel))}
+
+.stat{font-family:var(--font-mono);font-weight:500;color:var(--lime);
+      font-size:clamp(1.8rem,3.6vw,2.9rem);line-height:1;margin:0 0 .35rem}
+.stat.cy{color:var(--cyan)}
+.stat small{font-size:.42em;color:var(--faint);letter-spacing:.04em}
+.slab{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--faint);margin:0}
+
+ul.points{margin:0;padding:0;list-style:none;max-width:70ch}
+ul.points li{position:relative;padding-left:1.5rem;margin-bottom:.85rem;
+             color:var(--dim);font-size:clamp(.98rem,1.3vw,1.16rem);line-height:1.5}
+ul.points li::before{content:"";position:absolute;left:0;top:.62em;width:.5rem;height:.5rem;
+                     background:var(--lime);border-radius:1px}
+ul.points li strong{color:var(--ink);font-weight:600}
+ul.points.tight li{margin-bottom:.55rem}
+
+code,.mono{font-family:var(--font-mono);font-size:.92em;color:var(--cyan)}
+.note{border-left:3px solid var(--warn);padding:.15rem 0 .15rem 1rem;color:var(--dim);
+      max-width:66ch;margin-top:1.6rem;font-size:.98rem;line-height:1.5}
+.note b{color:var(--warn);font-weight:600}
+
+table.data{border-collapse:collapse;width:100%;font-size:clamp(.85rem,1.1vw,1rem)}
+table.data th,table.data td{text-align:left;padding:.62rem .7rem;border-bottom:1px solid var(--line)}
+table.data th{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;
+              text-transform:uppercase;color:var(--faint);font-weight:400}
+table.data td.num{font-family:var(--font-mono);color:var(--ink)}
+table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)}
+
+.bars{display:flex;align-items:flex-end;gap:clamp(1.5rem,5vw,4rem);height:min(38vh,300px);
+      padding:0 .5rem;margin:1rem 0 .4rem}
+.bar{flex:1;max-width:150px;display:flex;flex-direction:column;height:100%}
+/* The fill needs its own track. Left as a sibling of the two labels it is the
+   only shrinkable item in the column, so it absorbs the labels' overflow and
+   silently draws the wrong ratio. */
+.bar .track{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end}
+.bar .fill{height:var(--h);border-radius:8px 8px 0 0;background:linear-gradient(180deg,var(--lime),#5f8c1c)}
+.bar.b2 .fill{background:linear-gradient(180deg,var(--cyan),#1c5c6c)}
+.bar .bval{font-family:var(--font-mono);color:var(--ink);font-size:clamp(1rem,1.8vw,1.5rem);
+           margin-bottom:.5rem;text-align:center}
+.bar .blab{font-family:var(--font-mono);font-size:.75rem;letter-spacing:.1em;color:var(--faint);
+           text-align:center;margin-top:.6rem}
+.chart{width:100%;max-width:660px;height:auto}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{fill:var(--faint);font-family:var(--font-mono);font-size:11px}
+.chart .band{fill:#c8f75110}
+.chart .lineA{stroke:var(--cyan);stroke-width:3;fill:none}
+.chart .lineB{stroke:var(--warn);stroke-width:3;fill:none}
+.chart .dot{r:6;stroke:var(--bg);stroke-width:2}
+.chart .val{font-family:var(--font-mono);font-size:13px;fill:var(--ink)}
+.chart .series{font-family:var(--font-mono);font-size:12px;letter-spacing:.08em}
+
+#titleslide .rule{width:70px;height:4px;background:var(--lime);margin:2rem 0 1.9rem}
+.meta{display:flex;flex-wrap:wrap;gap:1.6rem;font-family:var(--font-mono);
+      font-size:.8rem;color:var(--faint);letter-spacing:.06em}
+.meta span b{color:var(--cyan);font-weight:400}
+
+.claim{border:1px solid #2e4a1f;background:linear-gradient(180deg,#141d11,var(--panel));
+       border-radius:16px;padding:clamp(1.2rem,2.4vw,2rem)}
+.claim p{margin:0;font-size:clamp(1.05rem,1.9vw,1.5rem);line-height:1.45;color:var(--ink)}
+.notclaim{margin-top:1.4rem}
+.notclaim li::before{background:var(--warn)}
+
+#dots{position:fixed;right:max(1.1rem,2.2vw);top:50%;transform:translateY(-50%);
+      display:flex;flex-direction:column;gap:.55rem;z-index:5}
+#dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;cursor:pointer;
+             background:#2b3a44;transition:background .2s,transform .2s}
+#dots button[aria-current="true"]{background:var(--lime);transform:scale(1.5)}
+#progress{position:fixed;top:0;left:0;height:2px;background:var(--lime);width:0;z-index:6;
+          transition:width .25s ease}
+#counter{position:fixed;left:max(1.1rem,2.2vw);bottom:max(1rem,2vh);font-family:var(--font-mono);
+         font-size:.75rem;color:var(--faint);letter-spacing:.1em;z-index:5}
+#counter b{color:var(--ink);font-weight:400}
+
+@media (max-width:720px){
+  #dots{display:none}
+  .slide{padding:8vh 6vw 10vh}
+  .bars{height:32vh}
+}
+/* 1280x720 is a common projector, and at that height the denser slides ran
+   past the viewport. Tighten the vertical rhythm rather than let content fall
+   off the bottom of the screen. */
+@media (max-height:820px){
+  .slide{padding:5vh 6vw 6vh}
+  h2{font-size:clamp(1.6rem,3.4vw,2.5rem);margin-bottom:1rem}
+  .lede{font-size:clamp(.95rem,1.35vw,1.18rem);margin-bottom:1.15rem}
+  ul.points li{font-size:clamp(.9rem,1.15vw,1.04rem);margin-bottom:.6rem}
+  ul.points.tight li{margin-bottom:.42rem}
+  .note{margin-top:1.1rem;font-size:.92rem}
+  .card p{font-size:.92rem}
+  .kicker{margin-bottom:.8rem}
+}
+@media (prefers-reduced-motion:reduce){
+  #deck{scroll-behavior:auto}
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<main id="deck">
+
+<section class="slide" id="titleslide" data-title="Does packing criteria into one judge call degrade them">
+  <div class="wrap">
+    <p class="kicker">LLM-as-a-judge &middot; measurement study</p>
+    <h1>Does packing criteria<br>into one judge call<br>quietly degrade them?</h1>
+    <div class="rule"></div>
+    <p class="lede">You pay for your judge to read the full input once. Stack judges for
+      multiple quality dimensions and you re-pay that read every time. The obvious fix is
+      to score everything in one call &mdash; and the obvious worry is that something breaks
+      when you do.</p>
+    <div class="meta">
+      <span>judge <b>gpt-5-mini</b></span>
+      <span>gold <b>HelpSteer2 + synthetic corruption</b></span>
+      <span>answer <b>it is free, up to five</b></span>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="s2" data-title="You pay to read the input every time">
+  <div class="wrap">
+    <p class="kicker">01 &middot; the cost structure</p>
+    <h2>You pay to read the input every time</h2>
+    <p class="lede">A judge cannot score anything until it has read the prompt and the
+      response. Score five dimensions in five calls and you buy that read
+      <strong>five times</strong>. The content is identical each time. Only the question changes.</p>
+    <div class="cols">
+      <div class="card">
+        <p class="stat">791<small> tok</small></p>
+        <p class="slab">input per criterion, one per call</p>
+      </div>
+      <div class="card accent">
+        <p class="stat">323<small> tok</small></p>
+        <p class="slab">input per criterion, five per call</p>
+      </div>
+      <div class="card">
+        <p class="stat cy">2.4&times;</p>
+        <p class="slab">reduction in what you re-read</p>
+      </div>
+    </div>
+    <p class="note"><b>Measured, not modelled.</b> Observed input tokens from a 150-item
+      run on <code>gpt-5-mini</code>: 3,599 of 3,600 calls completed.</p>
+  </div>
+</section>
+
+<section class="slide" id="s3" data-title="Two hypotheses, both plausible">
+  <div class="wrap">
+    <p class="kicker">02 &middot; why this is not obvious</p>
+    <h2>Two hypotheses, both plausible</h2>
+    <div class="cols two">
+      <div class="card rival">
+        <h3>Packing hurts &mdash; divided attention</h3>
+        <p>Attention is split across criteria. One shared reasoning budget now covers five
+          judgements instead of one. Each score gets less of the model than it used to.
+          <em class="hl">Per-criterion accuracy declines as group size rises.</em></p>
+      </div>
+      <div class="card accent">
+        <h3>Packing helps &mdash; criteria in context</h3>
+        <p>The judge sees the whole rubric at once and can trade dimensions off coherently
+          rather than scoring each in isolation. A response is verbose <em>relative to</em>
+          how helpful it is. Splitting the call hides that.</p>
+      </div>
+    </div>
+    <p class="note"><b>Pre-registered rival:</b> any apparent effect is really about
+      <em class="hl">where a criterion sits</em> in the prompt, not how many share the call.
+      That implies a different fix &mdash; order your criteria &mdash; so it is modelled
+      alongside, not treated as a nuisance.</p>
+  </div>
+</section>
+
+<section class="slide" id="s4" data-title="Why not judge versus judge">
+  <div class="wrap">
+    <p class="kicker">03 &middot; the design decision that shapes everything</p>
+    <h2>Why not judge versus judge</h2>
+    <p class="lede">The cheap way to answer this is to run a packed judge against an unpacked
+      one and measure disagreement. That measures <strong>agreement between two fallible
+      instruments</strong>, and it cannot tell you which one moved. If both degrade together
+      it reports a clean null.</p>
+    <ul class="points">
+      <li>So: <strong>ground truth on both sides.</strong> Human labels where they exist,
+        corruption applied by construction where they do not.</li>
+      <li><strong>HelpSteer2</strong> gives the human side: 10,681 prompts &times; 2 responses,
+        five criteria, Likert 0&ndash;4, at least three annotators each. Two responses per
+        prompt gives pairwise ground truth with a clean 0.5 baseline.</li>
+      <li>The closest published result leans pessimistic &mdash; <strong>LongJudgeBench</strong>
+        found a rubric added on top of a reference gave no improvement
+        (<span class="mono">0.578</span> vs <span class="mono">0.584</span>). But that varied
+        <strong>whether a rubric was present</strong>, not how many criteria shared a call.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="slide" id="s5" data-title="The answer: at five criteria, packing is free">
+  <div class="wrap">
+    <p class="kicker">04 &middot; the result</p>
+    <h2>At five criteria, packing is free</h2>
+    <div class="cols two" style="align-items:center">
+      <div>
+        <svg class="chart" viewBox="0 0 600 150" role="img"
+             aria-label="Accuracy change from packing five criteria into one call: point estimate plus 0.5 points, 95 percent confidence interval from minus 3.4 to plus 4.3 points, straddling zero.">
+          <line class="grid" x1="60" y1="100" x2="540" y2="100"></line>
+          <line x1="300" y1="30" x2="300" y2="112" stroke="#5d7280" stroke-width="1" stroke-dasharray="4 4"></line>
+          <text class="axis" x="300" y="24" text-anchor="middle">no change</text>
+          <rect x="164" y="60" width="308" height="14" rx="7" fill="#5ad2ea33" stroke="#5ad2ea" stroke-width="1"></rect>
+          <circle cx="320" cy="67" r="7" fill="#c8f751" stroke="#080b0f" stroke-width="2"></circle>
+          <text class="val" x="164" y="52" text-anchor="middle" fill="#5ad2ea">&minus;3.4</text>
+          <text class="val" x="472" y="52" text-anchor="middle" fill="#5ad2ea">+4.3</text>
+          <text class="val" x="320" y="95" text-anchor="middle" fill="#c8f751">+0.5</text>
+          <text class="axis" x="60"  y="120">&minus;6 pts</text>
+          <text class="axis" x="540" y="120" text-anchor="end">+6 pts</text>
+        </svg>
+        <p class="slab" style="margin-top:.5rem">accuracy change, K = 1 &rarr; K = 5 &middot; 95% CI, clustered on item</p>
+      </div>
+      <div>
+        <p class="lede" style="margin-bottom:1.1rem">Five criteria in one call instead of five,
+          on real human labels: <em class="hl">no detectable accuracy cost</em>, and the
+          interval is tight enough to rule out anything worse than
+          <strong>3.4 points</strong>.</p>
+        <table class="data">
+          <tr><th></th><th>K = 1</th><th>K = 5</th></tr>
+          <tr><td>Accuracy</td><td class="num">0.8051</td><td class="num">0.8039</td></tr>
+          <tr><td>Judge tie rate</td><td class="num">0.4800</td><td class="num">0.4796</td></tr>
+          <tr><td>Cost / 10&sup3; criteria</td><td class="num">$0.593</td><td class="num up">$0.318</td></tr>
+        </table>
+        <p class="slab" style="margin-top:.7rem">paired contrast +0.0047 &middot; SE 0.0194 &middot; p = 0.81 &middot; n = 144 items</p>
+      </div>
+    </div>
+    <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">46% cheaper,
+      for nothing measurable.</b> That is the finding. The rest of this talk is why you should
+      believe it, and where it stops.</p>
+  </div>
+</section>
+
+<section class="slide" id="s6" data-title="What is held constant">
+  <div class="wrap">
+    <p class="kicker">05 &middot; why you should believe it</p>
+    <h2>What is held constant</h2>
+    <ul class="points">
+      <li><strong>The criteria themselves.</strong> Every condition scores all of them. Only
+        the packing changes.</li>
+      <li><strong>Three randomisations, all required.</strong> Partition membership, criterion
+        order within the call, and response order &mdash; each seeded from
+        <code>SHA-256(base_seed, item_id, nominal_n, replicate)</code>. Drop any one and a
+        group-size effect is confounded with criterion pairing or with position.</li>
+      <li><strong>Per-criterion output budget.</strong> Content budget is
+        <code>40 + 220 &times; group_size</code>. If a five-criterion call had to emit five
+        scores and five rationales under a one-criterion ceiling, accuracy would drop for a
+        completely uninteresting reason and I would have measured my own token limit.</li>
+    </ul>
+    <p class="note"><b>Had the effect vanished when that control went in, that would have
+      been the finding.</b> Report it and stop. Acknowledged and uncontrolled: a
+      five-criterion prompt is genuinely longer, so this is not a pure test of divided
+      attention and is not described as one.</p>
+  </div>
+</section>
+
+<section class="slide" id="s7" data-title="The tie rate is co-primary, and it is flat">
+  <div class="wrap">
+    <p class="kicker">06 &middot; the outcome nobody reports</p>
+    <h2>The tie rate is co-primary, and it is flat</h2>
+    <p class="lede">When the judge scores both responses equally it has expressed no
+      preference. Those observations have no correct answer, so they leave the accuracy
+      outcome. <strong>Excluding them is only defensible if you report them.</strong></p>
+    <div class="cols two">
+      <div class="card rival">
+        <h3>The trap</h3>
+        <p>If packing makes a judge flatter and more indecisive, that <em>is</em> degradation
+          &mdash; and dropping ties silently hides it, biasing the contrast in exactly the
+          direction you were hoping to find.</p>
+      </div>
+      <div class="card accent">
+        <h3>What happened</h3>
+        <p><span class="mono">0.4800 &rarr; 0.4796</span>. Resolution does not vary with
+          treatment, so conditioning on resolved observations is not a collider here. The
+          selection concern is discharged empirically rather than argued away.</p>
+      </div>
+    </div>
+    <p class="note"><b>Report it next to accuracy, always.</b> A judge that stops committing
+      looks identical to a judge that got better, if you only ever look at the rows where it
+      committed.</p>
+  </div>
+</section>
+
+<section class="slide" id="s8" data-title="Estimators tested against a known answer">
+  <div class="wrap">
+    <p class="kicker">07 &middot; why you should believe it</p>
+    <h2>Estimators tested against a known answer</h2>
+    <ul class="points tight">
+      <li><strong>Clustered standard errors, always.</strong> Observations cluster by source
+        prompt. Clustered SEs have been measured at over <span class="mono">3&times;</span>
+        naive ones on comparable eval data. Naive SEs appear nowhere in this work.</li>
+      <li><strong>Within-item paired contrasts as primary.</strong> Every item is judged at
+        every group size, so item difficulty differences out exactly rather than being
+        modelled &mdash; roughly a third of the variance at &rho; = 0.5.</li>
+      <li><strong>Three estimators reported together</strong>, because they fail differently:
+        paired contrast, cluster-robust logistic regression, and a crossed mixed model with
+        random intercepts for item and criterion. All three agree here.</li>
+      <li><strong>And the suite is validated against planted effects.</strong> It recovers a
+        known degradation with the correct sign and significance, and produces
+        <em>no</em> significant curve on a judge with nothing planted.</li>
+    </ul>
+    <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">An estimator
+      suite that has never been tested against a known answer is not evidence of anything.</b>
+      Plant an effect. Check you find it. Plant nothing. Check you do not.</p>
+  </div>
+</section>
+
+<section class="slide" id="s9" data-title="Anchor every scale point or the judge invents a shorter one">
+  <div class="wrap">
+    <p class="kicker">08 &middot; what it took to measure this</p>
+    <h2>Anchor every scale point,<br>or the judge invents a shorter one</h2>
+    <p class="lede">With the rubric anchored only at <span class="mono">0</span>,
+      <span class="mono">2</span> and <span class="mono">4</span>, <code>gpt-5-mini</code>
+      used only 0, 2 and 4. <strong>Never 1. Never 3.</strong> A partially anchored scale
+      becomes the scale.</p>
+    <div class="cols">
+      <div class="card rival">
+        <p class="stat" style="color:var(--warn)">66%</p>
+        <p class="slab">tie rate, anchored at 0 / 2 / 4</p>
+      </div>
+      <div class="card accent">
+        <p class="stat">43%</p>
+        <p class="slab">tie rate, all five points anchored</p>
+      </div>
+      <div class="card">
+        <p class="stat cy">29 &rarr; 49</p>
+        <p class="slab">usable observations per 100</p>
+      </div>
+    </div>
+    <p class="note"><b>You lose most of your data to a formatting decision.</b> Two thirds of
+      pairs unscoreable, 29 usable observations out of 100 &mdash; not because the judge is
+      weak, but because it was handed a three-point scale and told it was a five-point one.
+      The class now rejects any criterion with an undescribed scale point.</p>
+  </div>
+</section>
+
+<section class="slide" id="s10" data-title="Your difficulty classification will be wrong">
+  <div class="wrap">
+    <p class="kicker">09 &middot; what it took to measure this</p>
+    <h2>Your difficulty classification will be wrong</h2>
+    <p class="lede">I sorted twenty corruption operations into <em class="hl">surface</em>
+      (detectable without comprehension) and <em class="hl">semantic</em> (requires reading
+      and reasoning), then measured them. <strong>Eight of twenty contradicted the class I
+      had assigned.</strong></p>
+    <ul class="points tight">
+      <li>Only <strong>5 of 12</strong> operations predicted to sit at ceiling actually
+        reached it.</li>
+      <li><code>contradict</code> &mdash; hypothesised semantic and difficult &mdash; reached
+        <span class="mono">0.93</span>.</li>
+      <li><code>jargon</code> is <strong>mute</strong>: lexical jargon substitution does not
+        move this judge's complexity score at <em>any</em> severity tested. That is a finding
+        about the judge &mdash; its notion of complexity tracks conceptual depth, not
+        vocabulary.</li>
+    </ul>
+    <p class="note"><b>The classification was pre-committed as a hypothesis, and measurement
+      governs.</b> This is why the calibration gate exists at all: it runs every operation at
+      group size 1 before a penny is spent on the sweep, and it reassigns them by what they
+      actually do.</p>
+  </div>
+</section>
+
+<section class="slide" id="s11" data-title="Detection rate hides two different failures">
+  <div class="wrap">
+    <p class="kicker">10 &middot; what it took to measure this</p>
+    <h2>Detection rate hides two different failures</h2>
+    <p class="lede">A low detection rate can mean the judge <strong>judged backwards</strong>,
+      or that it <strong>saw no difference at all</strong>. Those need opposite remedies, and
+      one number cannot tell them apart.</p>
+    <div class="cols">
+      <div class="card"><h3>detection</h3><p>hits / n</p></div>
+      <div class="card"><h3>tie rate</h3><p>ties / n</p></div>
+      <div class="card accent"><h3>discrimination</h3><p>hits / (hits + wrong) &mdash; accuracy
+        <em>given</em> the judge committed</p></div>
+    </div>
+    <ul class="points tight" style="margin-top:1.4rem">
+      <li>Wrong-direction rates were near <strong>zero</strong> across all twenty operations
+        while tie rates reached <span class="mono">0.95</span>. Every low-detection operation
+        was <em>insensitive</em>, not <em>inaccurate</em>.</li>
+      <li>A rule treating detection below 0.60 as near-chance would have thrown out
+        <strong>five operations that were directionally perfect</strong> and simply needed
+        more severity. Chance looks like 50% wrong; these were 0&ndash;10%.</li>
+    </ul>
+    <p class="note"><b>And severity is not monotone in validity.</b> Raising it on the five
+      insensitive operations improved one and damaged three &mdash; so it needs a ladder, not
+      a guess. <code>vague</code> reversed direction outright and was removed.</p>
+  </div>
+</section>
+
+<section class="slide" id="s12" data-title="Past the labelled ceiling: twenty criteria by corruption">
+  <div class="wrap">
+    <p class="kicker">11 &middot; how far it pushes</p>
+    <h2>Past the labelled ceiling</h2>
+    <p class="lede">Five is where the labels stop. No public corpus offers more than about
+      five fixed, fully-labelled criteria per item &mdash; FLASK annotates three of twelve
+      skills; BiGGen uses per-instance rubrics, so criteria differ across items and cannot be
+      packed at all. <strong>A null at five with no located breaking point is weak evidence.</strong></p>
+    <ul class="points tight">
+      <li><strong>Corruption ground truth is not bound by that ceiling.</strong> Seed a known
+        edit with a known direction and you have a label for free. Fifteen synthetic-only
+        criteria join the five anchors &mdash; <em class="hl">K = 20</em>, 17 operations
+        measured, three load-only.</li>
+      <li><strong>The estimand narrows to match.</strong> Did the targeted score move in the
+        seeded direction? Ties and wrong directions are both misses.</li>
+      <li><strong>Conclusions attach to operations, not criteria.</strong> I can speak about
+        detecting injected typos and recovering a deleted answer. Not about judging verbosity
+        the way a human does.</li>
+    </ul>
+    <p class="note"><b>Leakage is reported, not used as a gate.</b> Deleting an answer
+      sentence necessarily hurts coherence too. That is a fact about text, and excluding
+      operations because their observed leakage looked bad would be selecting on the outcome.</p>
+  </div>
+</section>
+
+<section class="slide" id="s13" data-title="How far it pushes: the K equals 20 sweep">
+  <div class="wrap">
+    <p class="kicker">12 &middot; how far it pushes</p>
+    <h2>The K = 20 sweep</h2>
+    <div class="cols two" style="align-items:center">
+      <div>
+        <svg class="chart" viewBox="0 0 600 300" role="img"
+             aria-label="Targeted recovery at K=1 and K=20. Semantic rises from 70.5 to 72.0 percent. Surface falls from 78.8 to 68.3 percent. Both endpoints sit inside the minimum detectable effect band.">
+          <rect class="band" x="95" y="49" width="420" height="211"></rect>
+          <line class="grid" x1="95" y1="40"  x2="515" y2="40"></line>
+          <line class="grid" x1="95" y1="84"  x2="515" y2="84"></line>
+          <line class="grid" x1="95" y1="128" x2="515" y2="128"></line>
+          <line class="grid" x1="95" y1="172" x2="515" y2="172"></line>
+          <line class="grid" x1="95" y1="216" x2="515" y2="216"></line>
+          <line class="grid" x1="95" y1="260" x2="515" y2="260"></line>
+          <text class="axis" x="85" y="44"  text-anchor="end">85%</text>
+          <text class="axis" x="85" y="132" text-anchor="end">75%</text>
+          <text class="axis" x="85" y="220" text-anchor="end">65%</text>
+          <text class="axis" x="110" y="282">K = 1</text>
+          <text class="axis" x="500" y="282" text-anchor="end">K = 20</text>
+          <text class="axis" x="505" y="62" text-anchor="end" fill="#c8f751">MDE band</text>
+          <polyline class="lineB" points="110,94.6 500,187"></polyline>
+          <polyline class="lineA" points="110,167.6 500,154.4"></polyline>
+          <circle class="dot" cx="110" cy="94.6" fill="#f0a35e"></circle>
+          <circle class="dot" cx="500" cy="187"  fill="#f0a35e"></circle>
+          <circle class="dot" cx="110" cy="167.6" fill="#5ad2ea"></circle>
+          <circle class="dot" cx="500" cy="154.4" fill="#5ad2ea"></circle>
+          <text class="val" x="110" y="78"  text-anchor="middle" fill="#f0a35e">78.8</text>
+          <text class="val" x="500" y="207" text-anchor="middle" fill="#f0a35e">68.3</text>
+          <text class="val" x="110" y="188" text-anchor="middle" fill="#5ad2ea">70.5</text>
+          <text class="val" x="500" y="144" text-anchor="middle" fill="#5ad2ea">72.0</text>
+          <text class="series" x="524" y="191" fill="#f0a35e">surface</text>
+          <text class="series" x="524" y="158" fill="#5ad2ea">semantic</text>
+        </svg>
+        <p class="slab" style="margin-top:.4rem">10,880 calls &middot; endpoints of the swept ladder</p>
+      </div>
+      <div>
+        <ul class="points">
+          <li><strong>Semantic operations did not decline</strong>
+            (<span class="mono">70.5 &rarr; 72.0</span>). The class that was supposed to break
+            under load is the one that held.</li>
+          <li><strong>Surface operations fell</strong>
+            (<span class="mono">78.8 &rarr; 68.3</span>) &mdash; the class predicted to sit at
+            ceiling and stay there.</li>
+          <li><strong>Neither contrast survives Holm correction</strong>, and both movements
+            sit inside the shaded band. Which is the honest headline of this slide.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" id="s14" data-title="What this study could not have seen">
+  <div class="wrap">
+    <p class="kicker">13 &middot; the limit</p>
+    <h2>What this study could not have seen</h2>
+    <div class="cols">
+      <div class="card"><p class="stat" style="color:var(--warn)">13&ndash;14<small> pts</small></p><p class="slab">MDE at K = 20</p></div>
+      <div class="card"><p class="stat cy">~4<small> pts</small></p><p class="slab">MDE at K = 5</p></div>
+      <div class="card"><p class="stat" style="color:var(--warn)">2.87&times;</p><p class="slab">observation imbalance in the sweep</p></div>
+    </div>
+    <p class="lede" style="margin-top:1.6rem"><strong>The two halves of this talk are not
+      equally powered, and I am not going to pretend otherwise.</strong> The K = 5 result has
+      an interval you can act on. The K = 20 sweep does not.</p>
+    <ul class="points tight">
+      <li>Every movement in the sweep sits inside the band it could resolve. <strong>Absence
+        of a significant effect there is not evidence of absence.</strong></li>
+      <li>The surface decline has two candidate explanations &mdash; load, or position in the
+        prompt &mdash; and this design cannot separate them. Position was pre-registered as
+        the rival so the reading could not be built after seeing the curve.</li>
+      <li>Detection class is a property of the <strong>operation</strong>, not the criterion.
+        Separating the two needs a second operation of the opposite class on the same
+        criterion. Not implemented, so not claimed.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="slide" id="s15" data-title="What I will actually claim">
+  <div class="wrap">
+    <p class="kicker">14 &middot; the defensible claim</p>
+    <h2>What I will actually claim</h2>
+    <div class="claim">
+      <p>On human-labelled data, packing five criteria into one judge call changed accuracy by
+        <em class="hl">+0.005 (95% CI &minus;0.034 to +0.043)</em> while cutting cost
+        <em class="hl">46%</em>. Extending the load to twenty criteria with synthetic
+        corruption showed no degradation that survives correction &mdash; but was not powered
+        to find one smaller than 13 points.</p>
+    </div>
+    <p class="slab" style="margin:1.7rem 0 .8rem">And what I am not claiming</p>
+    <ul class="points tight notclaim">
+      <li>Not that packing is safe at twenty. That it was <em>not shown</em> to be unsafe is a
+        weaker statement, and it is the one the data supports.</li>
+      <li>Not that each corruption isolates a human quality dimension.</li>
+      <li>Not generalisation past this judge and this corpus. Per-dataset variance across
+        published benchmark suites is large enough that judges need validating per use case.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="slide" id="s16" data-title="If you run judges in production">
+  <div class="wrap">
+    <p class="kicker">15 &middot; takeaway</p>
+    <h2>If you run judges in production</h2>
+    <ul class="points">
+      <li><strong>Pack them, up to about five.</strong> That range is measured, the saving is
+        metered, and the interval is tight. Past that you are extrapolating &mdash; as am I.</li>
+      <li><strong>Anchor every scale point.</strong> Skip one and the judge quietly adopts a
+        shorter scale and ties on two thirds of your pairs.</li>
+      <li><strong>Report the tie rate next to accuracy.</strong> A judge that stops committing
+        is degrading, and dropping ties hides it in the direction you want to find.</li>
+      <li><strong>Hold the per-criterion output budget constant</strong>, or you will measure
+        your own token ceiling and call it divided attention.</li>
+      <li><strong>Randomise criterion order</strong>, and <strong>plant an effect in your
+        estimators</strong> before you trust them on real data.</li>
+    </ul>
+    <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">Questions.</b>
+      Methods, pre-registration and the corruption catalogue are in the repo:
+      <code>METHODS.md</code>, <code>PREREGISTRATION.md</code>.</p>
+  </div>
+</section>
+
+</main>
+<nav id="dots" aria-label="Slide navigation"></nav>
+<div id="counter"><b id="cnum">1</b> / <span id="ctot">16</span></div>
+
+<script>
+(function () {
+  "use strict";
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
+  var dots = document.getElementById("dots");
+  var bar = document.getElementById("progress");
+  var cnum = document.getElementById("cnum");
+  var current = 0;
+  var remote = false;
+
+  document.getElementById("ctot").textContent = String(slides.length);
+
+  var bus = null;
+  try { bus = new BroadcastChannel("deck-sync-packing-v1"); } catch (e) { bus = null; }
+
+  slides.forEach(function (slide, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.title = slide.getAttribute("data-title") || ("Slide " + (i + 1));
+    b.setAttribute("aria-label", b.title);
+    b.addEventListener("click", function () { go(i, true); });
+    dots.appendChild(b);
+  });
+  var buttons = Array.prototype.slice.call(dots.children);
+
+  function paint(i) {
+    current = i;
+    cnum.textContent = String(i + 1);
+    bar.style.width = ((i + 1) / slides.length * 100) + "%";
+    buttons.forEach(function (b, n) { b.setAttribute("aria-current", n === i ? "true" : "false"); });
+    // Keep the address bar on the current slide so a reload resumes here.
+    // replaceState rather than a hash assignment: no back-history to walk, and
+    // no scroll jump from the browser acting on the fragment itself.
+    if (slides[i].id && window.history && window.history.replaceState) {
+      window.history.replaceState(null, "", "#" + slides[i].id);
+    }
+  }
+
+  // A smooth scroll crosses every slide between here and there, and each
+  // crossing trips the observer below. Without this guard, jumping from slide 1
+  // to slide 16 would strobe the presenter view through fourteen slides on the
+  // way. While a jump is in flight, only its destination counts.
+  var pending = null;
+  var pendingTimer = null;
+
+  function expect(i) {
+    pending = i;
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(function () { pending = null; }, 1200);
+  }
+
+  function go(i, broadcast) {
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    expect(i);
+    slides[i].scrollIntoView({ behavior: "smooth", block: "start" });
+    paint(i);
+    if (broadcast && bus) { bus.postMessage({ type: "nav", index: i }); }
+  }
+
+  // Scrolling is also navigation, so the presenter view has to follow a scroll
+  // the same way it follows a keypress. This measures which slide's top is
+  // nearest the viewport top rather than watching an intersection ratio: a
+  // slide taller than the viewport can never reach a high ratio, and on those
+  // slides a ratio-based observer stops reporting altogether.
+  var ticking = false;
+
+  function sync() {
+    ticking = false;
+    var origin = deck.getBoundingClientRect().top;
+    var best = 0;
+    var bestDistance = Infinity;
+    for (var n = 0; n < slides.length; n++) {
+      var distance = Math.abs(slides[n].getBoundingClientRect().top - origin);
+      if (distance < bestDistance) { bestDistance = distance; best = n; }
+    }
+    if (pending !== null) {
+      if (best !== pending) { return; }
+      pending = null;
+      clearTimeout(pendingTimer);
+    }
+    if (best === current) { return; }
+    paint(best);
+    if (!remote && bus) { bus.postMessage({ type: "nav", index: best }); }
+  }
+
+  deck.addEventListener("scroll", function () {
+    if (ticking) { return; }
+    ticking = true;
+    window.requestAnimationFrame(sync);
+  }, { passive: true });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+    var k = e.key;
+    if (k === "ArrowRight" || k === "ArrowDown" || k === "PageDown" || k === " " || k === "Enter") {
+      e.preventDefault(); go(current + 1, true);
+    } else if (k === "ArrowLeft" || k === "ArrowUp" || k === "PageUp") {
+      e.preventDefault(); go(current - 1, true);
+    } else if (k === "Home") {
+      e.preventDefault(); go(0, true);
+    } else if (k === "End") {
+      e.preventDefault(); go(slides.length - 1, true);
+    }
+  });
+
+  if (bus) {
+    bus.onmessage = function (e) {
+      var m = e.data || {};
+      if (m.type === "nav" && typeof m.index === "number") {
+        remote = true;
+        go(m.index, false);
+        setTimeout(function () { remote = false; }, 400);
+      } else if (m.type === "ping") {
+        bus.postMessage({ type: "state", index: current, total: slides.length });
+      }
+    };
+  }
+
+  // Open on the slide named in the hash, so a deep link -- or a reload partway
+  // through the talk -- comes back where it left off rather than at slide one.
+  var initial = 0;
+  if (window.location.hash.length > 1) {
+    var target = document.getElementById(window.location.hash.slice(1));
+    var i = slides.indexOf(target);
+    if (i >= 0) { initial = i; }
+  }
+  paint(initial);
+  if (initial > 0) {
+    // Instant, not smooth: there is nothing to animate away from on first paint.
+    var jump = function () {
+      expect(initial);
+      slides[initial].scrollIntoView({ behavior: "instant", block: "start" });
+    };
+    jump();
+    // Webfonts land after first layout and shift slide heights, so scroll again
+    // once everything has settled -- but only if the speaker has not already
+    // moved on. `load` can fire many seconds late on a bad network, and
+    // dragging the projector back to the opening slide mid-talk is far worse
+    // than a slightly misaligned first paint.
+    window.addEventListener("load", function () {
+      if (current === initial) { jump(); }
+    });
+  }
+  if (bus) { bus.postMessage({ type: "state", index: initial, total: slides.length }); }
+}());
+</script>
+</body>
+</html>

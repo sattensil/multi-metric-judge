@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presenter &middot; packing talk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media=&#39;all&#39;" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --font-display:"Sora","Trebuchet MS",system-ui,sans-serif;
+  --font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"Roboto Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --bg:#080b0f; --panel:#0e151b; --ink:#e9eff3; --dim:#93a7b4; --faint:#5d7280;
+  --lime:#c8f751; --cyan:#5ad2ea; --warn:#f0a35e; --red:#ef6f6f; --line:#1d2b35;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);
+     display:flex;flex-direction:column;overflow:hidden}
+
+header{display:flex;align-items:center;gap:1.2rem;padding:.75rem 1.4rem;
+       border-bottom:1px solid var(--line);flex:0 0 auto}
+header .badge{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.2em;
+              text-transform:uppercase;color:var(--faint)}
+header .badge b{color:var(--cyan);font-weight:400}
+#link{margin-left:auto;font-family:var(--font-mono);font-size:.68rem;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:.5rem}
+#link .led{width:8px;height:8px;border-radius:50%;background:#3a4650}
+#link.live .led{background:var(--lime)} #link.live{color:var(--lime)}
+
+main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.85fr);
+     gap:1px;background:var(--line);min-height:0}
+.pane{background:var(--bg);padding:1.4rem 1.6rem;overflow-y:auto;min-height:0}
+
+.goal{display:inline-block;font-family:var(--font-mono);font-size:.66rem;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--lime);border:1px solid #2e4a1f;background:#131c10;
+      border-radius:999px;padding:.3rem .8rem;margin-bottom:.9rem}
+#title{font-family:var(--font-display);font-weight:600;line-height:1.08;margin:0 0 1.3rem;
+       font-size:clamp(1.4rem,2.6vw,2.2rem);letter-spacing:-.01em}
+.slab{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;
+      color:var(--faint);margin:0 0 .7rem}
+#say{margin:0 0 1.6rem;padding:0;list-style:none}
+#say li{position:relative;padding-left:1.35rem;margin-bottom:.75rem;color:var(--ink);
+        font-size:clamp(.95rem,1.15vw,1.12rem);line-height:1.5}
+#say li::before{content:"";position:absolute;left:0;top:.6em;width:.45rem;height:.45rem;
+                background:var(--cyan);border-radius:1px}
+#say li b{color:var(--lime);font-weight:600}
+#dir{border-left:3px solid var(--warn);padding:.3rem 0 .3rem 1rem;color:var(--dim);
+     font-size:.98rem;line-height:1.5;margin:0}
+#dir b{color:var(--warn);font-weight:600}
+
+.side section{border-bottom:1px solid var(--line);padding-bottom:1.2rem;margin-bottom:1.2rem}
+.side section:last-child{border:0;margin-bottom:0}
+#timer{font-family:var(--font-mono);font-size:clamp(2.4rem,6vw,3.6rem);line-height:1;
+       color:var(--lime);margin:0 0 .5rem;letter-spacing:-.02em}
+#timer.over{color:var(--red)}
+#timer.idle{color:var(--faint)}
+#pace{font-family:var(--font-mono);font-size:.8rem;color:var(--dim);margin:0}
+#pace b{font-weight:400}
+#pace.ahead b{color:var(--cyan)} #pace.ontime b{color:var(--lime)} #pace.behind b{color:var(--warn)}
+#window{font-family:var(--font-mono);font-size:.8rem;color:var(--faint);margin:.35rem 0 0}
+#next{font-family:var(--font-display);font-weight:600;font-size:1.02rem;line-height:1.3;
+      color:var(--dim);margin:0}
+#nextgoal{font-family:var(--font-mono);font-size:.7rem;color:var(--faint);margin:.45rem 0 0}
+#pos{font-family:var(--font-mono);font-size:.8rem;color:var(--faint);margin:0}
+#pos b{color:var(--ink);font-weight:400}
+.keys{font-family:var(--font-mono);font-size:.7rem;color:var(--faint);line-height:1.9;margin:0}
+.keys kbd{background:var(--panel);border:1px solid var(--line);border-radius:4px;
+          padding:.1rem .35rem;color:var(--dim)}
+
+@media (max-width:860px){
+  main{grid-template-columns:1fr;grid-template-rows:1fr auto}
+  body{overflow:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <span class="badge">presenter &middot; <b>packing talk</b></span>
+  <span class="badge">30 min &middot; <b id="slidecount">&mdash;</b></span>
+  <span id="link"><span class="led"></span><span id="linktext">standalone</span></span>
+</header>
+
+<main>
+  <div class="pane">
+    <span class="goal" id="goal"></span>
+    <h1 id="title"></h1>
+    <p class="slab">say</p>
+    <ul id="say"></ul>
+    <p class="slab">direction</p>
+    <p id="dir"></p>
+  </div>
+
+  <div class="pane side">
+    <section>
+      <p class="slab">elapsed</p>
+      <p id="timer" class="idle">00:00</p>
+      <p id="pace"><b>press T to start</b></p>
+      <p id="window"></p>
+    </section>
+    <section>
+      <p class="slab">next</p>
+      <p id="next"></p>
+      <p id="nextgoal"></p>
+    </section>
+    <section>
+      <p class="slab">position</p>
+      <p id="pos"></p>
+    </section>
+    <section>
+      <p class="slab">keys</p>
+      <p class="keys">
+        <kbd>&rarr;</kbd> <kbd>space</kbd> next &middot; <kbd>&larr;</kbd> back<br>
+        <kbd>home</kbd> <kbd>end</kbd> jump &middot; <kbd>T</kbd> start / pause timer<br>
+        <kbd>R</kbd> reset timer
+      </p>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  const TITLES = [
+    "Does packing criteria into one judge call degrade them",
+    "You pay to read the input every time",
+    "Two hypotheses, both plausible",
+    "Why not judge versus judge",
+    "The answer: at five criteria, packing is free",
+    "What is held constant",
+    "The tie rate is co-primary, and it is flat",
+    "Estimators tested against a known answer",
+    "Anchor every scale point or the judge invents a shorter one",
+    "Your difficulty classification will be wrong",
+    "Detection rate hides two different failures",
+    "Past the labelled ceiling: twenty criteria by corruption",
+    "How far it pushes: the K equals 20 sweep",
+    "What this study could not have seen",
+    "What I will actually claim",
+    "If you run judges in production"
+  ];
+
+  const GOALS = [
+    "frame the question",
+    "make the cost real",
+    "earn the uncertainty",
+    "justify the method",
+    "deliver the answer",
+    "close the obvious hole",
+    "the outcome nobody reports",
+    "instrument credibility",
+    "give them something to ship",
+    "measurement beats intuition",
+    "the metric that lies",
+    "set up the extension",
+    "show it, then discount it",
+    "state the limit first",
+    "the one claim",
+    "send them home with it"
+  ];
+
+  const WINDOWS = [
+    "0:00 - 0:45", "0:45 - 2:00", "2:00 - 3:30", "3:30 - 5:00",
+    "5:00 - 7:30", "7:30 - 9:30", "9:30 - 11:00", "11:00 - 13:00",
+    "13:00 - 15:00", "15:00 - 16:45", "16:45 - 18:15", "18:15 - 20:00",
+    "20:00 - 22:00", "22:00 - 24:00", "24:00 - 25:15", "25:15 - 26:00"
+  ];
+
+  // Seconds elapsed at which each slide should be *left*. Drives the pace readout.
+  const ENDS = [45, 120, 210, 300, 450, 570, 660, 780, 900, 1005, 1095, 1200, 1320, 1440, 1515, 1560];
+
+  const NOTES = [
+    {
+      say: [
+        "Everyone here has run an LLM judge. Most of you run more than one, because you care about more than one thing.",
+        "<b>The question is whether stacking those into a single call costs you anything.</b> Not whether it saves money - it obviously does - but whether the scores get worse.",
+        "I am going to give you the answer in five minutes, then spend twenty on why you should believe it and where it stops."
+      ],
+      dir: "<b>Do not read the title.</b> Land the room, then the question. Hold until people have settled."
+    },
+    {
+      say: [
+        "A judge cannot score anything until it has read the prompt and the response. That read is the bulk of what you pay for.",
+        "Five dimensions, five calls: you buy that read five times. The content is byte-identical every time. Only the question at the end changes.",
+        "<b>791 input tokens per criterion at one-per-call, 323 at five-per-call.</b> Measured, not modelled."
+      ],
+      dir: "This is where a practitioner does the arithmetic on their own eval bill. <b>Pause after the two numbers.</b>"
+    },
+    {
+      say: [
+        "Here is why this is a study and not a blog post: it is genuinely not obvious which way it goes.",
+        "The pessimistic story is divided attention - one shared reasoning budget now spread across five judgements.",
+        "<b>The optimistic story is just as good.</b> A response is verbose relative to how helpful it is. Split the call and you hide that from the judge.",
+        "And a third, pre-registered: it is not about how many criteria share the call, but where in the prompt each one sits."
+      ],
+      dir: "<b>Argue both sides honestly.</b> If the room is already sure, they will not listen to the evidence. Flag the rival and move - it returns at slide 14."
+    },
+    {
+      say: [
+        "The cheap design is packed-judge versus unpacked-judge. That measures agreement between two fallible instruments, and it cannot tell you which one moved.",
+        "<b>If both degrade together it reports a clean null.</b> That is the failure mode, and it is invisible.",
+        "So: ground truth on both sides. HelpSteer2 gives ten thousand prompts, two responses each, five criteria, three or more annotators - which gives pairwise ground truth with a clean 0.5 baseline.",
+        "LongJudgeBench is the closest published result and leans pessimistic, but it varied whether a rubric was present, not how many criteria shared a call."
+      ],
+      dir: "This is where a methodologist decides whether to trust the rest of the talk. <b>Say the failure mode out loud</b> rather than implying it."
+    },
+    {
+      say: [
+        "So here is the answer. <b>Five criteria in one call, against five separate calls, on real human labels: plus half a point of accuracy, confidence interval minus 3.4 to plus 4.3.</b>",
+        "It straddles zero. And it is <b>tight</b> - it rules out anything worse than about three and a half points of degradation.",
+        "Cost went from 59 cents per thousand criteria to 32. <b>Forty-six percent cheaper, for nothing I can measure.</b>",
+        "The tie rate did not move either, and I will come back to why that matters more than it sounds."
+      ],
+      dir: "<b>This is the slide they photograph. Give it silence.</b> Deliver the interval, not just the point estimate - the tightness is the whole argument. Do not rush to caveats; they get slides 14 and 15."
+    },
+    {
+      say: [
+        "Every condition scores all five criteria. Only the packing changes.",
+        "Three randomisations, all needed: which criteria share a block, their order inside the call, and which response comes first. Drop any one and group size is confounded with pairing or position.",
+        "<b>The control that matters most is the output budget.</b> If a five-criterion call has to emit five scores and five rationales under a one-criterion ceiling, accuracy drops for a completely uninteresting reason.",
+        "Content budget is forty plus two-twenty per criterion. Truncation raises rather than returning a partial payload."
+      ],
+      dir: "<b>Say the quiet part:</b> if the effect had vanished once that control went in, that would have been the finding, and I would have reported it and stopped."
+    },
+    {
+      say: [
+        "When the judge scores both responses equally, it has expressed no preference. There is no correct answer, so those rows leave the accuracy outcome.",
+        "<b>Here is the trap.</b> If packing makes a judge flatter and more indecisive, that is degradation - and dropping ties hides it, in exactly the direction I was hoping to find.",
+        "So the tie rate is co-primary, not secondary. And it is flat: <b>0.4800 to 0.4796.</b>",
+        "That discharges the selection concern empirically. Resolution does not vary with treatment, so conditioning on resolved rows is not a collider here."
+      ],
+      dir: "<b>Do not rush this one.</b> It is the point most of the room has not thought of, and it is what separates this from a benchmark blog post. If you are behind schedule, take time from slide 13, not here."
+    },
+    {
+      say: [
+        "Clustered standard errors throughout - observations cluster by source prompt, and clustered SEs run over three times naive ones on comparable eval data. Naive SEs appear nowhere in this work.",
+        "Within-item paired contrasts as primary: every item is judged at every group size, so item difficulty differences out exactly instead of being modelled.",
+        "Three estimators reported together because they fail differently, and here all three agree.",
+        "<b>And the estimator suite is validated against planted effects.</b> It recovers a known degradation with the right sign and significance, and produces no curve on a judge with nothing planted."
+      ],
+      dir: "<b>The planted-effect check is the line to land.</b> An estimator suite never tested against a known answer is not evidence of anything - say it exactly that flatly."
+    },
+    {
+      say: [
+        "Now, what it took to get a number that clean. This one you can use tomorrow.",
+        "With the rubric anchored only at zero, two and four, the judge used <b>only zero, two and four.</b> Never one. Never three.",
+        "It tied on <b>sixty-six percent</b> of scoreable pairs, leaving twenty-nine usable observations out of a hundred.",
+        "Anchor all five points and ties fall to forty-three percent, usable rises to forty-nine. <b>Same judge, same data, a formatting decision.</b>",
+        "A partially anchored scale becomes the scale. The class now rejects any criterion with an undescribed scale point."
+      ],
+      dir: "<b>Ask for a show of hands: who anchors every point?</b> Very few will. This is the most immediately actionable slide in the talk - let the number sit."
+    },
+    {
+      say: [
+        "I sorted twenty corruption operations into surface - detectable without comprehension - and semantic, requiring reading and reasoning. Then I measured them.",
+        "<b>Eight of twenty contradicted the class I assigned.</b> Only five of twelve predicted to sit at ceiling actually reached it.",
+        "Contradict - which I had down as semantic and hard - reached ninety-three percent.",
+        "And jargon is <b>mute</b>: swapping in jargon does not move this judge's complexity score at any severity I tested. <b>That is a finding about the judge</b>, not the instrument - its notion of complexity tracks conceptual depth, not vocabulary."
+      ],
+      dir: "The honest beat: <b>I wrote down a hypothesis, measurement contradicted it, and the pre-commitment says measurement governs.</b> Do not smooth this over - volunteering it is worth more than the result."
+    },
+    {
+      say: [
+        "One more, and it is the subtlest. A low detection rate means one of two completely different things: the judge judged <b>backwards</b>, or it saw <b>no difference at all</b>.",
+        "Opposite remedies. One number cannot tell them apart.",
+        "Wrong-direction rates were near zero across all twenty operations, while tie rates reached ninety-five percent. <b>Every low-detection operation was insensitive, not inaccurate.</b>",
+        "My original rule would have thrown out five operations that were directionally perfect and just needed more severity. Chance looks like fifty percent wrong. These were zero to ten.",
+        "And severity is not monotone in validity - raising it improved one operation and damaged three."
+      ],
+      dir: "Three numbers on this slide - detection, tie rate, discrimination. <b>Make sure the room hears why you need all three.</b> If time is short, cut the severity-ladder line, not the insensitive-versus-inaccurate one."
+    },
+    {
+      say: [
+        "So that is five criteria. Five is where the labels stop - no public corpus offers more than about five fixed, fully-labelled criteria per item.",
+        "<b>A null at five with no located breaking point is weak evidence.</b> I wanted to know where it breaks.",
+        "Corruption ground truth is not bound by the labelling ceiling. Seed a known edit with a known direction and you have a label for free. That gets us to twenty.",
+        "The estimand narrows to match: did the targeted score move in the seeded direction? Ties and wrong directions are both misses.",
+        "<b>And conclusions attach to operations, not criteria.</b> I can speak about detecting injected typos. Not about judging verbosity the way a human does."
+      ],
+      dir: "<b>The operations-not-criteria distinction is your answer to the hardest question you will get.</b> Say it slowly, and mention leakage is reported rather than used as a gate."
+    },
+    {
+      say: [
+        "Ten thousand eight hundred and eighty calls, one to twenty criteria per call.",
+        "Semantic operations: 70.5 to 72.0. Surface: 78.8 down to 68.3. <b>Which is the wrong way round</b> - the class needing comprehension held, the class needing none moved.",
+        "Now look at the shaded band. That is what this design could actually resolve.",
+        "<b>Neither contrast survives Holm correction, and both movements sit inside the band.</b> So I am showing you this curve and then telling you not to read a story into it."
+      ],
+      dir: "<b>Show it and discount it in the same breath.</b> Do not build suspense you have to withdraw - the honest headline is the third bullet, not the first. Ninety seconds. This is the slide to cut if you are behind."
+    },
+    {
+      say: [
+        "The limit, before anyone asks. <b>The two halves of this talk are not equally powered and I am not going to pretend otherwise.</b>",
+        "At five criteria the interval is about four points wide - you can act on that. At twenty, the minimum detectable effect is thirteen to fourteen, and the largest thing I saw was ten and a half.",
+        "<b>Absence of a significant effect at twenty is not evidence of absence.</b> It is a study not powered to settle it.",
+        "The surface drop has two candidate explanations, load or position, and this design cannot separate them. Position was pre-registered as the rival so that reading could not be built after seeing the curve.",
+        "And detection class is a property of the operation, not the criterion. Fixing that needs a second operation of the opposite class on the same criterion. Not implemented, so not claimed."
+      ],
+      dir: "<b>Get here before the audience does.</b> If a reviewer raises MDE before you do, every earlier slide gets re-read as overclaiming. Own the asymmetry - it makes slide 15 credible."
+    },
+    {
+      say: [
+        "So, precisely. <b>On human-labelled data, packing five criteria into one call changed accuracy by half a point, interval minus 3.4 to plus 4.3, while cutting cost forty-six percent.</b>",
+        "Extending to twenty criteria with synthetic corruption showed no degradation surviving correction - but was not powered to find one smaller than thirteen points.",
+        "What I am not claiming: that packing is safe at twenty. That it was not <i>shown</i> unsafe is weaker, and it is what the data supports.",
+        "Not that each corruption isolates a human quality dimension. And not generalisation past this judge and this corpus."
+      ],
+      dir: "<b>Read the claim box verbatim.</b> This is the sentence that should survive the talk; improvising will weaken it."
+    },
+    {
+      say: [
+        "If you run judges in production: <b>pack them, up to about five.</b> That range is measured, the saving is metered, the interval is tight. Past that you are extrapolating - so am I.",
+        "Anchor every scale point, or the judge quietly adopts a shorter scale and ties on two thirds of your pairs.",
+        "Report the tie rate next to accuracy. A judge that stops committing is degrading.",
+        "Hold your per-criterion output budget constant, or you will measure your own token ceiling and call it divided attention.",
+        "Randomise criterion order. And <b>plant an effect in your estimators before you trust them on real data.</b>",
+        "Methods and pre-registration are in the repo. <b>Questions.</b>"
+      ],
+      dir: "<b>Aim to arrive at twenty-six minutes.</b> If behind, cut slides 12 and 13 to one line each - never cut 7, 9, or 14."
+    }
+  ];
+
+  var title = document.getElementById("title");
+  var goal = document.getElementById("goal");
+  var say = document.getElementById("say");
+  var dir = document.getElementById("dir");
+  var next = document.getElementById("next");
+  var nextgoal = document.getElementById("nextgoal");
+  var pos = document.getElementById("pos");
+  var windowEl = document.getElementById("window");
+  var timerEl = document.getElementById("timer");
+  var paceEl = document.getElementById("pace");
+  var link = document.getElementById("link");
+  var linktext = document.getElementById("linktext");
+
+  var current = 0;
+  var total = TITLES.length;
+  document.getElementById("slidecount").textContent = total + " slides";
+
+  var bus = null;
+  try { bus = new BroadcastChannel("deck-sync-packing-v1"); } catch (e) { bus = null; }
+
+  function render(i) {
+    current = Math.max(0, Math.min(total - 1, i));
+    title.textContent = TITLES[current];
+    goal.textContent = GOALS[current];
+    windowEl.textContent = "target window  " + WINDOWS[current];
+
+    say.innerHTML = "";
+    NOTES[current].say.forEach(function (line) {
+      var li = document.createElement("li");
+      li.innerHTML = line;
+      say.appendChild(li);
+    });
+    dir.innerHTML = NOTES[current].dir;
+
+    if (current + 1 < total) {
+      next.textContent = TITLES[current + 1];
+      nextgoal.textContent = GOALS[current + 1];
+    } else {
+      next.textContent = "End of deck";
+      nextgoal.textContent = "questions";
+    }
+    pos.innerHTML = "<b>" + (current + 1) + "</b> of " + total;
+    paint();
+  }
+
+  function go(i, broadcast) {
+    render(i);
+    if (broadcast && bus) { bus.postMessage({ type: "nav", index: current }); }
+  }
+
+  // --- timer -------------------------------------------------------------
+  var started = null;
+  var accrued = 0;
+  var running = false;
+
+  function elapsed() {
+    return accrued + (running && started !== null ? (Date.now() - started) / 1000 : 0);
+  }
+
+  function clock(seconds) {
+    var s = Math.max(0, Math.floor(seconds));
+    var m = Math.floor(s / 60);
+    return (m < 10 ? "0" : "") + m + ":" + ((s % 60) < 10 ? "0" : "") + (s % 60);
+  }
+
+  function paint() {
+    var e = elapsed();
+    timerEl.textContent = clock(e);
+    timerEl.className = !running && e === 0 ? "idle" : (e > 1800 ? "over" : "");
+
+    if (!running && e === 0) {
+      paceEl.className = "";
+      paceEl.innerHTML = "<b>press T to start</b>";
+      return;
+    }
+    var drift = e - ENDS[current];
+    if (drift < -45) {
+      paceEl.className = "ahead";
+      paceEl.innerHTML = "<b>" + clock(-drift) + " ahead</b> of the slide window";
+    } else if (drift > 45) {
+      paceEl.className = "behind";
+      paceEl.innerHTML = "<b>" + clock(drift) + " behind</b> - consider trimming";
+    } else {
+      paceEl.className = "ontime";
+      paceEl.innerHTML = "<b>on pace</b>";
+    }
+  }
+
+  function toggleTimer() {
+    if (running) {
+      accrued = elapsed();
+      running = false;
+      started = null;
+    } else {
+      started = Date.now();
+      running = true;
+    }
+    paint();
+  }
+
+  function resetTimer() {
+    running = false; started = null; accrued = 0;
+    paint();
+  }
+
+  setInterval(paint, 1000);
+
+  // --- input -------------------------------------------------------------
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+    var k = e.key;
+    if (k === "ArrowRight" || k === "ArrowDown" || k === "PageDown" || k === " " || k === "Enter") {
+      e.preventDefault(); go(current + 1, true);
+    } else if (k === "ArrowLeft" || k === "ArrowUp" || k === "PageUp") {
+      e.preventDefault(); go(current - 1, true);
+    } else if (k === "Home") {
+      e.preventDefault(); go(0, true);
+    } else if (k === "End") {
+      e.preventDefault(); go(total - 1, true);
+    } else if (k === "t" || k === "T") {
+      e.preventDefault(); toggleTimer();
+    } else if (k === "r" || k === "R") {
+      e.preventDefault(); resetTimer();
+    }
+  });
+
+  if (bus) {
+    var lastHeard = 0;
+    var adopted = false;
+
+    function setLive(live) {
+      link.className = live ? "live" : "";
+      linktext.textContent = live ? "synced" : "standalone";
+    }
+
+    bus.onmessage = function (e) {
+      var m = e.data || {};
+      if (m.type !== "nav" && m.type !== "state") { return; }
+      lastHeard = Date.now();
+      setLive(true);
+      if (typeof m.index !== "number") { return; }
+      // A `nav` is the projector moving. A `state` is it answering our ping --
+      // adopt that only for the initial handshake, so the heartbeat below
+      // cannot drag the notes back to wherever the projector happens to be.
+      if (m.type === "nav" || !adopted) {
+        adopted = true;
+        render(m.index);
+      }
+    };
+
+    // Heartbeat. Without it the indicator latches on the first message and
+    // still reads "synced" long after the projector window has been closed.
+    bus.postMessage({ type: "ping" });
+    setInterval(function () {
+      bus.postMessage({ type: "ping" });
+      if (Date.now() - lastHeard > 8000) { setLive(false); }
+    }, 3000);
+  }
+
+  render(0);
+}());
+</script>
+</body>
+</html>

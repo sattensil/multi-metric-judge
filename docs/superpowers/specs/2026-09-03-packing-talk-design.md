@@ -1,7 +1,7 @@
 # 30-minute packing talk — design
 
 **Date:** 2026-09-03  
-**Status:** approved  
+**Status:** approved; **narrative revised 2026-09-07** (see Revision below)  
 **Audience:** technical AI/ML practitioners
 
 ## Goal
@@ -62,3 +62,43 @@ No new provider calls. Numbers come from the completed `runs/sweep` reanalysis a
 
 - Test pins: equal slide/note counts, shared channel name, no network fetches in the deck.  
 - Manual: open both views, keyboard nav, desktop and narrow layout.  
+
+
+---
+
+## Revision, 2026-09-07 — claim-first reordering
+
+The narrative above led with the K = 20 synthetic sweep and demoted the K = 5
+human-stratum pilot to "a supporting beat". That inverted the evidence: the
+pilot carries a tight clustered interval (+0.005, 95% CI −0.034 to +0.043, n =
+144 items) while the sweep's MDE is 13–14 points and nothing in it survives
+Holm. Presenting the weaker result first meant building to a reveal that the
+next three slides had to withdraw.
+
+The deck was reordered so the claim matches the evidence:
+
+1. Title / question
+2. You pay to read the input every time
+3. Two hypotheses, both plausible
+4. Why not judge versus judge
+5. **The answer: at five criteria, packing is free** — the claim, up front
+6. What is held constant
+7. The tie rate is co-primary, and it is flat
+8. Estimators tested against a known answer
+9. **Anchor every scale point, or the judge invents a shorter one**
+10. **Your difficulty classification will be wrong**
+11. **Detection rate hides two different failures**
+12. Past the labelled ceiling: twenty criteria by corruption
+13. How far it pushes: the K = 20 sweep
+14. What this study could not have seen
+15. What I will actually claim
+16. If you run judges in production
+
+Slides 9–11 are new, promoting measured methodology findings (§3.3, §8.2) that
+the original narrative omitted entirely. Slides 12–13 compress the old 5–10 into
+the extension they actually are. The old slide 12 asserted the surface decline
+was "largely positional"; nothing in the repo supports that, so it is now
+presented as an unadjudicated rival and folded into slide 14.
+
+Unchanged: the visual system, the dual-view architecture, the sync channel, and
+every claim-discipline constraint under "Claims on stage".
