@@ -513,7 +513,7 @@ The flat tie rate empirically discharges the selection concern of §5.2 for this
 comparison: resolution does not vary with treatment, so conditioning on resolved
 observations is not a collider here.
 
-The synthetic stratum is implemented but has not been run.
+The synthetic stratum was subsequently calibrated (§8.2) and swept (§8.3).
 
 
 ### 8.2 Calibration gate: results
@@ -590,6 +590,100 @@ Substantively, `jargon`'s muteness is a finding about the criterion rather than 
 instrument: lexical jargon substitution does not move this judge's complexity score
 at any severity tested, which suggests its notion of complexity tracks conceptual
 depth rather than vocabulary.
+
+### 8.3 Packing sweep: results
+
+The synthetic-stratum packing sweep was run to completion on `gpt-5-mini` and is
+analysed under the operation-recovery estimand (§10.0c). **Read §8.3.1 before
+citing any figure in this section**: the run artefacts were not retained, and the
+outcome measures below are transcribed rather than recomputed.
+
+**Design as executed.** Reproduced exactly by `packing sweep --dry-run` against
+`data/helpsteer2.jsonl` at 500 base items (verified 2026-09-05):
+
+| | |
+|---|---|
+| Criterion pool | K = 20 |
+| Measured operations | 17 |
+| Items per operation | 40 |
+| Corrupted base items | 680 |
+| Nominal levels swept | 1, 2, 3, 5, 8, 12, 16, 20 |
+| Replicates per level | 1 |
+| Calls | 10,880 |
+| Estimated input tokens | 26,440,075 |
+| Cost ceiling at list price | $44.44 |
+
+Criterion-observations per *actual* group size:
+
+    {1: 1360, 2: 1496, 3: 1224, 4: 572, 5: 1360, 8: 1642, 12: 824, 16: 1042, 20: 1360}
+
+**The sweep is not balanced, and unlike §4.2 it makes no attempt to be.** The
+imbalance ratio is 2.87 (1,642 observations at group size 8 against 572 at group
+size 4). The non-negative-least-squares replicate allocation described in §4.2 is
+implemented in `design.py` and used for the human-stratum plan; the synthetic
+sweep planner, `plan_targeted_blocks`, enumerates levels × replicates directly and
+applies no such allocation. Group size 4 is thin because it arises only as a
+ragged by-product of higher nominal levels, never as a nominal level itself. This
+is a contributor to the width of the interval reported below and is a deviation
+from §4.2 that was neither intended nor, until now, recorded.
+
+**Outcomes.** Targeted directional recovery, K = 1 → K = 20:
+
+| Detection class | K = 1 | K = 20 |
+|---|---|---|
+| semantic | 0.705 | 0.720 |
+| surface | 0.788 | 0.683 |
+
+Cost per 10³ criteria scored fell from approximately $0.61 to $0.22 uncached, at
+list price.
+
+**Neither K = 20 contrast survives Holm correction** across the group-size ladder.
+The minimum detectable effect at this sample size is approximately 0.13–0.14, and
+both observed movements — including the 10.5-point surface decline — fall inside
+it. The sweep therefore bounds degradation rather than estimating it, and no
+packing-degradation claim is made from it.
+
+The surface decline is *hypothesised* to be positional rather than a load effect,
+per the pre-registered rival H2 (§1). **That hypothesis is not adjudicated here.**
+Separating a position effect from a load effect requires a design that varies the
+two independently; `position` is a modelled covariate, but at K = 20 a longer
+criterion list is also a list with more late positions in it, and this sweep
+cannot decompose the two. No coefficient for the positional component is reported
+because none survives in recoverable form (§8.3.1).
+
+#### 8.3.1 Provenance and what is not recoverable
+
+`runs/` is gitignored and its contents were not retained; no run log, per-call
+record, or analysis output from this sweep exists in the repository. The design
+facts in the table above were **regenerated** on 2026-09-05 by re-running
+`packing sweep --dry-run`, which reproduces the call plan deterministically from
+the committed catalogue and `SWEEP_LEVELS`, and they can be re-verified the same
+way at any time. That the planner independently yields exactly 10,880 calls is
+evidence the sweep ran at stock settings.
+
+The outcome measures — the four recovery rates, the two cost endpoints, the Holm
+result and the MDE — are **transcribed from the talk design specification**
+(`docs/superpowers/specs/2026-09-03-packing-talk-design.md`), which froze them
+from the original analysis. They have not been recomputed and cannot be, from this
+checkout. Specifically **not** recoverable:
+
+- per-level values between K = 1 and K = 20 (only the endpoints survive);
+- clustered standard errors and confidence intervals on either contrast;
+- usable *n* per cell after ties and inapplicable operations;
+- the judge tie rate by group size, which §5.2 makes co-primary;
+- the leakage matrix and specificity rates of §5.3;
+- per-operation and per-criterion breakdowns, and the `group_size × criterion`
+  interaction of §6.4.
+
+Re-running is possible and costed (`--dry-run` ceiling $44.44). It would not
+confirm the figures above: the design reproduces exactly from its seeds, but the
+judge is nondeterministic, so a rerun yields fresh draws. It would also not settle
+the significance question, since the same 680 items carry the same ~0.13–0.14 MDE.
+Resolving that needs more items, not a repetition.
+
+Until a run with retained artefacts exists, **every outcome figure in §8.3 should
+be treated as provisional**, and anything depending on the quantities listed above
+as unavailable rather than null.
 
 ## 9. Threats to validity
 
