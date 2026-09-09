@@ -22,7 +22,7 @@ neither alone proves the other. Both have a shared blind spot, stated below.
 | K = 20 sweep (METHODS §8.3) | **Complete.** The observed contrast stands; its reading as a load-only effect is not identified, because position moved with K | `packing reproduce`, from `sweep` |
 | K = 20 position decomposition (METHODS §8.3.2) | **Complete, exploratory.** Not pre-specified, not corrected for multiplicity | `packing reproduce`, from `sweep` |
 | Scale anchoring (METHODS §3.3) and calibration gate (§8.2) | **Complete** | `packing calibration-report --run calib` |
-| K = 40 fixed-position ladder | **Executing.** Pre-registered before execution; no results exist yet. Progress is in `runs/ladder-k40/` rather than quoted here, because a number written into a document is stale the moment the next call lands | Nothing to verify yet. Read the pre-registration and the plan |
+| K = 40 fixed-position ladder (METHODS §8.5) | **Complete.** Pre-registered before execution. Primary contrast significant; per-operation effects are exploratory and underpowered | Recompute from `artifacts/ladder-k40/` via `packing ladder-analyze --run ladder-k40` |
 
 The K = 20 sweep is qualified, not retired. Position is nested inside the call,
 so `E[position | K] = (K-1)/2` exactly and support is triangular: the recovery

@@ -878,11 +878,11 @@ the three specifications (4061.4, against 4064.7 for a class intercept alone and
 averages a positive and a negative effect toward a null, the dilution §10.0b
 anticipated, now measured rather than assumed.
 
-### 8.4 Planned extension: fixed-position load ladder
+### 8.4 Extension design: fixed-position load ladder
 
-**Planned, not run.** No outcome-generating call has been made under this design.
-Full protocol and pre-registration in
-`docs/superpowers/specs/2026-09-08-load-ladder-design.md`.
+**Executed. Results in §8.5.** Full protocol and pre-registration in
+`docs/superpowers/specs/2026-09-08-load-ladder-design.md`, frozen before any call
+was made.
 
 The K = 20 sweep bounds degradation rather than estimating it, and §8.3.2 can
 separate load from position only additively, off triangular support. The planned
@@ -916,6 +916,101 @@ The budget is computed by `packing ladder --dry-run` against the 40-criterion
 manifest, hash `721b8ac2a2a7e15f`. The ceiling assumes every call fills its output
 budget; the expected figure applies the 1.954 ceiling-to-actual ratio measured on
 the K = 20 sweep. Full protocol and per-case figures in the spec.
+
+### 8.5 Fixed-position load ladder: results
+
+Executed on `gpt-5-mini` under the protocol pre-registered in
+`docs/superpowers/specs/2026-09-08-load-ladder-design.md`, which was frozen before
+any call was made. Criterion manifest `721b8ac2a2a7e15f`, frame
+`d7df63ab1e61de56`, seed 20260908, levels 1, 5, 10, 20, 40. Artefacts archived to
+`artifacts/ladder-k40/`.
+
+| | |
+|---|---|
+| Calls planned | 6,480 |
+| Calls succeeded | 6,289 (97.1%) |
+| Lost to transport timeouts | 191 |
+| Retained unevaluable outputs | 30 |
+| Cached input tokens | 19.7% |
+
+**Primary outcome.** The pre-registered confirmatory contrast is the
+equal-weighted average across the eight core operations of the difference in
+directional recovery between K = 1 and K = 40. One two-sided test at
+alpha = 0.05, so no multiplicity adjustment applies.
+
+| | |
+|---|---|
+| theta | **-0.0766** |
+| SE | 0.0241 |
+| Welch-Satterthwaite df | 370.7 |
+| t | -3.174 |
+| p | **0.0016** |
+| 95% CI | **[-0.1240, -0.0291]** |
+
+Appending 39 criteria behind a first-position target costs about 7.7 points of
+directional recovery, and the interval excludes zero.
+
+**The result does not depend on how unevaluable output is scored**, which was the
+handling decision most able to manufacture it:
+
+| Rule | theta | 95% CI | p |
+|---|---|---|---|
+| Primary | -0.0766 | [-0.1240, -0.0291] | 0.0016 |
+| Lower bound on d | -0.0766 | [-0.1240, -0.0291] | 0.0016 |
+| Upper bound on d | -0.0619 | [-0.1098, -0.0140] | 0.0114 |
+| Complete case | -0.0717 | [-0.1193, -0.0241] | 0.0033 |
+
+All four agree in sign with intervals excluding zero, so §10's sign-disagreement
+clause is not triggered.
+
+**The effect is concentrated, not uniform.** Per-operation differences, K = 1 to
+K = 40:
+
+| Operation | Difference | n | | Operation | Difference | n |
+|---|---|---|---|---|---|---|
+| `duplicate` | -0.4167 | 48 | | `truncate` | +0.1429 | 56 |
+| `agreement` | -0.2200 | 50 | | `shuffle` | +0.0392 | 51 |
+| `depunct` | -0.2157 | 51 | | `drop_answer` | +0.0200 | 50 |
+| | | | | `filler` | +0.0192 | 52 |
+| | | | | `flatten` | +0.0185 | 54 |
+
+Three operations fall sharply and five are flat or slightly positive. The average
+is negative because of `duplicate`, `agreement` and `depunct`.
+
+**These per-operation figures are exploratory and underpowered**, and no claim is
+made about which operations degrade. At roughly 50 units each the per-operation
+MDE is 0.12 to 0.19, so five of the eight differences sit inside their own noise.
+They are reported because the average alone reads as a uniform effect, which this
+is not.
+
+**Diagnostics.** Recovery is not monotone in K: 0.672 at K = 1, about 0.704 at
+K = 5 and K = 10, then 0.655 at K = 40. The intermediate rungs carry no
+inferential claim by pre-registration and this shape is descriptive only.
+
+The judge tie rate rises steeply with load, 0.30 at K = 1 to 0.63 at K = 40,
+which is the §5.2 pattern: the judge commits less as more criteria share the
+call. Unevaluable output also rises with load, from 0.0% at K = 1 to 1.5% at
+K = 40, which is why §10 retains and scores it rather than replacing it.
+
+**Key secondary: the `numbers` correctness sentinel.** Directional recovery
+*improved*, +0.0904, 95% CI [0.008, 0.173], p = 0.032, n = 166. It is reported as
+a planned estimate and is **not comparable with the core operations**, which are
+measured on a different population (§9).
+
+#### 8.5.1 What this result is, and is not
+
+The estimand is the effect of **appending 39 trailing criteria behind a target
+fixed at position 0**. It is not a generic load effect. Trailing quantity, the
+target's recency, and its distance from the end of the context all move together
+with K by construction, and this design separates none of them from each other.
+What it does remove, which the K = 20 sweep could not, is the ordinal-position
+confound: the target sits first at every rung.
+
+Two further limits. The eight core operations were selected for high
+applicability so that a single common eligible population exists (§4), so the
+average is over that set and that population, not over the corruption catalogue.
+And `gpt-5-mini` is a model alias rather than a pinned snapshot, so this is one
+realisation of the experiment and a fresh run is a new draw.
 
 ## 9. Threats to validity
 

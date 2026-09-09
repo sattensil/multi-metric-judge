@@ -149,3 +149,44 @@ def test_a_phase_disclosed_timeout_outranks_the_bare_form():
     assert classify_failure("read timeout while streaming") == UNEVALUABLE
     assert classify_failure("generation timeout after 120s") == UNEVALUABLE
     assert classify_failure("stream timeout") == UNEVALUABLE
+
+
+REAL_CREDIT_ERROR = (
+    "gpt-5-mini: request failed: Error code: 429 - {'error': {'message': "
+    "'You have no credits remaining. Add credits to continue using the API at "
+    "https://platform.openai.com/settings/organization/billing/.', 'type': "
+    "'insufficient_quota', 'param': None, 'code': 'credit_balance_exhausted'}}"
+)
+
+
+def test_an_exhausted_balance_is_fatal_not_transient():
+    """A 429 is two conditions wearing one status code.
+
+    A rate limit clears on its own; an exhausted balance never does. Classified
+    transient it is retried indefinitely while making no progress, which is what
+    happened on the K = 40 run: 414 of 444 failures were this, every one marked
+    retryable, and the run kept issuing requests against a zero balance.
+    """
+    assert classify_failure(REAL_CREDIT_ERROR) == FATAL
+    assert classify_failure(REAL_CREDIT_ERROR) != TRANSIENT
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "credit_balance_exhausted",
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "You have no credits remaining",
+        "You exceeded your current quota",
+    ],
+)
+def test_terminal_billing_conditions_are_fatal(message):
+    assert classify_failure(message) == FATAL
+
+
+def test_a_genuine_rate_limit_is_still_transient():
+    # The distinguishing signal is the error code, not the 429 status, so both
+    # of these have to keep working after the billing tier is added.
+    assert classify_failure("Error code: 429 - rate limit exceeded") == TRANSIENT
+    assert classify_failure("429 Too Many Requests, retry after 2s") == TRANSIENT

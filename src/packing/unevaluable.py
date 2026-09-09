@@ -79,7 +79,23 @@ _UNEVALUABLE_MARKERS = (
     "refusal",
 )
 
-# Checked before everything else. A phase-disclosed timeout names a phase where
+# Checked first, because these arrive as HTTP 429 and the transient list matches
+# on "429" for rate limits. A rate limit and an exhausted balance are two
+# conditions wearing the same status code: one clears on its own, the other never
+# does. Retrying an exhausted balance cannot succeed, so it is fatal and the run
+# stops instead of draining the failure budget against a wall.
+#
+# Matched on the provider's error code and type fields rather than the status,
+# since the status is the part that does not distinguish them.
+_TERMINAL_BILLING = (
+    "credit_balance_exhausted",
+    "insufficient_quota",
+    "billing_hard_limit_reached",
+    "no credits remaining",
+    "exceeded your current quota",
+)
+
+# Checked before the transient markers. A phase-disclosed timeout names a phase where
 # load plausibly matters, so it must not be swallowed by the bare timeout
 # language in the transient list, which contains it as a substring.
 _LOAD_PHASE_TIMEOUTS = (
@@ -92,12 +108,16 @@ _LOAD_PHASE_TIMEOUTS = (
 def classify_failure(message: str) -> str:
     """Transient, unevaluable, or fatal. Unknown means fatal.
 
-    Order matters, in three tiers. A phase-disclosed timeout is checked first,
+    Order matters, in four tiers. Terminal billing conditions come first, because
+    they arrive as 429 and would otherwise be caught by the rate-limit marker and
+    retried forever. Then a phase-disclosed timeout is checked,
     because the transient list carries the bare timeout language and contains it
     as a substring. Then transient, then the remaining unevaluable markers, then
     fatal for anything unrecognised.
     """
     lowered = message.lower()
+    if any(marker in lowered for marker in _TERMINAL_BILLING):
+        return FATAL
     if any(marker in lowered for marker in _LOAD_PHASE_TIMEOUTS):
         return UNEVALUABLE
     if any(marker in lowered for marker in _TRANSIENT_MARKERS):
