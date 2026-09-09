@@ -1225,10 +1225,10 @@ def ladder_cmd(
         for item_id in numbers_stream
     }
 
-    core_ids, _ = fill_lane(
+    core_ids, core_rest = fill_lane(
         core_stream, lambda i: core_sides[i] is not None, core_n
     )
-    numbers_ids, _ = fill_lane(
+    numbers_ids, numbers_rest = fill_lane(
         numbers_stream, lambda i: numbers_sides[i] is not None, numbers_n
     )
 
@@ -1326,9 +1326,38 @@ def ladder_cmd(
             )
         )
 
+    # Reserves: the screened, eligible remainder of each lane, in frozen order.
+    # A persistent transient failure is replaced from here, so the replacement is
+    # drawn from the same population and the draw order was fixed before any
+    # outcome existed. Without them there is nothing legitimate to replace with.
+    for lane, rest, sides in (
+        ("core", core_rest, core_sides),
+        ("numbers", numbers_rest, numbers_sides),
+    ):
+        for item_id in rest:
+            side = sides.get(item_id)
+            if side is None:
+                continue
+            units.append(
+                Unit(
+                    base_item_id=item_id,
+                    lane=lane,
+                    side=side,
+                    eligible=True,
+                    operation="",
+                    realisation_seed=0,
+                    companion_seed=seed,
+                    status="reserve",
+                )
+            )
+
     # A silent shortfall would destroy the equal weighting the primary estimand
     # assumes, so the post-build check is mandatory rather than advisory.
-    built_counts = Counter(u.operation for u in units if u.lane == "core")
+    built_counts = Counter(
+        u.operation
+        for u in units
+        if u.lane == "core" and u.status == "active"
+    )
     if not allow_short and len(set(built_counts.values())) > 1:
         raise click.ClickException(
             f"unequal core quotas after build: {dict(built_counts)}"
@@ -1375,3 +1404,103 @@ def ladder_cmd(
         "live execution consumes the frozen sampling plan and is not implemented "
         "here; see the live-execution prerequisites in the plan"
     )
+
+
+@cli.command("ladder-run")
+@click.option("--plan", "plan_path", type=click.Path(), required=True)
+@click.option("--items", "items_path", type=click.Path(), required=True)
+@click.option("--name", default="ladder", show_default=True)
+@click.option("--workers", type=int, default=16, show_default=True)
+@click.option("--max-failures", type=int, default=40, show_default=True)
+@click.option(
+    "--archive-to", type=click.Path(), default="artifacts", show_default=True,
+    help="Where the run is copied after execution. Must not be under runs/.",
+)
+@click.option(
+    "--confirm-spend", is_flag=True, default=False,
+    help="Required to send anything. Without it this is a plan check only.",
+)
+def ladder_run_cmd(
+    plan_path: str,
+    items_path: str,
+    name: str,
+    workers: int,
+    max_failures: int,
+    archive_to: str,
+    confirm_spend: bool,
+) -> None:
+    """Execute a frozen ladder sampling plan.
+
+    Consumes the artifact rather than re-screening, so the sample cannot drift
+    between planning and execution.
+    """
+    from .live import archive_run, rebuild_items
+    from .runner import execute_concurrent
+    from .sampling_plan import read_plan
+
+    plan = read_plan(Path(plan_path))
+    items, specs = rebuild_items(plan, Path(items_path))
+
+    if plan.model not in CATALOG:
+        raise click.ClickException(f"no pricing for {plan.model!r}")
+    entry = CATALOG[plan.model]
+    est = estimate(specs)
+    projection = project_cost(est, entry["in"], entry["out"])
+
+    console.print(f"plan {plan_path}: manifest {plan.manifest_sha256[:16]}, seed {plan.seed}")
+    console.print(f"integrity verified: dataset and manifest digests match")
+    console.print(f"units {plan.active_count}, calls {len(specs)}, model {plan.model}")
+    console.print(
+        f"[bold]cost ceiling ${projection['usd_total_ceiling']:.2f}[/bold] "
+        "(actual will be lower)"
+    )
+
+    if not confirm_spend:
+        console.print(
+            "[yellow]no --confirm-spend: plan verified, nothing sent[/yellow]"
+        )
+        return
+
+    if Path(archive_to).resolve().is_relative_to(Path("runs").resolve()):
+        raise click.ClickException(
+            f"--archive-to {archive_to} is under runs/, which .gitignore covers. "
+            "The point of archival is to escape that rule."
+        )
+
+    run_dir = _run_dir(name)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    write_jsonl(items, run_dir / "items.jsonl")
+    (run_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "dataset": "ladder",
+                "model": plan.model,
+                "levels": list(plan.levels),
+                "seed": plan.seed,
+                "manifest_sha256": plan.manifest_sha256,
+                "dataset_sha256": plan.dataset_sha256,
+                "plan_path": str(plan_path),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    provider = get_provider(plan.model)
+    stats = execute_concurrent(
+        specs,
+        provider,
+        run_dir / "calls.jsonl",
+        workers=workers,
+        max_failures=max_failures,
+    )
+    console.print(
+        f"attempted {stats.attempted}, written {stats.written}, "
+        f"skipped {stats.skipped}, failed {stats.failed}"
+    )
+    if stats.errors:
+        for line in stats.errors[:10]:
+            console.print(f"[yellow]{line}[/yellow]")
+
+    destination = archive_run(run_dir, Path(archive_to))
+    console.print(f"[bold]archived to {destination}[/bold]")

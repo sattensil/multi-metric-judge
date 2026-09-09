@@ -23,6 +23,14 @@ _STATUSES = ("active", "reserve")
 
 @dataclass(frozen=True)
 class Unit:
+    """One base prompt's role in the study.
+
+    An `active` unit is in the sample and carries its assigned operation and
+    realisation seed. A `reserve` unit is screened and eligible but not yet in
+    the sample, so `operation` is empty and `realisation_seed` is 0 until it is
+    drawn as a replacement.
+    """
+
     base_item_id: str
     lane: str
     side: str
