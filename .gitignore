@@ -8,3 +8,4 @@ data/cache/
 .pytest_cache/
 data/*.jsonl
 .DS_Store
+dist/

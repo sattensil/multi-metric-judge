@@ -1,5 +1,17 @@
 # Does packing criteria into one LLM judge call quietly degrade them?
 
+> **Start here if you came from a talk:** [REPLICATION.md](REPLICATION.md)
+>
+> | Want to | Go to |
+> |---|---|
+> | Inspect what was found and which claims hold | the status table and claim map |
+> | Reproduce every published number, no API key | `uv run packing reproduce` |
+> | Rerun the experiment with fresh judge calls | the nondeterminism and model-alias caveats first |
+> | Find the K = 40 extension | pre-registered, currently executing, no results yet |
+>
+> This repository holds **two experiments at different stages**. The completed
+> K = 20 work and the in-flight K = 40 ladder are not one study.
+
 You pay for your judge to read the full input once. Stack judges for multiple
 quality dimensions and you re-pay that read each time. Does combining scores into
 one call quietly degrade them?

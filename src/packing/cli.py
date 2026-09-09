@@ -8,6 +8,7 @@ money is spent.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import click
@@ -1504,3 +1505,204 @@ def ladder_run_cmd(
 
     destination = archive_run(run_dir, Path(archive_to))
     console.print(f"[bold]archived to {destination}[/bold]")
+
+
+# Runs whose retained call records back a published claim. `ladder` here is the
+# SEVERITY ladder from calibration, not the K = 40 fixed-position ladder, which
+# is `ladder-k40`. Two unrelated things called "ladder" is a trap; the names are
+# kept as they are on disk so existing commands keep working, and the collision
+# is called out here and in REPLICATION.md.
+CLAIM_RUNS: tuple[str, ...] = ("pilot", "sweep", "calib", "calib2", "ladder")
+
+
+@cli.command("reproduce")
+@click.option(
+    "--expected", "expected_path", type=click.Path(),
+    default="replication/expected.json", show_default=True,
+)
+@click.option(
+    "--sums", "sums_path", type=click.Path(), default=None,
+    help="Optional SHA256SUMS to verify artifacts against before recomputing.",
+)
+@click.option("--root", type=click.Path(), default=".", show_default=True)
+@click.option(
+    "--tolerance", type=float, default=None,
+    help="Float comparison tolerance. Counts and ids are always exact.",
+)
+def reproduce_cmd(
+    expected_path: str, sums_path: str | None, root: str, tolerance: float | None
+) -> None:
+    """Recompute every published claim from retained artifacts. No API key.
+
+    Audits the analysis path. It does not audit construction: call records that
+    are internally consistent with a wrong experiment still recompute cleanly.
+    """
+    from .replication import (
+        FLOAT_TOLERANCE,
+        compare,
+        compute_claims,
+        verify_checksums,
+    )
+
+    if sums_path:
+        problems = verify_checksums(Path(sums_path), Path(root))
+        if problems:
+            console.print("[red]artifact verification failed[/red]")
+            for problem in problems[:20]:
+                console.print(f"  {problem}")
+            raise click.ClickException(
+                f"{len(problems)} artifact problem(s); recomputation not attempted"
+            )
+        console.print("[green]artifact checksums verified[/green]")
+
+    missing = [name for name in CLAIM_RUNS if not (_run_dir(name) / "calls.jsonl").exists()]
+    payload = json.loads(Path(expected_path).read_text(encoding="utf-8"))
+    expected = payload["claims"]
+
+    try:
+        claims = compute_claims(_load_run)
+    except Exception as exc:  # noqa: BLE001 - report which artifact is absent
+        console.print(f"[yellow]UNAVAILABLE: {exc}[/yellow]")
+        if missing:
+            console.print(
+                f"missing run artifacts: {', '.join(missing)}. Download the "
+                "replication bundle, or see REPLICATION.md."
+            )
+        raise click.ClickException("recomputation could not run") from exc
+
+    results = compare(
+        claims, expected,
+        tolerance=FLOAT_TOLERANCE if tolerance is None else tolerance,
+    )
+    failures = [r for r in results if not r.ok]
+    by_section: dict[str, list] = {}
+    for result in results:
+        by_section.setdefault(result.section, []).append(result)
+    for section, rows in by_section.items():
+        bad = sum(1 for r in rows if not r.ok)
+        state = "[green]PASS[/green]" if not bad else "[red]MISMATCH[/red]"
+        console.print(f"\n{section}: {state} ({len(rows) - bad}/{len(rows)})")
+        for result in rows:
+            if not result.ok:
+                console.print(f"[red]{result.line}[/red]")
+
+    console.print()
+    if failures:
+        raise click.ClickException(
+            f"MISMATCH: {len(failures)} of {len(results)} values disagree"
+        )
+    console.print(
+        f"[bold green]PASS[/bold green]: {len(results)} published values "
+        "recomputed from retained artifacts"
+    )
+    if missing:
+        console.print(
+            f"[yellow]note: {', '.join(missing)} absent, so claims backed only "
+            "by those runs were not checked[/yellow]"
+        )
+
+
+@cli.command("bundle")
+@click.option("--out", "out_dir", type=click.Path(), default="dist", show_default=True)
+@click.option("--version", default="v1", show_default=True)
+@click.option(
+    "--items", "items_path", type=click.Path(),
+    default="data/helpsteer2.jsonl", show_default=True,
+)
+def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
+    """Build the checksum-pinned replication bundle. No API key, no upload.
+
+    Publishing the archive is a separate, deliberate step.
+    """
+    import subprocess
+    import tarfile
+
+    from .replication import file_sha256, ordered_item_id_sha256
+
+    frame = Path(items_path)
+    if not frame.exists():
+        raise click.ClickException(f"{frame} not found")
+
+    name = f"packing-replication-{version}"
+    staging = Path(out_dir) / name
+    if staging.exists():
+        raise click.ClickException(
+            f"{staging} already exists; bundles are never overwritten"
+        )
+    (staging / "data").mkdir(parents=True)
+    shutil.copy2(frame, staging / "data" / frame.name)
+
+    present, absent = [], []
+    for run in CLAIM_RUNS:
+        source = _run_dir(run)
+        if not (source / "calls.jsonl").exists():
+            absent.append(run)
+            continue
+        destination = staging / "runs" / run
+        destination.mkdir(parents=True)
+        for filename in ("calls.jsonl", "items.jsonl", "meta.json"):
+            candidate = source / filename
+            if candidate.exists():
+                shutil.copy2(candidate, destination / filename)
+        present.append(run)
+
+    (staging / "environment").mkdir()
+    for filename in ("uv.lock", "pyproject.toml"):
+        if Path(filename).exists():
+            shutil.copy2(filename, staging / "environment" / filename)
+    shutil.copy2("replication/expected.json", staging / "expected.json")
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+
+    manifest = {
+        "bundle": name,
+        "code_commit": commit,
+        "runs_included": present,
+        "runs_absent": absent,
+        "model": "gpt-5-mini",
+        "model_is_an_alias": True,
+        "request_settings": {
+            "temperature": None,
+            "reasoning_effort": "low",
+            "structured_outputs": "strict",
+        },
+        "frame": {
+            "path": f"data/{frame.name}",
+            "dataset_sha256": file_sha256(frame),
+            "ordered_item_id_sha256": ordered_item_id_sha256(frame),
+            "dataset_source": "nvidia/HelpSteer2",
+            "dataset_licence": "CC-BY-4.0",
+            "fetch_command": f"packing fetch --limit {sum(1 for _ in frame.open())}",
+            "n_items": sum(1 for _ in frame.open()),
+        },
+        "not_recorded": [
+            "provider response ids",
+            "per-call wall-clock timestamps",
+            "pinned model snapshot (gpt-5-mini is an alias)",
+        ],
+        "recompute_command": "packing reproduce --sums SHA256SUMS",
+    }
+    (staging / "MANIFEST.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    lines = []
+    for path in sorted(staging.rglob("*")):
+        if path.is_file() and path.name != "SHA256SUMS":
+            lines.append(f"{file_sha256(path)}  {path.relative_to(staging)}")
+    (staging / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    archive = Path(out_dir) / f"{name}.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(staging, arcname=name)
+
+    size_mb = archive.stat().st_size / 1e6
+    console.print(f"runs included: {', '.join(present)}")
+    if absent:
+        console.print(f"[yellow]runs absent: {', '.join(absent)}[/yellow]")
+    console.print(f"files: {len(lines)}")
+    console.print(f"[bold]{archive}[/bold]  {size_mb:.1f} MB")
+    console.print(f"archive sha256: {file_sha256(archive)}")
+    console.print("\nNothing was uploaded. Publishing the archive is a separate step.")

@@ -1,0 +1,42 @@
+{
+  "claims": {
+    "methods_8_1": {
+      "accuracy_k1": 0.8051,
+      "accuracy_k5": 0.8039,
+      "judge_tie_rate_scoreable_k1": 0.48,
+      "judge_tie_rate_scoreable_k5": 0.4796,
+      "mde_at_pilot_n": 0.0543,
+      "n_items": 144,
+      "paired_clustered_se": 0.0194,
+      "paired_mean_difference": 0.0047,
+      "per_item_difference_sd": 0.2325
+    },
+    "methods_8_3": {
+      "calls": 10880,
+      "semantic_recovery_k1": 0.705,
+      "semantic_recovery_k20": 0.72,
+      "surface_discrimination_k20": 1.0,
+      "surface_recovery_k1": 0.7875,
+      "surface_recovery_k20": 0.6833,
+      "surface_tie_rate_k1": 0.2042,
+      "surface_tie_rate_k20": 0.3167
+    },
+    "methods_8_3_2": {
+      "semantic_group_size_p_without_position": 0.8924,
+      "semantic_group_size_slope_with_position": 0.026,
+      "semantic_group_size_slope_without_position": 0.0008,
+      "semantic_interaction_p": 0.755,
+      "semantic_position_p": 0.0141,
+      "semantic_position_slope": -0.0508,
+      "surface_attenuation_fraction": 0.7467,
+      "surface_group_size_p_without_position": 0.0025,
+      "surface_group_size_slope_with_position": -0.0069,
+      "surface_group_size_slope_without_position": -0.0271,
+      "surface_interaction_p": 0.1172,
+      "surface_position_p": 0.0667,
+      "surface_position_slope": -0.0395
+    }
+  },
+  "note": "Frozen expected values for `packing reproduce`. Regenerate only when the analysis definition changes, never to make a failing check pass.",
+  "schema_version": 1
+}
