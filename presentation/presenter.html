@@ -128,7 +128,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
 
   const TITLES = [
     "Does packing criteria into one judge call degrade them",
-    "You pay to read the input every time",
+    "The judge reasons five times to answer five questions",
     "Two hypotheses, both plausible",
     "Why not judge versus judge",
     "The answer: at five criteria, packing is free",
@@ -147,7 +147,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
 
   const GOALS = [
     "frame the question",
-    "make the cost real",
+    "make the durable cost real",
     "earn the uncertainty",
     "justify the method",
     "deliver the answer",
@@ -186,12 +186,13 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     },
     {
       say: [
-        "A judge cannot score anything until it has read the prompt and the response. That read is the bulk of what you pay for.",
-        "Five dimensions, five calls: you buy that read five times. The content is byte-identical every time. Only the question at the end changes.",
-        "<b>791 input tokens per criterion at one-per-call, 323 at five-per-call.</b> A 2.4x reduction in what you re-read.",
-        "<b>Measured, not modelled.</b> Observed input tokens from a 150-item run on gpt-5-mini: 3,599 of 3,600 calls completed."
+        "The obvious cost story is the input: five dimensions, five calls, you buy the same read five times. 791 input tokens per criterion at one-per-call against 323 at five-per-call.",
+        "<b>That is the half you can cache away.</b> Providers bill a cached prefix at about a tenth. If your inputs are long enough to cache, re-reading is nearly free and that saving mostly disappears.",
+        "<b>The half that survives is reasoning.</b> 82 reasoning tokens per criterion at one-per-call, 29 at five-per-call. The judge thinks once for five criteria instead of five times.",
+        "Output is never cached, and it costs eight times input on this model. So uncached the saving is 46%, under ideal caching it is 35%, and 93% of what is left is output tokens.",
+        "<b>Measured, not modelled.</b> Observed tokens from a 150-item run on gpt-5-mini: 3,599 of 3,600 calls completed. On this corpus the shared prefix is 585 tokens, under the ~1,024 a cache needs, so only 2.8% actually cached."
       ],
-      dir: "This is where a practitioner does the arithmetic on their own eval bill. <b>Pause after the two numbers.</b>"
+      dir: "<b>Do not sell the input story.</b> A practitioner who caches will discount it on the spot. Lead with reasoning amortisation, and volunteer the caching caveat before anyone raises it. The 46% still holds for this run, uncached, and you can say why."
     },
     {
       say: [

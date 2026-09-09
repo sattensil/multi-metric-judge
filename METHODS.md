@@ -398,6 +398,51 @@ output, and reasoning tokens per criterion scored, with cost computed at publish
 list prices and reported both cached and uncached; cache engagement is verified from
 the provider's reported cached-token count rather than assumed.
 
+**The cost saving is reported by component, because prompt caching erodes one
+component and not the other.** Solving the pilot's per-call input tokens for
+structure gives `input = 585 + 206 * K`: a 585-token prefix shared across the
+unpacked calls for one item, and 206 tokens of rubric per criterion. The prefix is
+a genuine prefix, since the item precedes the rubric in the rendered prompt
+(`prompt.py:66-78`), so it is cacheable in principle.
+
+Per 5 criteria, from `runs/pilot`:
+
+| | K = 1, five calls | K = 5, one call | Saved |
+|---|---|---|---|
+| Input tokens | 3,954 | 1,615 | 2,339 |
+| Output tokens | 989 | 592 | 396 |
+| of which reasoning | 409 | 146 | 263 |
+| of which content | 580 | 447 | 133 |
+
+Cost per 10³ criteria and the composition of the saving:
+
+| Scenario | K = 1 | K = 5 | Saving | Input share | Output share |
+|---|---|---|---|---|---|
+| Uncached | $0.593 | $0.318 | 46.4% | 42% | 58% |
+| Ideal input caching | $0.488 | $0.318 | 34.9% | 7% | **93%** |
+
+Output tokens are never cached and cost 8x input on `gpt-5-mini`, so under caching
+almost the whole saving is the output side, and two thirds of that is reasoning:
+82 reasoning tokens per criterion at K = 1 against 29 at K = 5. The durable claim
+is therefore that the judge reasons once for five criteria rather than five times,
+not that the input is read once rather than five times.
+
+Longer inputs make the uncached saving larger and the cached saving slightly
+smaller, because caching neutralises exactly the component that scales with input
+length: at a 16,000-token prefix the uncached saving is 75.5% and the cached
+saving 30.5%.
+
+**On this corpus the cache cannot engage.** The 585-token prefix is below the
+roughly 1,024 tokens the major providers require (§`cost.py:8-11`), and the pilot
+measured 94,848 cached of 3,340,677 input tokens, 2.84%. The uncached column is
+therefore the correct one to report for this run, and the cached column is a
+counterfactual for deployments with longer inputs.
+
+UNVERIFIED as external claims: the 10% cached-input multiplier (`cost.py:64-68`)
+and the ~1,024-token prefix threshold are the repo's assumptions and have not been
+checked against current published provider pricing. The 34.9% figure moves if the
+real discount differs.
+
 ## 6. Statistical analysis
 
 ### 6.1 Estimators

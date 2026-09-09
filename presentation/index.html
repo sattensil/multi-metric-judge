@@ -173,25 +173,26 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   </div>
 </section>
 
-<section class="slide" id="s2" data-title="You pay to read the input every time">
+<section class="slide" id="s2" data-title="The judge reasons five times to answer five questions">
   <div class="wrap">
     <p class="kicker">01 &middot; the cost structure</p>
-    <h2>You pay to read the input every time</h2>
+    <h2>The judge reasons five times<br>to answer five questions</h2>
     <div class="cols">
       <div class="card">
-        <p class="stat">791<small> tok</small></p>
-        <p class="slab">per criterion &middot; one per call</p>
+        <p class="stat">82<small> tok</small></p>
+        <p class="slab">reasoning / criterion &middot; K = 1</p>
       </div>
       <div class="card accent">
-        <p class="stat">323<small> tok</small></p>
-        <p class="slab">per criterion &middot; five per call</p>
+        <p class="stat">29<small> tok</small></p>
+        <p class="slab">reasoning / criterion &middot; K = 5</p>
       </div>
       <div class="card">
-        <p class="stat cy">2.4&times;</p>
-        <p class="slab">less input re-read</p>
+        <p class="stat cy">8&times;</p>
+        <p class="slab">output price vs input</p>
       </div>
     </div>
-    <p class="slab" style="margin-top:1.4rem">measured &middot; <code>gpt-5-mini</code> &middot; 150 items</p>
+    <p class="note"><b>Caching cannot touch output.</b> Re-reading the input is the
+      half you can cache away. Reasoning is not.</p>
   </div>
 </section>
 
