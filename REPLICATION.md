@@ -22,7 +22,7 @@ neither alone proves the other. Both have a shared blind spot, stated below.
 | K = 20 sweep (METHODS §8.3) | **Complete.** The observed contrast stands; its reading as a load-only effect is not identified, because position moved with K | `packing reproduce`, from `sweep` |
 | K = 20 position decomposition (METHODS §8.3.2) | **Complete, exploratory.** Not pre-specified, not corrected for multiplicity | `packing reproduce`, from `sweep` |
 | Scale anchoring (METHODS §3.3) and calibration gate (§8.2) | **Complete** | `packing calibration-report --run calib` |
-| K = 40 fixed-position ladder (METHODS §8.5) | **Complete.** Pre-registered before execution. Primary contrast significant; per-operation effects are exploratory and underpowered | Recompute from `artifacts/ladder-k40/` via `packing ladder-analyze --run ladder-k40` |
+| K = 40 fixed-position ladder (METHODS §8.5) | **Complete.** Pre-registered before execution. Primary contrast significant; per-operation effects are exploratory and underpowered | `packing reproduce`, then `packing ladder-analyze --run ladder-k40` |
 
 The K = 20 sweep is qualified, not retired. Position is nested inside the call,
 so `E[position | K] = (K-1)/2` exactly and support is triangular: the recovery
@@ -62,7 +62,7 @@ check pass.
 | §3.3 scale anchoring, §8.2 calibration verdicts | `runs/calib/`, `runs/calib2/`, `runs/ladder/` | `packing calibration-report --run calib` |
 | §8.3 sweep recovery, tie rates, discrimination | `runs/sweep/` | `packing reproduce` |
 | §8.3.2 position decomposition, attenuation | `runs/sweep/` | `packing reproduce` |
-| §8.5 K = 40 ladder: primary contrast, numbers sentinel | `artifacts/ladder-k40/` | `packing reproduce`, and `packing ladder-analyze --run ladder-k40` for the diagnostics |
+| §8.5 K = 40 ladder: primary contrast, numbers sentinel | `runs/ladder-k40/` | `packing reproduce`, and `packing ladder-analyze --run ladder-k40` for the diagnostics |
 
 **A naming collision to be aware of.** `runs/ladder/` is the *severity* ladder
 from calibration. The K = 40 fixed-position ladder is `runs/ladder-k40/`. Two
@@ -113,6 +113,22 @@ SHA-256 `1560bffb0ce61f30`, a digest for all 24 files, the code commit, model an
 request settings, the per-section commands, and the approximate call date range.
 `dist/` itself is gitignored, so 40 MB of append-only call records never enter
 clone history; the archive is a release asset.
+
+## Unpacking the bundle
+
+The CLI resolves a run name to `runs/<name>/`, so the archive has to land there:
+
+```bash
+tar xzf packing-replication-v2.tar.gz
+cp -R packing-replication-v2/runs/. runs/
+cp packing-replication-v2/data/*.jsonl data/
+uv run packing reproduce
+```
+
+`runs/*` is gitignored, which is why the artefacts travel as a release asset
+rather than in the tree. A run directory copied anywhere else will not be found:
+`packing ladder-analyze --run ladder-k40` reads `runs/ladder-k40/`, not an
+arbitrary path.
 
 ## Cost figures are lower bounds, not billing
 

@@ -1,6 +1,7 @@
 # Fixed-position load ladder: design
 
-Status: **planned**. No outcome-generating call has been made under this design.
+Status: **executed**. Results in METHODS §8.5. This document was frozen before
+the first call and is the pre-registration for that result.
 
 ## 1. Question
 
@@ -564,7 +565,9 @@ Computed by `packing ladder --dry-run` against the real 40-criterion manifest
 (hash `721b8ac2a2a7e15f`) on a 1,600-prompt frame. The dry-run ceiling assumes
 every call fills its output budget, which it will not; the expected column applies
 the ceiling-to-actual ratio measured on the retained K = 20 sweep, where a $44.44
-ceiling produced $22.75 of actual spend, a factor of 1.954.
+ceiling produced $22.75 of record-derived spend, a factor of 1.954. Both sides
+of that ratio are computed from retained token counts, so it converts one floor
+into another and is not a billing figure.
 
 | Case | Core n | `numbers` n | Analyzable | Calls | Input tokens | Ceiling | Expected |
 |---|---|---|---|---|---|---|---|

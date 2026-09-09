@@ -7,10 +7,11 @@
 > | Inspect what was found and which claims hold | the status table and claim map |
 > | Reproduce every published number, no API key | `uv run packing reproduce` |
 > | Rerun the experiment with fresh judge calls | the nondeterminism and model-alias caveats first |
-> | Find the K = 40 extension | pre-registered, currently executing, no results yet |
+> | Find the K = 40 extension | pre-registered, executed, results in METHODS §8.5 |
 >
-> This repository holds **two experiments at different stages**. The completed
-> K = 20 work and the in-flight K = 40 ladder are not one study.
+> This repository holds **three completed experiments**: the K = 5 human pilot,
+> the K = 20 sweep, and the K = 40 fixed-position ladder. They answer related
+> but different questions and should not be read as one study.
 
 You pay for your judge to read the full input once. Stack judges for multiple
 quality dimensions and you re-pay that read each time. Does combining scores into
@@ -227,9 +228,9 @@ uv run packing run --items data/synthetic.jsonl --model mock --name e2e
 uv run packing analyze --run e2e
 ```
 
-## Planned extension: the fixed-position load ladder
+## Extension: the fixed-position load ladder
 
-**Planned, not run.** The completed K = 20 sweep bounds degradation rather than
+**Executed. Results in `METHODS.md` §8.5.** The completed K = 20 sweep bounds degradation rather than
 estimating it, and load cannot be separated from criterion position
 nonparametrically, because position is nested inside the call. The next run
 removes that confound by construction: the target criterion sits at position 0 in

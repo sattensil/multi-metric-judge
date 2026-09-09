@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- 16 slides in `index.html` matching 16 `TITLES` / `NOTES` / `GOALS` in `presenter.html`
+- 19 slides in `index.html` matching 19 `TITLES` / `NOTES` / `GOALS` / `WINDOWS` / `ENDS` in `presenter.html`
 - Channel name exactly `deck-sync-packing-v1`
 - Exploratory operation-recovery framing; no Holm-significant packing-degradation claim
 - Numbers from completed sweep reanalysis; no API calls

@@ -10,7 +10,7 @@ A 30-minute claim-first research talk, in the same dual-view HTML pattern as the
 
 ## Narrative
 
-Claim → experiment → evidence → limits → decision. About 16 full-screen slides, ~26 minutes plus ~4 minutes Q&A.
+Claim, then experiment, evidence, limits, decision. 19 full-screen slides, about 28 minutes plus Q and A.
 
 The claim leads, because the evidence supports it: the K = 5 human-stratum pilot
 carries a tight clustered interval (+0.005, 95% CI −0.034 to +0.043, n = 144),
@@ -31,9 +31,12 @@ slides have to withdraw.
 11. Detection rate hides two different failures  
 12. Past the labelled ceiling: twenty criteria by corruption  
 13. How far it pushes: the K = 20 sweep  
-14. What this study could not have seen  
-15. What I will actually claim  
-16. If you run judges in production  
+14. **Position, not count**, the K = 20 rival adjudicated  
+15. **At forty, it does break**, the K = 40 contrast  
+16. But three operations carry it  
+17. What this still cannot say  
+18. What I will actually claim  
+19. If you run judges in production  
 
 Slides 9 to 11 carry measured methodology findings (§3.3, §8.2). Slides 12 and 13
 present the synthetic sweep as the extension it is. The K = 20 sweep is shown and

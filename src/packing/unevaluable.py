@@ -1,7 +1,10 @@
 """Failure classification and the composite-outcome value for unevaluable output.
 
-Three classes, because two conflate a harness bug with a treatment effect:
+Four ordered tiers, because fewer conflate a harness bug with a treatment effect:
 
+0. FATAL, terminal billing: an exhausted balance arrives as 429 and would
+   otherwise be caught by the rate-limit marker and retried forever. Checked
+   first, matched on the error code rather than the status.
 1. TRANSIENT: exogenous and content-independent. Retried, then the prompt is
    replaced from its own lane. Never scored, and never a completed identity on
    resume.

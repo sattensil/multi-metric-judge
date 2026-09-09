@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 DECK = Path(__file__).resolve().parents[1] / "presentation"
-SLIDES = 19
+SLIDES = 20
 CHANNEL = "deck-sync-packing-v1"
 
 
@@ -100,7 +100,7 @@ def presenter() -> str:
     return _read("presenter.html")
 
 
-def test_projector_view_has_sixteen_slides(index: str) -> None:
+def test_projector_view_has_the_pinned_slide_count(index: str) -> None:
     assert len(re.findall(r'<section class="slide"', index)) == SLIDES
 
 

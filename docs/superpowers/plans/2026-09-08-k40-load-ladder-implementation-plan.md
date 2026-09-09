@@ -1,10 +1,10 @@
 # Fixed-Position Load Ladder Implementation Plan
 
 > [!IMPORTANT]
-> **Status: implemented; the K = 40 run is executing.**
-> This is an implementation plan, not a record of results. All fourteen tasks are
-> built and tested, and the paid run is in flight. No K = 40 outcome exists yet,
-> and **no claim in the completed K = 20 analysis depends on any of this code**.
+> **Status: implemented and executed.**
+> This is an implementation plan, not a record of results. All fourteen tasks
+> are built and tested, and the run completed. **Results are in METHODS §8.5**,
+> not here. No claim in the completed K = 20 analysis depends on this code.
 > For the status of the evidence, see [REPLICATION.md](../../../REPLICATION.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

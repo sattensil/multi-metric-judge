@@ -407,9 +407,16 @@ the provider's reported cached-token count rather than assumed.
 **Every cost figure in this study is derived from retained call records, which
 makes it a lower bound on spend rather than a measure of it.** A provider-level
 retry is a fully billed call whose tokens never reach the record, because only
-the successful attempt is written. Measured on the K = 40 ladder: 10,216,217
-input tokens billed against 3,042,025 recorded, a factor of 3.4, under a client
-configured with three retries. Record-derived costs are therefore correct as
+the successful attempt is written.
+
+The gap was measured once, on the K = 40 ladder's first and stalled attempt:
+10,216,217 input tokens billed against 3,042,025 recorded at that moment, a
+factor of 3.4, under a client configured with three retries. **That comparison
+is not recomputable from the retained artefact**, because the recorded side was
+a point-in-time count and the run was later resumed to completion; the billed
+side came from the provider dashboard, which the repository does not hold. Treat
+the 3.4 as an observed instance of the mechanism, not a reproducible constant,
+and treat the mechanism itself as the reason every figure here is a floor. Record-derived costs are therefore correct as
 per-call economics and are not billing figures. Compare them with each other, not
 with an invoice.
 
@@ -447,11 +454,18 @@ smaller, because caching neutralises exactly the component that scales with inpu
 length: at a 16,000-token prefix the uncached saving is 75.5% and the cached
 saving 30.5%.
 
-**On this corpus the cache cannot engage.** The 585-token prefix is below the
+**On the K = 5 pilot's prompts the cache cannot engage.** The 585-token prefix is below the
 roughly 1,024 tokens the major providers require (§`cost.py:8-11`), and the pilot
 measured 94,848 cached of 3,340,677 input tokens, 2.84%. The uncached column is
 therefore the correct one to report for this run, and the cached column is a
 counterfactual for deployments with longer inputs.
+
+The K = 40 ladder is that deployment. Its rubric alone runs to about 3,600
+tokens, so the shared prefix clears the threshold and 19.7% of its input tokens
+were served from cache against the pilot's 2.84% (§8.5). The counterfactual in
+the table above is therefore partly observed rather than hypothetical, and it
+cuts the direction the table predicts: the input half of the saving erodes as
+inputs grow long enough to cache.
 
 UNVERIFIED as external claims: the 10% cached-input multiplier (`cost.py:64-68`)
 and the ~1,024-token prefix threshold are the repo's assumptions and have not been
@@ -896,7 +910,7 @@ rungs using nested prefixes of one seeded companion sequence.
 | Confirmatory primary | equal-weighted average over eight operations, K = 1 against K = 40 |
 | Core operation set | `flatten`, `truncate`, `shuffle`, `drop_answer`, `agreement`, `depunct`, `duplicate`, `filler` |
 | Target n | 464 prompts, 58 per operation |
-| Planning variance | `sigma_eff` 0.3288, cluster bootstrap CI [0.2651, 0.3693] |
+| Planning variance | `sigma_eff` 0.3345, cluster bootstrap CI [0.2709, 0.3763] |
 | Key secondary | `numbers` correctness sentinel, n = 184, smallest effect of interest 0.10 |
 | Budget | 6,480 calls, $50.58 dry-run ceiling, about $26 expected |
 

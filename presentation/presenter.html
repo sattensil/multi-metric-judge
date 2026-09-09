@@ -144,6 +144,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "At forty, it does break",
     "But three operations carry it",
     "What this still cannot say",
+    "Where does it break? Not yet answerable",
     "What I will actually claim",
     "If you run judges in production"
   ];
@@ -166,6 +167,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "the new result",
     "temper the average",
     "state the limit",
+    "name the open question",
     "the one claim",
     "send them home with it"
   ];
@@ -173,14 +175,14 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
   const WINDOWS = [
     "0:00 - 0:45", "0:45 - 2:00", "2:00 - 3:30", "3:30 - 5:00",
     "5:00 - 7:30", "7:30 - 9:30", "9:30 - 11:00", "11:00 - 13:00",
-    "13:00 - 15:00", "15:00 - 16:45", "16:45 - 18:15", "18:15 - 20:00",
-    "18:15 - 19:30", "19:30 - 20:45", "20:45 - 22:15", "22:15 - 23:15",
-    "23:15 - 24:15", "24:15 - 25:15", "25:15 - 26:00"
+    "13:00 - 15:00", "15:00 - 16:45", "16:45 - 18:15", "18:15 - 19:30",
+    "19:30 - 20:45", "20:45 - 22:15", "22:15 - 23:45", "23:45 - 25:00",
+    "25:00 - 26:15", "26:15 - 27:00", "27:00 - 28:00", "28:00 - 29:00"
   ];
 
   // Seconds elapsed at which each slide should be *left*. Drives the pace readout.
   const ENDS = [45, 120, 210, 300, 450, 570, 660, 780, 900, 1005, 1095,
-                1170, 1245, 1335, 1425, 1500, 1560, 1620, 1680];
+                1170, 1245, 1335, 1425, 1500, 1575, 1620, 1680, 1740];
 
   const NOTES = [
     {
@@ -348,6 +350,16 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
         "<b>What did get removed is the ordinal-position confound.</b> That is what slide 14 said was doing the work at K = 20, and it is gone here by construction."
       ],
       dir: "<b>Get here before the audience does.</b> The result is strong enough that someone will over-read it as \"load degrades judges\". Correct that yourself, on your own slide, and the claim survives the Q and A."
+    },
+    {
+      say: [
+        "So let me answer the question the premise of this talk raises. I added criteria until it broke. Where does it break?",
+        "<b>I do not know, and I want to be precise about why.</b> Forty breaks. Five does not. The rungs in between all came back null.",
+        "But look at the point estimates: plus 0.03 at five, then minus 0.02, minus 0.04, minus 0.08. Monotone from ten onward. <b>That pattern is exactly what a crossing point looks like, and I cannot claim it.</b>",
+        "Each of those middle rungs carries an interval about five points wide. A true effect of two or four points is invisible to them. <b>Absence of significance there is absence of power, not evidence of no effect.</b>",
+        "<b>The study that answers it:</b> drop five, it is answered twice already. Put roughly two hundred units per operation on ten, twenty and thirty, which is four times the sample to halve the interval. And pre-register the trend test, rather than fitting a shape to a curve I have already seen."
+      ],
+      dir: "<b>Do not let this land as a failure.</b> It is the next experiment, specified. If someone asks where it breaks, this slide is the answer and the honest answer is a number you do not have yet. Naming what it would cost is what makes that credible rather than evasive."
     },
     {
       say: [

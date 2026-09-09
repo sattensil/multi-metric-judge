@@ -32,7 +32,7 @@ from .criteria import Criterion
 from .dataset import PairedItem
 from .budget import near_cap
 from .score import Outcome, make_outcome, quadratic_weighted_kappa
-from .unevaluable import TRANSIENT, unevaluable_value
+from .unevaluable import TRANSIENT, classify_failure, unevaluable_value
 
 SYNTHETIC_POSITIVE_CONTROLS = frozenset(
     {"contradict", "hedge", "lowercase", "offtopic", "slang", "typos"}
@@ -152,8 +152,19 @@ def build_outcomes(
             continue
         rec_a, rec_b = sides["a"], sides["b"]
 
-        # Replaced upstream, so they say nothing about judge behaviour.
-        if TRANSIENT in (rec_a.get("failure_class"), rec_b.get("failure_class")):
+        # Re-derived, not trusted, for the same reason `near_cap` is recomputed
+        # below: a stored flag carries whatever definition was live when the row
+        # was written, and this run spans a change to the rule. Records written
+        # earlier classify a bare "Request timed out." as scoreable; the current
+        # rule makes it transient and replaceable. Classification is a function
+        # of the message, so applying it at analysis time keeps one definition
+        # across the whole dataset.
+        classes = tuple(
+            classify_failure(rec.get("failure") or "")
+            for rec in (rec_a, rec_b)
+            if rec.get("failure")
+        )
+        if TRANSIENT in classes:
             continue
 
         if rec_a.get("failure") or rec_b.get("failure"):
