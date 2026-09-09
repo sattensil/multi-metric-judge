@@ -45,6 +45,25 @@ _TRANSIENT_MARKERS = (
     "service unavailable",
     "bad gateway",
     "temporarily unavailable",
+    # A bare timeout of undisclosed phase, which is what the SDK raises after
+    # exhausting its own retries ("Request timed out.").
+    #
+    # Class 1 on measured grounds rather than assumed ones. Latency on the K = 40
+    # ladder has a rung-independent tail: at K = 1, where the median call takes
+    # 3.2s, six of 386 calls still exceeded 90s and one reached 124.8s. A call
+    # that spends two minutes on a single criterion is not generating for two
+    # minutes, so the tail is transport, not load-induced generation.
+    #
+    # The consequence of getting this wrong is asymmetric. Scored as class 2 a
+    # timeout becomes a recovery miss, and at the observed rate that would inject
+    # false failures into roughly 5% of observations. Retrying and, if
+    # persistent, replacing costs sample but does not corrupt the outcome.
+    #
+    # Phase-disclosed read and generation timeouts stay class 2, since those name
+    # a phase where load plausibly matters.
+    "timed out",
+    "timeout",
+    "apitimeouterror",
 )
 
 _UNEVALUABLE_MARKERS = (
@@ -58,34 +77,29 @@ _UNEVALUABLE_MARKERS = (
     "content filter",
     "refused",
     "refusal",
+)
+
+# Checked before everything else. A phase-disclosed timeout names a phase where
+# load plausibly matters, so it must not be swallowed by the bare timeout
+# language in the transient list, which contains it as a substring.
+_LOAD_PHASE_TIMEOUTS = (
     "read timeout",
     "generation timeout",
     "stream timeout",
-    # A bare timeout, which is what the OpenAI SDK actually raises after its own
-    # retries are exhausted ("Request timed out."). It has to land somewhere, and
-    # it must not be FATAL: a timeout is the most ordinary transient condition
-    # there is, and aborting the run on one would throw away every completed
-    # call's worth of progress for a network hiccup.
-    #
-    # It lands in class 2 rather than class 1 because the phase is unknown and
-    # generation time plausibly rises with K. Section 10 of the spec resolves
-    # that ambiguity toward retention: replacing a failure that the load may have
-    # caused would condition the analysis on surviving high load. The transient
-    # markers are checked first, so a disclosed connect-phase timeout still
-    # classifies as class 1.
-    "timed out",
-    "timeout",
-    "apitimeouterror",
 )
 
 
 def classify_failure(message: str) -> str:
     """Transient, unevaluable, or fatal. Unknown means fatal.
 
-    Order matters: the transient markers are checked first, so a connect timeout
-    is not caught by the generic timeout language in the unevaluable set.
+    Order matters, in three tiers. A phase-disclosed timeout is checked first,
+    because the transient list carries the bare timeout language and contains it
+    as a substring. Then transient, then the remaining unevaluable markers, then
+    fatal for anything unrecognised.
     """
     lowered = message.lower()
+    if any(marker in lowered for marker in _LOAD_PHASE_TIMEOUTS):
+        return UNEVALUABLE
     if any(marker in lowered for marker in _TRANSIENT_MARKERS):
         return TRANSIENT
     if any(marker in lowered for marker in _UNEVALUABLE_MARKERS):

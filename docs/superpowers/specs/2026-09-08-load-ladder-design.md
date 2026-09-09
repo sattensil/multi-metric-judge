@@ -408,9 +408,21 @@ an SDK change or an unsupported model option would otherwise arrive as evidence
 that load degraded judging. An unrecognised failure is fatal, not unevaluable, so
 the burden is on the harness to classify rather than on the estimate to absorb.
 
-Timeouts are split by phase rather than by string match: a connection timeout is
-class 1, while a read or generation timeout is class 2, since generation time
+Timeouts are split by phase where the provider discloses one: a read or
+generation timeout is class 2, since those name a phase where generation time
 plausibly rises with K.
+
+A timeout of **undisclosed** phase, which is what the SDK raises after exhausting
+its own retries, is class 1. That is settled by measurement rather than argument.
+Observed latency on this ladder has a rung-independent tail: at K = 1, where the
+median call takes 3.2 seconds, 6 of 386 calls still exceeded 90 seconds and one
+reached 124.8. A call spending two minutes on a single criterion is not
+generating for two minutes, so the tail is transport.
+
+The consequence of misclassifying is asymmetric. As class 2 a timeout becomes a
+recovery miss, and at the observed rate of roughly 5% of calls that injects false
+failures into the outcome. As class 1 it costs sample through replacement but
+leaves the estimate uncorrupted.
 
 **Resume semantics.** An identity counts as complete only when it has a success or
 a class-2 record. Class-1 failures are written to a separate attempts log so a

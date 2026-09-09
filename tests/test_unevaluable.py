@@ -122,14 +122,17 @@ def test_unknown_rule_is_rejected():
         "unexpected APITimeoutError()",
     ],
 )
-def test_a_bare_timeout_is_unevaluable_never_fatal(message):
+def test_a_bare_timeout_is_transient_never_fatal(message):
     """The SDK raises a bare timeout after exhausting its own retries.
 
     Classified FATAL it would abort the run and discard every completed call's
-    progress over a network hiccup. It is class 2 rather than class 1 because the
-    phase is undisclosed and generation time plausibly rises with K.
+    progress over a network hiccup. Class 1 rather than class 2 on measured
+    grounds: the observed latency tail is rung-independent, appearing at K = 1
+    where the median call is 3.2s, so it is transport rather than load-induced
+    generation. Scoring it as a recovery miss would inject false failures into
+    roughly 5% of observations at the observed timeout rate.
     """
-    assert classify_failure(message) == UNEVALUABLE
+    assert classify_failure(message) == TRANSIENT
     assert classify_failure(message) != FATAL
 
 
@@ -140,5 +143,9 @@ def test_a_disclosed_connect_timeout_is_still_transient():
     assert classify_failure("connection timeout") == TRANSIENT
 
 
-def test_a_read_timeout_is_still_unevaluable():
+def test_a_phase_disclosed_timeout_outranks_the_bare_form():
+    # The transient list carries the bare timeout language and contains these as
+    # substrings, so precedence, not membership, is what keeps them class 2.
     assert classify_failure("read timeout while streaming") == UNEVALUABLE
+    assert classify_failure("generation timeout after 120s") == UNEVALUABLE
+    assert classify_failure("stream timeout") == UNEVALUABLE
