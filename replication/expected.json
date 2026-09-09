@@ -35,11 +35,20 @@
       "surface_interaction_p": 0.1172,
       "surface_position_p": 0.0667,
       "surface_position_slope": -0.0395
+    },
+    "methods_8_5": {
+      "successful_calls": 7653,
+      "theta": -0.0629,
+      "se": 0.0225,
+      "ci_low": -0.1071,
+      "ci_high": -0.0186,
+      "numbers_mean_difference": 0.1215,
+      "numbers_n_items": 181,
+      "trend_slope": -0.0096,
+      "trend_se": 0.0028,
+      "trend_lrt_factor_vs_linear_p": 0.5738
     }
   },
   "note": "Frozen expected values for `packing reproduce`. Regenerate only when the analysis definition changes, never to make a failing check pass.",
-  "schema_version": 1,
-  "pending": {
-    "methods_8_5": "Unpinned while the ladder run is still executing. Values from a run in progress are stale as soon as the next call lands, and pinning them mid-run is what made this command fail. Re-pin from the settled artefact, then verify both directions."
-  }
+  "schema_version": 1
 }

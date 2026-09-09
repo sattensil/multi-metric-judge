@@ -175,6 +175,18 @@ def compute_claims(load_run) -> dict[str, dict[str, Any]]:
     if sentinel is not None:
         ladder["numbers_mean_difference"] = float(sentinel.mean_difference)
         ladder["numbers_n_items"] = int(sentinel.n_items)
+
+    # The trend, which is the analysis that actually answers where degradation
+    # begins. `position` is deliberately constant in this design, so the shared
+    # `functional_form` helper cannot be used: it carries position as a covariate
+    # and the fit is singular.
+    trend = analyze.fit_logit(core, formula="correct_num ~ group_size")
+    ladder["trend_slope"] = float(trend.params["group_size"])
+    ladder["trend_se"] = float(trend.bse["group_size"])
+    factor = analyze.fit_logit(core, formula="correct_num ~ C(group_size)")
+    ladder["trend_lrt_factor_vs_linear_p"] = float(
+        analyze.lrt(trend, factor)["p"]
+    )
     claims["methods_8_5"] = ladder
     return claims
 

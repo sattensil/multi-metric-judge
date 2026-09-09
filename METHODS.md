@@ -942,24 +942,24 @@ the K = 20 sweep. Full protocol and per-case figures in the spec.
 ### 8.5 Fixed-position load ladder: results
 
 Executed on `gpt-5-mini` under the protocol pre-registered in
-`docs/superpowers/specs/2026-09-08-load-ladder-design.md`, which was frozen before
-any call was made. Criterion manifest `721b8ac2a2a7e15f`, frame
-`d7df63ab1e61de56`, seed 20260908, levels 1, 5, 10, 20, 40. Artefacts archived to
-`artifacts/ladder-k40/`.
+`docs/superpowers/specs/2026-09-08-load-ladder-design.md`, frozen before any call
+was made. Criterion manifest `721b8ac2a2a7e15f`, frame `d7df63ab1e61de56`, seed
+20260908. Rungs K = 1, 5, 10, 20, 30, 40; the K = 30 rung was added after the
+first pass and is exploratory with respect to the pre-registered ladder.
 
 | | |
 |---|---|
-| Calls planned | 6,480 |
-| Calls succeeded | 6,289 (97.1%) |
-| Lost to transport timeouts | 191 |
-| Retained unevaluable outputs | 30 |
+| Calls planned | 7,776 (648 units x 2 sides x 6 rungs) |
+| Calls succeeded | 7,653 (98.4%) |
+| Never completed, after retry and replacement | 123 |
+| Retained unevaluable outputs, scored | 3 |
 | Cached input tokens | 19.7% |
 
-> [!NOTE]
-> The K = 30 rung is being collected, which also backfills calls lost to
-> transport failure at other rungs. The figures below are from the artefact as it
-> stood at the end of the first complete pass and are re-derived, along with the
-> `reproduce` pins, once collection settles.
+Failure rows total 612, of which 414 are the exhausted-balance condition that
+halted an intermediate pass; those identities were retried to success once credit
+was restored and are not losses. Failure class is re-derived from the message at
+analysis time rather than read from the record, because the run spans a change to
+the classification rule (§10.9).
 
 **Primary outcome.** The pre-registered confirmatory contrast is the
 equal-weighted average across the eight core operations of the difference in
@@ -968,77 +968,128 @@ alpha = 0.05, so no multiplicity adjustment applies.
 
 | | |
 |---|---|
-| theta | **-0.0766** |
-| SE | 0.0241 |
-| Welch-Satterthwaite df | 370.7 |
-| t | -3.174 |
-| p | **0.0016** |
-| 95% CI | **[-0.1240, -0.0291]** |
+| theta | **-0.0629** |
+| SE | 0.0225 |
+| Welch-Satterthwaite df | 411.6 |
+| t | -2.794 |
+| p | **0.0054** |
+| 95% CI | **[-0.1071, -0.0186]** |
 
-Appending 39 criteria behind a first-position target costs about 7.7 points of
-directional recovery, and the interval excludes zero.
-
-**The result does not depend on how unevaluable output is scored**, which was the
-handling decision most able to manufacture it:
+**Robust to the outcome definition**, which was the handling decision most able
+to manufacture the result:
 
 | Rule | theta | 95% CI | p |
 |---|---|---|---|
-| Primary | -0.0766 | [-0.1240, -0.0291] | 0.0016 |
-| Lower bound on d | -0.0766 | [-0.1240, -0.0291] | 0.0016 |
-| Upper bound on d | -0.0619 | [-0.1098, -0.0140] | 0.0114 |
-| Complete case | -0.0717 | [-0.1193, -0.0241] | 0.0033 |
+| Primary | -0.0629 | [-0.1071, -0.0186] | 0.0054 |
+| Lower bound on d | -0.0672 | [-0.1114, -0.0231] | 0.0029 |
+| Upper bound on d | -0.0629 | [-0.1071, -0.0186] | 0.0054 |
+| Complete case | -0.0654 | [-0.1097, -0.0212] | 0.0038 |
 
-All four agree in sign with intervals excluding zero, so §10's sign-disagreement
-clause is not triggered.
+#### 8.5.1 The shape: continuous decline, not a threshold
 
-**The effect is concentrated, not uniform.** Per-operation differences, K = 1 to
-K = 40:
+The full ladder, each rung contrasted against K = 1 with the same estimator:
+
+| K | theta | 95% CI | p | Holm |
+|---|---|---|---|---|
+| 5 | +0.0395 | [+0.0033, +0.0758] | 0.033 | 0.131 |
+| 10 | -0.0059 | [-0.0482, +0.0365] | 0.786 | 1.000 |
+| 20 | -0.0134 | [-0.0610, +0.0341] | 0.579 | 1.000 |
+| 30 | -0.0263 | [-0.0722, +0.0197] | 0.261 | 0.784 |
+| 40 | **-0.0629** | [-0.1071, -0.0186] | 0.0054 | **0.027** |
+
+Monotone from K = 5 onward, and only the K = 40 rung clears its own noise. Each
+intermediate rung carries an interval near five points wide, so a true effect of
+two or three points is invisible to it: those nulls are absence of power, not
+evidence of absence.
+
+**A trend test answers what the rungs cannot.** Fitting recovery on group size
+directly, cluster-robust on the base prompt, uses all 2,700 core observations
+across 464 clusters instead of splitting them into five underpowered contrasts:
+
+| | |
+|---|---|
+| Slope | **-0.00960** log-odds per criterion added |
+| SE | 0.00284 |
+| p | **0.00072** |
+| 95% CI | [-0.01516, -0.00404] |
+| Factor against linear, LRT | lr 2.905, df 4, **p = 0.574** |
+
+The slope is significant and there is **no detectable curvature**, so a single
+straight line fits every rung. Fitted against observed recovery:
+
+| K | Fitted | Observed |
+|---|---|---|
+| 1 | 0.781 | 0.760 |
+| 5 | 0.774 | 0.798 |
+| 10 | 0.766 | 0.760 |
+| 20 | 0.748 | 0.753 |
+| 30 | 0.729 | 0.734 |
+| 40 | 0.710 | 0.703 |
+
+**So there is no breaking point to find.** Recovery declines continuously with
+load at roughly one percent of log-odds per criterion added. K = 40 is where the
+accumulated decline first exceeds what a single rung can resolve, not where
+something begins. A talk or paper that presents K = 40 as a threshold would be
+reading the power curve, not the phenomenon.
+
+The trend test was **not pre-registered**, so it is exploratory. It is also the
+analysis this design should have specified, since it is the one with power, and
+that is recorded as a deviation in §10.10 rather than presented as a plan
+fulfilled.
+
+#### 8.5.2 The average is carried by three operations
+
+Per-operation differences, K = 1 to K = 40:
 
 | Operation | Difference | n | | Operation | Difference | n |
 |---|---|---|---|---|---|---|
-| `duplicate` | -0.4167 | 48 | | `truncate` | +0.1429 | 56 |
-| `agreement` | -0.2200 | 50 | | `shuffle` | +0.0392 | 51 |
-| `depunct` | -0.2157 | 51 | | `drop_answer` | +0.0200 | 50 |
-| | | | | `filler` | +0.0192 | 52 |
-| | | | | `flatten` | +0.0185 | 54 |
+| `duplicate` | -0.3684 | 57 | | `truncate` | +0.1404 | 57 |
+| `agreement` | -0.2105 | 57 | | `filler` | +0.0517 | 58 |
+| `depunct` | -0.1852 | 54 | | `shuffle` | +0.0345 | 58 |
+| | | | | `flatten` | +0.0172 | 58 |
+| | | | | `drop_answer` | +0.0172 | 58 |
 
-Three operations fall sharply and five are flat or slightly positive. The average
-is negative because of `duplicate`, `agreement` and `depunct`.
+Three operations fall and five are flat or slightly positive. **These are
+exploratory and underpowered**, and no claim is made about which operations
+degrade: at roughly 57 units each the per-operation MDE is 0.11 to 0.18, so five
+of the eight sit inside their own noise. They are reported because the average
+alone reads as a uniform effect, which this is not.
 
-**These per-operation figures are exploratory and underpowered**, and no claim is
-made about which operations degrade. At roughly 50 units each the per-operation
-MDE is 0.12 to 0.19, so five of the eight differences sit inside their own noise.
-They are reported because the average alone reads as a uniform effect, which this
-is not.
+#### 8.5.3 Diagnostics
 
-**Diagnostics.** Recovery is not monotone in K: 0.672 at K = 1, about 0.704 at
-K = 5 and K = 10, then 0.655 at K = 40. The intermediate rungs carry no
-inferential claim by pre-registration and this shape is descriptive only.
+| K | Recovery | Judge tie rate | Unevaluable |
+|---|---|---|---|
+| 1 | 0.6723 | 0.2983 | 0.31% |
+| 5 | 0.7060 | 0.5580 | 0.00% |
+| 10 | 0.7122 | 0.5938 | 0.16% |
+| 20 | 0.7108 | 0.6104 | 0.00% |
+| 30 | 0.6915 | 0.6295 | 0.00% |
+| 40 | 0.6651 | 0.6329 | 0.00% |
 
-The judge tie rate rises steeply with load, 0.30 at K = 1 to 0.63 at K = 40,
-which is the §5.2 pattern: the judge commits less as more criteria share the
-call. Unevaluable output also rises with load, from 0.0% at K = 1 to 1.5% at
-K = 40, which is why §10 retains and scores it rather than replacing it.
+The judge tie rate rises steeply and monotonically, 0.30 to 0.63, which is the
+§5.2 pattern: the judge commits less as more criteria share the call. Unevaluable
+output is negligible on the completed run, because the retry and replacement path
+absorbed the transport failures that produced it on earlier passes.
 
 **Key secondary: the `numbers` correctness sentinel.** Directional recovery
-*improved*, +0.0904, 95% CI [0.008, 0.173], p = 0.032, n = 166. It is reported as
-a planned estimate and is **not comparable with the core operations**, which are
+*improved*: +0.1215, 95% CI [0.0448, 0.1983], p = 0.0021, n = 181. Reported as a
+planned estimate and **not comparable** with the core operations, which are
 measured on a different population (§9).
 
-#### 8.5.1 What this result is, and is not
+#### 8.5.4 What this result is, and is not
 
-The estimand is the effect of **appending 39 trailing criteria behind a target
-fixed at position 0**. It is not a generic load effect. Trailing quantity, the
-target's recency, and its distance from the end of the context all move together
-with K by construction, and this design separates none of them from each other.
-What it does remove, which the K = 20 sweep could not, is the ordinal-position
-confound: the target sits first at every rung.
+The estimand is the effect of **appending trailing criteria behind a target fixed
+at position 0**. It is not a generic load effect. Trailing quantity, the target's
+recency, and its distance from the end of the context all move together with K by
+construction, and this design separates none of them. What it does remove, which
+the K = 20 sweep could not, is the ordinal-position confound: the target sits
+first at every rung.
 
 Two further limits. The eight core operations were selected for high
 applicability so that a single common eligible population exists (§4), so the
-average is over that set and that population, not over the corruption catalogue.
-And `gpt-5-mini` is a model alias rather than a pinned snapshot, so this is one
-realisation of the experiment and a fresh run is a new draw.
+average is over that set and that population rather than over the corruption
+catalogue. And `gpt-5-mini` is a model alias rather than a pinned snapshot, so
+this is one realisation and a fresh run is a new draw.
 
 ## 9. Threats to validity
 
@@ -1184,6 +1235,22 @@ pre-specified are labelled, so nothing post-hoc reads as a priori.
    is archived outside the ignore rule before analysis begins. A figure that cannot
    be recomputed from retained per-call records is reported as unavailable rather
    than as null.
+
+9. **Failure class re-derived, not stored.** The K = 40 run spans a change to the
+   classification rule: rows written earlier record a bare timeout as scoreable,
+   while the current rule makes it transient and replaceable. Classification is a
+   function of the message, so it is applied at analysis time and one definition
+   governs the whole dataset. The same argument already applied to the near-cap
+   flag (§4.3). Reported figures move under this: the primary contrast is
+   -0.0629 re-derived, against -0.0766 under the mixed regime.
+10. **Trend test added, exploratory.** The ladder pre-registered one endpoint
+   contrast. It did not pre-register a test of shape, and the endpoint contrast
+   cannot answer where degradation begins. The trend fit in §8.5.1 is therefore
+   exploratory, and it is the analysis the design should have specified: it uses
+   all rungs at once and is the only one of the two with power to detect a slope.
+11. **K = 30 rung added.** Collected after the first complete pass, to fill the
+   gap between 20 and 40. It is not part of the pre-registered ladder and enters
+   only the exploratory shape analysis, never the primary contrast.
 
 ## References
 

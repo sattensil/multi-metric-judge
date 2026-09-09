@@ -144,7 +144,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "At forty, it does break",
     "But three operations carry it",
     "What this still cannot say",
-    "Where does it break? Not yet answerable",
+    "It does not break, it bends",
     "What I will actually claim",
     "If you run judges in production"
   ];
@@ -167,7 +167,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "the new result",
     "temper the average",
     "state the limit",
-    "name the open question",
+    "answer the premise",
     "the one claim",
     "send them home with it"
   ];
@@ -353,18 +353,22 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     },
     {
       say: [
-        "So let me answer the question the premise of this talk raises. I added criteria until it broke. Where does it break?",
+        "So let me answer the question this whole talk sets up. I added criteria until it broke. Where does it break?",
+        "<b>It does not break. It bends, and it was bending the whole time.</b>",
+        "Fit recovery against criteria per call and the slope is minus 0.0096 log-odds per criterion, p of 0.0007. Test whether a straight line is enough and you cannot reject it: p of 0.57. <b>One line fits every rung from one to forty.</b>",
+        "So why did only forty come back significant? Because each individual rung carries an interval about five points wide, and the accumulated decline only clears that at forty. <b>Forty is where my measurement catches up, not where the judge changes behaviour.</b>",
+        "<b>If I had put a threshold on this slide I would have been reading my own power curve.</b> There is no cliff. There is a slope, and you pick where on it you are willing to sit."
         "<b>I do not know, and I want to be precise about why.</b> Forty breaks. Five does not. The rungs in between all came back null.",
         "But look at the point estimates: plus 0.03 at five, then minus 0.02, minus 0.04, minus 0.08. Monotone from ten onward. <b>That pattern is exactly what a crossing point looks like, and I cannot claim it.</b>",
         "Each of those middle rungs carries an interval about five points wide. A true effect of two or four points is invisible to them. <b>Absence of significance there is absence of power, not evidence of no effect.</b>",
         "<b>The study that answers it:</b> drop five, it is answered twice already. Put roughly two hundred units per operation on ten, twenty and thirty, which is four times the sample to halve the interval. And pre-register the trend test, rather than fitting a shape to a curve I have already seen."
       ],
-      dir: "<b>Do not let this land as a failure.</b> It is the next experiment, specified. If someone asks where it breaks, this slide is the answer and the honest answer is a number you do not have yet. Naming what it would cost is what makes that credible rather than evasive."
+      dir: "<b>This is the payoff slide for the premise.</b> The interesting answer is that the question was wrong: there is no threshold, there is a slope. Say the trend numbers, then say why the individual rungs looked null. The trend test was not pre-registered, so call it exploratory out loud."
     },
     {
       say: [
         "Precisely, then. <b>Five criteria in one call cost nothing measurable and save 46 percent.</b> Interval minus 3.4 to plus 4.3 points.",
-        "<b>Forty behind a first-position target cost 7.7 points of recovery</b>, interval minus 12.4 to minus 2.9.",
+        "<b>Recovery declines continuously with load, about 1% of log-odds per criterion, p of 0.0007, reaching 6.3 points at forty</b>, interval minus 10.7 to minus 1.9.",
         "<b>And at twenty, the decline I originally reported was position, not count.</b>",
         "What I am not claiming: not that load is the mechanism at forty, because recency moves with it. Not which operations break. Not generalisation past this judge and this corpus."
       ],
@@ -373,7 +377,7 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     {
       say: [
         "If you run judges in production: <b>pack to about five.</b> Free, measured, and the saving is metered.",
-        "<b>Forty is too many.</b> That is measured now, not extrapolated.",
+        "<b>It bends from the start.</b> There is no threshold to stay under, so pick where on the slope you are willing to sit.",
         "<b>Order your criteria before you consider unpacking them.</b> At twenty that was the whole effect.",
         "Anchor every scale point, or the judge adopts a shorter scale and ties on two thirds of your pairs.",
         "Report the tie rate next to accuracy. It went from 0.30 to 0.63 across this ladder.",

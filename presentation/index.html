@@ -541,24 +541,55 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   </div>
 </section>
 
-<section class="slide" id="s18" data-title="Where does it break? Not yet answerable">
+<section class="slide" id="s18" data-title="It does not break, it bends">
   <div class="wrap">
-    <p class="kicker">17 &middot; the open question</p>
-    <h2>Where does it break?</h2>
-    <p class="lede">I added criteria until it broke. <em class="hl">Forty breaks.
-      Five does not.</em> Every rung in between is null, and that is a power
-      problem, not an answer.</p>
-    <div class="cols">
-      <div class="card"><p class="stat cy">&plusmn;0.05</p>
-        <p class="slab">interval width at 10, 20, 30</p></div>
-      <div class="card accent"><p class="stat">4&times;</p>
-        <p class="slab">sample to halve it</p></div>
-      <div class="card"><p class="stat">~200</p>
-        <p class="slab">units per operation per rung</p></div>
+    <p class="kicker">17 &middot; where does it break</p>
+    <h2>It does not break. It bends.</h2>
+    <div class="cols two" style="align-items:center">
+      <div>
+        <svg class="chart" viewBox="0 0 600 260" role="img"
+             aria-label="Recovery against criteria per call. Fitted straight line falls from 0.781 at K equals 1 to 0.710 at K equals 40. Observed points at 0.760, 0.798, 0.760, 0.753, 0.734, 0.703 track it closely.">
+          <line class="grid" x1="70" y1="30"  x2="560" y2="30"></line>
+          <line class="grid" x1="70" y1="90"  x2="560" y2="90"></line>
+          <line class="grid" x1="70" y1="150" x2="560" y2="150"></line>
+          <line class="grid" x1="70" y1="210" x2="560" y2="210"></line>
+          <text class="axis" x="62" y="34"  text-anchor="end">0.81</text>
+          <text class="axis" x="62" y="94"  text-anchor="end">0.77</text>
+          <text class="axis" x="62" y="154" text-anchor="end">0.73</text>
+          <text class="axis" x="62" y="214" text-anchor="end">0.69</text>
+          <line class="lineA" x1="82" y1="73.5" x2="551" y2="180"
+                stroke="#c8f751" stroke-width="3" stroke-dasharray="7 5"></line>
+          <polyline class="lineB" points="82,104.6 130,47.7 190,104.6 310,114.9 430,144.3 551,190.4"></polyline>
+          <circle class="dot" cx="82"  cy="104.6" fill="#f0a35e"></circle>
+          <circle class="dot" cx="130" cy="47.7"  fill="#f0a35e"></circle>
+          <circle class="dot" cx="190" cy="104.6" fill="#f0a35e"></circle>
+          <circle class="dot" cx="310" cy="114.9" fill="#f0a35e"></circle>
+          <circle class="dot" cx="430" cy="144.3" fill="#f0a35e"></circle>
+          <circle class="dot" cx="551" cy="190.4" fill="#f0a35e"></circle>
+          <text class="axis" x="82"  y="238" text-anchor="middle">1</text>
+          <text class="axis" x="130" y="238" text-anchor="middle">5</text>
+          <text class="axis" x="190" y="238" text-anchor="middle">10</text>
+          <text class="axis" x="310" y="238" text-anchor="middle">20</text>
+          <text class="axis" x="430" y="238" text-anchor="middle">30</text>
+          <text class="axis" x="551" y="238" text-anchor="middle">40</text>
+          <text class="series" x="315" y="255" text-anchor="middle" fill="#5d7280">criteria per call</text>
+          <text class="series" x="500" y="170" fill="#c8f751">fitted</text>
+          <text class="series" x="150" y="126" fill="#f0a35e">observed</text>
+        </svg>
+      </div>
+      <div>
+        <ul class="points tight">
+          <li><strong>Slope &minus;0.0096</strong> log-odds per criterion,
+            p = <strong>0.0007</strong>.</li>
+          <li>No curvature. A straight line fits every rung
+            (<span class="mono">p = 0.57</span>).</li>
+          <li>Only K = 40 clears its own noise. <strong>That is the power curve,
+            not a threshold.</strong></li>
+        </ul>
+      </div>
     </div>
-    <p class="note"><b>The shape study.</b> Drop K = 5, it is answered twice.
-      Concentrate on 10, 20, 30 and pre-register the trend test rather than
-      deriving it from the curve afterwards.</p>
+    <p class="note"><b>I added until it broke. It was bending the whole time.</b>
+      1% of log-odds per criterion, from the first one.</p>
   </div>
 </section>
 
@@ -568,13 +599,16 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <h2>What I will actually claim</h2>
     <div class="claim">
       <p>Five criteria in one call cost <em class="hl">nothing measurable</em> and
-        save <em class="hl">46%</em>. Forty behind a first-position target cost
-        <em class="hl">7.7 points</em> of recovery (95% CI &minus;12.4 to &minus;2.9).
-        At twenty, the decline was <em class="hl">position</em>, not count.</p>
+        save <em class="hl">46%</em>. Recovery then declines
+        <em class="hl">continuously</em> with load, about 1% of log-odds per
+        criterion (p = 0.0007), reaching <em class="hl">6.3 points</em> at forty
+        (95% CI &minus;10.7 to &minus;1.9). At twenty, what looked like a decline
+        was <em class="hl">position</em>, not count.</p>
     </div>
     <p class="slab" style="margin:1.7rem 0 .8rem">And what I am not claiming</p>
     <ul class="points tight notclaim">
-      <li>Not that <strong>load</strong> is the cause at forty. Recency moves with it.</li>
+      <li>Not that <strong>load</strong> is the cause. Recency moves with it.</li>
+      <li>Not a <strong>threshold</strong>. There is a slope, not a cliff.</li>
       <li>Not <strong>which</strong> operations break.</li>
       <li>Not <strong>generalisation</strong> past this judge, this corpus.</li>
     </ul>
@@ -587,7 +621,7 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <h2>If you run judges in production</h2>
     <ul class="points">
       <li><strong>Pack to about five.</strong> Free, measured, metered.</li>
-      <li><strong>Forty is too many.</strong> Now measured, not extrapolated.</li>
+      <li><strong>It bends from the start.</strong> No threshold to stay under.</li>
       <li><strong>Order your criteria</strong> before you unpack them.</li>
       <li><strong>Anchor every scale point.</strong></li>
       <li><strong>Report the tie rate</strong> next to accuracy.</li>
