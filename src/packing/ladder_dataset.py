@@ -17,7 +17,7 @@ from __future__ import annotations
 import random
 
 from .criteria import Criterion
-from .dataset import PairedItem
+from .dataset import _HIGH, _LOW, _NEUTRAL, PairedItem
 from .partition import partition_seed
 from .registry import corruption_for
 
@@ -105,22 +105,59 @@ def build_ladder_item(
     if not result.changed:
         return None
 
+    # The pair is clean against corrupted of the SAME source response, so the
+    # only difference between the two halves is the corruption. Pairing one
+    # response against the other would make the contrast a comparison of two
+    # different answers and the seeded direction would mean nothing.
+    #
+    # Which half holds the corrupted text is randomised from an independent seed,
+    # so a judge that always prefers the first response gains nothing. The seed is
+    # independent of the realisation seed for the reason recorded in
+    # `dataset.build_corrupted_items`: items are dropped when the corruption does
+    # not apply, so conditioning on survival skews the realisation seed
+    # distribution and would skew the side choice with it.
+    side_seed = partition_seed(f"lad-side:{base.item_id}:{op_key}", 0, 0, seed)
+    corrupt_is_b = random.Random(side_seed).random() < 0.5
+    first, second = (
+        (clean, result.text) if corrupt_is_b else (result.text, clean)
+    )
+
+    # Ground truth by construction, expressed as pseudo-human labels the way the
+    # synthetic stratum already does (`dataset.py:308-318`): the targeted
+    # criterion is ordered in the seeded direction, every companion is neutral so
+    # it contributes a tie rather than a spurious outcome.
+    keys = [c.key for c in criteria]
+    target = corruption.targeted_criterion
+    corrupted_score = _HIGH if corruption.direction > 0 else _LOW
+    clean_score = _LOW if corruption.direction > 0 else _HIGH
+    labels_first = {k: _NEUTRAL for k in keys}
+    labels_second = {k: _NEUTRAL for k in keys}
+    if corrupt_is_b:
+        labels_first[target] = clean_score
+        labels_second[target] = corrupted_score
+    else:
+        labels_first[target] = corrupted_score
+        labels_second[target] = clean_score
+
     return PairedItem(
         item_id=f"lad-{op_key}-{base.item_id}-{side}",
         prompt=base.prompt,
-        response_a=result.text if side == "a" else base.response_a,
-        response_b=result.text if side == "b" else base.response_b,
-        human_a={},
-        human_b={},
-        dataset=base.dataset,
+        response_a=first,
+        response_b=second,
+        human_a=labels_first,
+        human_b=labels_second,
+        dataset="synthetic",
         meta={
             **base.meta,
             "base_item": base.item_id,
             "operation": op_key,
-            "corrupted_side": side,
+            "direction": corruption.direction,
+            "source_side": side,
+            "corrupted_side": "b" if corrupt_is_b else "a",
+            "n_edits": result.n_edits,
             "realisation_seed": realisation_seed,
             "provenance": result.provenance,
         },
         source="synthetic",
-        targeted_criterion=corruption.targeted_criterion,
+        targeted_criterion=target,
     )
