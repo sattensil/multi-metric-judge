@@ -101,6 +101,7 @@ def test_the_frozen_expectations_file_is_well_formed():
     assert payload["schema_version"] == 1
     claims = payload["claims"]
     assert {"methods_8_1", "methods_8_3", "methods_8_3_2"} <= set(claims)
+
     # The published pilot figures, pinned. If these drift, either the analysis
     # definition changed or something is wrong; either way it is not a silent edit.
     assert claims["methods_8_1"]["accuracy_k1"] == 0.8051
@@ -120,3 +121,25 @@ def test_the_tie_rate_denominator_is_the_scoreable_one():
     key = "judge_tie_rate_scoreable_k1"
     assert key in payload["claims"]["methods_8_1"]
     assert payload["claims"]["methods_8_1"][key] != 0.5123
+
+
+def test_every_computed_claim_is_either_pinned_or_declared_pending():
+    """A computed claim must not silently stop being checked.
+
+    Dropping a claim from `expected.json` used to be invisible: `reproduce`
+    would pass on whatever remained. Anything the code computes now has to be
+    either pinned or listed under `pending` with a reason, so removing a pin is
+    a deliberate act rather than an omission.
+    """
+    from packing import cli
+    from packing import replication as rep
+
+    computed = set(rep.compute_claims(cli._load_run))
+    document = json.loads(
+        Path("replication/expected.json").read_text(encoding="utf-8")
+    )
+    accounted = set(document["claims"]) | set(document.get("pending", {}))
+    unaccounted = computed - accounted
+    assert not unaccounted, (
+        f"computed but neither pinned nor declared pending: {sorted(unaccounted)}"
+    )

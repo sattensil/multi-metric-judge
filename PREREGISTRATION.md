@@ -4,8 +4,15 @@ Commit this file, with the placeholders resolved, **before** the confirmatory ru
 Its purpose is to stop the analysis from being chosen after the data is seen. The
 pilot is explicitly exploratory; everything below governs the confirmatory run only.
 
-Status: **DRAFT**. Thresholds are proposals until the pilot fills in the
-variance estimates, at which point this file is frozen and committed.
+Status: **FROZEN** for the confirmatory run, 2026-09-03. The pilot was
+explicitly exploratory and its job was to turn assumed variances into measured
+ones; the thresholds below are the pilot-derived values and were fixed before
+the confirmatory K = 40 ladder issued a call.
+
+What that does and does not license: this file pre-registers the confirmatory
+run. It does **not** pre-register the pilot, which it governs nothing of, nor
+the K = 20 sweep, whose position decomposition is labelled exploratory in
+METHODS §8.3.2 for exactly that reason.
 
 ## 1. Question
 
@@ -92,8 +99,8 @@ Secondary estimators, always reported alongside:
 | Sensitivity re-run at a looser filter | **≥ 3 scoreable** | fixed, see §7a |
 | α | 0.05 | fixed |
 | Power | 0.80 | fixed |
-| Confirmatory MDE | _from pilot_ | TBD |
-| Confirmatory n items | _from pilot via Miller's formula_ | TBD |
+| Confirmatory MDE | _from pilot_ | 0.0543 at n = 144, alpha = .05, power = .80 |
+| Confirmatory n items | _from pilot via Miller's formula_ | 170 for delta = 0.05, 472 for 0.03, at sigma_d = 0.2325 |
 | Max tolerated failure rate before aborting a run | 25 calls | fixed |
 | Every scale point must carry an anchor | enforced in code | fixed, see §7b |
 
@@ -308,6 +315,8 @@ defence fails and must be withdrawn.
 The finding is not reported as general until it replicates on SummEval (K=4,
 different domain, 5-point scale). JUDGE-BENCH found per-dataset variance across
 20 datasets large enough that a single substrate proves little.
+
+**Status: unmet and deferred.** No SummEval run exists. Every result in this repository is therefore reported as specific to `gpt-5-mini` on HelpSteer2, which METHODS §9.5 and §8.5.1 state and the talk states on its limits slide. The generality claim this condition guards is not made anywhere.
 
 ## 16. Analysis validation
 

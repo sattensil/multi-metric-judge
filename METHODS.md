@@ -649,8 +649,16 @@ excluded from measurement.
 **Resulting design.** K = 20 criteria form the packing load; **17 operations are
 measured**. Three criteria are load-only: complexity, specificity, support. Four of
 the five anchor criteria retain valid operations (coherence, correctness,
-helpfulness, verbosity); complexity is lost, so cross-stratum comparison narrows to
-four criteria, the same narrowing §9.1a anticipated on independent grounds.
+helpfulness, verbosity); complexity is lost, so **four criteria retain a valid
+operation**.
+
+That is a narrower set than it sounds, and it is not the same narrowing as
+§9.1a's. This one is about operation validity: complexity drops out because
+`jargon` is mute. §9.1a narrows further, to **three**, on construct grounds:
+verbosity/`duplicate` has a valid operation but the two strata measure
+different things there, so cross-stratum agreement says nothing about
+instrument validity. Four criteria can be compared; three of those comparisons
+are informative.
 
 **The hypothesised detection classification largely failed.** Of twenty operations,
 eight contradicted their hypothesised class; only 5 of 12 `surface` operations
@@ -692,7 +700,7 @@ artefacts and the reproduction check.
     {1: 1360, 2: 1496, 3: 1224, 4: 572, 5: 1360, 8: 1642, 12: 824, 16: 1042, 20: 1360}
 
 These are call counts, not criterion-observations. The generating line is
-`Counter(len(sp.group) for sp in specs)` (`cli.py:815`), one increment per
+`Counter(len(sp.group) for sp in specs)` (`cli.py:824`), one increment per
 `CallSpec`, and the figures sum to exactly 10,880. They are not
 criterion-observations, and the distinction matters because it understates the
 true spread: criterion-observations are `calls x group_size` (27,200 at group size 20 against
@@ -730,7 +738,7 @@ per the pre-registered rival H2 (§1). That hypothesis is **adjudicated in §8.3
 which was possible only once the retained run artefacts were located (§8.3.1). The
 outcome measures in the table above are position-marginal: they come from
 `synthetic_recovery` and `paired_ladder`, neither of which enters `position`
-(`analyze.py:206-235`, `analyze.py:504-570`). The position-adjusted picture is
+(`analyze.py:303`, `analyze.py:652`). The position-adjusted picture is
 materially different and is reported separately rather than folded in here.
 
 #### 8.3.1 Provenance: retained artefacts and recomputed figures
@@ -761,7 +769,7 @@ and every one reproduces the figure frozen in the talk specification:
 
 **The MDE and its inputs.** `paired_contrast` collapses to one value per
 independence unit and keeps only units present at *both* group sizes
-(`analyze.py:530-537`), so the K = 1 against K = 20 contrast runs on far fewer
+(`analyze.py:601`), so the K = 1 against K = 20 contrast runs on far fewer
 units than there are items.
 
 | Class | n units | σ_d | MDE at n |
@@ -788,7 +796,7 @@ Items required to reach a target MDE, from the recomputed σ_d:
 judge is nondeterministic, so a repetition yields fresh draws at the same n. Three
 levers cost nothing: dropping the ragged by-product group sizes from the ladder,
 pre-registering a single K = 1 against K = 20 rung instead of paying Holm across
-eight (`analyze.py:566`), and one-sided testing of a directional hypothesis. Each
+eight (`analyze.py:766`), and one-sided testing of a directional hypothesis. Each
 tightens the headline contrast without another call.
 
 #### 8.3.2 Load and position, separated
@@ -796,7 +804,7 @@ tightens the headline contrast without another call.
 The pre-registered rival H2 (§1) holds that an apparent packing effect is really
 about where a criterion sits in the prompt. It is testable here because criterion
 order within each call is randomised and each criterion's ordinal position is
-recorded per observation (`partition.py:139-146`, `runner.py:199`).
+recorded per observation (`partition.py:139-146`, `runner.py:183`).
 
 **What the design does and does not identify.** Position is nested inside the
 call: `0 ≤ position ≤ group_size − 1`, so `E[position | group_size = g] = (g−1)/2`
@@ -1130,7 +1138,8 @@ pre-specified are labelled, so nothing post-hoc reads as a priori.
    operations are expected to be detectable without comprehension, and pooling
    those with the semantic operations would dilute a real effect toward the null.
    The stratification is **not** a primary axis: the K = 20 class contrast holds in
-   only 8 of 11 leave-one-out fits (§8.3.2), and the planned extension (§8.4) does
+   only 8 of 11 leave-one-out fits (recorded in the ladder design spec, not in
+   §8.3.2, which does not carry that analysis), and the extension (§8.4) does
    not stratify on it.
 
 1. **Every scale point is anchored.** A partially anchored scale becomes the scale:

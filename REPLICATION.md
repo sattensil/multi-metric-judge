@@ -194,7 +194,7 @@ the criterion definitions with their anchors.
 
 - `METHODS.md` states the protocol as it now stands, with §10 recording
   pre-specification status: which claims are confirmatory, which exploratory.
-- `PREREGISTRATION.md` is the frozen pre-registration.
+- `PREREGISTRATION.md` is the pre-registration for the **confirmatory** run, frozen 2026-09-03. It governs neither the pilot nor the K = 20 sweep, and the K = 40 ladder has its own frozen protocol in `docs/superpowers/specs/2026-09-08-load-ladder-design.md`.
 - `docs/superpowers/specs/` holds designs; `docs/superpowers/plans/` holds
   implementation plans.
 

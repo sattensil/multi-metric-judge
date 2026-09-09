@@ -252,7 +252,7 @@ Protocol, power and pre-registration:
 2. Tie rates measured per criterion.
 3. Pilot effect size feeds Miller's power formula before the confirmatory spend.
 4. Budget control verified: if the effect vanishes, that is the result.
-5. SummEval replication before any curve is presented.
+5. SummEval replication before any curve is presented as **general**. **Unmet and deferred:** no SummEval run exists, so every curve here is reported as specific to this judge and corpus rather than as a general finding. See `PREREGISTRATION.md` §on generality.
 
 ## Sources
 
