@@ -1,33 +1,38 @@
 {
-  "archive": "packing-replication-v2.tar.gz",
-  "archive_sha256": "1560bffb0ce61f30a0e5b757b6b3c490eeba18679f3a47f5e8e1caee1d76e143",
-  "archive_size_bytes": 13032422,
+  "analysis_notes": [
+    "Failure class is re-derived from the message at analysis time, not read from the record, because the run spans a change to the rule (METHODS 10.9).",
+    "The trend test in 8.5.1 was not pre-registered and is exploratory (METHODS 10.10). The K = 30 rung was added after the first pass (METHODS 10.11)."
+  ],
+  "archive": "packing-replication-v3.tar.gz",
+  "archive_sha256": "ebb2e76cc158255856f05d405d598211b499a028dd6dfb348d6f6a2e9ef73be5",
+  "archive_size_bytes": 15152021,
   "built_from_branch": "packing-talk",
   "call_date_range_approximate": "2026-08-26 to 2026-09-09",
   "claims_backed": {
     "METHODS 3.3 and 8.2": "runs/calib, runs/calib2, runs/ladder",
     "METHODS 8.1": "runs/pilot",
     "METHODS 8.3 and 8.3.2": "runs/sweep",
-    "METHODS 8.5": "runs/ladder-k40"
+    "METHODS 8.5, 8.5.1 to 8.5.4": "runs/ladder-k40"
   },
-  "code_commit": "8340f95bfefeb026def8596e0a9008b6f9699aef",
-  "cost_figures_are_lower_bounds": "Every dollar figure in METHODS is computed from retained token counts. Retried attempts bill in full and are never written, so true spend is higher. Measured gap on the K = 40 run: 10,216,217 input tokens billed against 3,042,025 recorded during the stalled first attempt.",
+  "code_commit": "479e43a8d77ee268952e90fe9c15a3ef64483b6f",
+  "cost_figures_are_lower_bounds": "Every dollar figure in METHODS is computed from retained token counts. A provider retry is billed in full and never written, so true spend is higher. The gap was observed once, during a stalled pass, and is not recomputable from this archive; see METHODS 5.4.",
+  "expected_json_sha256": "eb7739f0865ae89bf2cea783bd6c4bcd06e2deff15ec8b9c0b40e49cd0488cdd",
   "files": {
-    "MANIFEST.json": "536f4e1b28a83b06d9997e2e1613848caaa1311662ae58ba0a318e1556df144d",
-    "SHA256SUMS": "e54f20e78b7c05acbed6c357a053340120c17cb3285d9942920a6562c6376466",
+    "MANIFEST.json": "5dc118ba4f65c3a69929143db837def9c20ab59d40688541a90d32f500a61f5c",
+    "SHA256SUMS": "afd9c54477960b911ae8c366d00505e6fc8393cebdcb2207ecfefd449ed530e4",
     "data/helpsteer2.jsonl": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
     "environment/pyproject.toml": "b3e624b55b5fa2e484776c2b03e68014ae8f64e0f322d677d741a634af9144e2",
     "environment/uv.lock": "4737ab77a183092cb6b42fe04532a353a57b27e86dd585a1821edf9556a50fe4",
-    "expected.json": "6de499360cf75edd68d62c12054f3a7a8fcc8c077b83587eff112ea2c743ad01",
+    "expected.json": "eb7739f0865ae89bf2cea783bd6c4bcd06e2deff15ec8b9c0b40e49cd0488cdd",
     "runs/calib/calls.jsonl": "16c88c402071170fb20dc552cee51f6b3862643c57f82ed2be05490fe7552f79",
     "runs/calib/items.jsonl": "897ca4ea4bac132b197ce6c25248fb6d60dab5af53faf72d54e702fd146c2473",
     "runs/calib/meta.json": "766bae4ea2aad331ed0c7cdcdc87a886927a702934655b7017d71a958cbb40b4",
     "runs/calib2/calls.jsonl": "ff5283d67d9c4fc9fadc4d2503507487c4098451c974206d5515397d19229125",
     "runs/calib2/items.jsonl": "752b9cbbee9991483ae7b24dd70c82ce89354d8ad5d6a3226d8a34695438377b",
     "runs/calib2/meta.json": "34b5629de40a39d344d90eb9cb341c915b8026eaf3b25a7e821f02123c2884be",
-    "runs/ladder-k40/calls.jsonl": "97ea1b16ddf5a37edacb315cd8d538a4ff565187f2269883bc940543e29c3876",
+    "runs/ladder-k40/calls.jsonl": "554750bb6716c3f220e6f16ec2ff993915bd4727d2489d37cf9accf65d1732ed",
     "runs/ladder-k40/items.jsonl": "1b338ef4a4ca915c1cbd217ffab32d4ce7798494b9252457dcdef964dec33788",
-    "runs/ladder-k40/meta.json": "46f6390bcb97209f3cf32bc7112bd231765469b9ffd3ec45bf8fb93b24d5f63b",
+    "runs/ladder-k40/meta.json": "52b4de408d76e6676a481ebc5c5cd22be882ee040572bf57f8446afdb6d651e9",
     "runs/ladder/calls.jsonl": "87bdb7802a58c35ebf78ee37fd54d8967d583075c1d6812bd19319e55b3c0198",
     "runs/ladder/items.jsonl": "6e672b5372af59b18a3878d2694481bb0e7dfc6873b9cb1ab5b4276482c75e29",
     "runs/ladder/meta.json": "155a0c52de03216a418035aaa7c4d1bbc839ad9aaf67223b94fee10a33ee7e7d",
@@ -55,15 +60,21 @@
     "per-call wall-clock timestamps",
     "pinned model snapshot (gpt-5-mini is an alias)"
   ],
-  "pinned_values": 37,
+  "pinned_claims": [
+    "methods_8_1",
+    "methods_8_3",
+    "methods_8_3_2",
+    "methods_8_5"
+  ],
+  "pinned_values": 40,
   "recompute_command": "packing reproduce --sums SHA256SUMS",
-  "release": "packing-replication-v2",
+  "release": "packing-replication-v3",
   "request_settings": {
     "reasoning_effort": "low",
     "structured_outputs": "strict",
     "temperature": null
   },
-  "run_name_collision": "`ladder` is the severity ladder from calibration. `ladder-k40` is the fixed-position K = 40 experiment. Different runs, adjacent names.",
+  "run_name_collision": "`ladder` is the severity ladder from calibration. `ladder-k40` is the fixed-position K = 40 experiment, rungs 1/5/10/20/30/40. Different runs, adjacent names.",
   "runs_included": [
     "pilot",
     "sweep",
