@@ -10,6 +10,18 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-08-load-ladder-design.md`
 
+## Execution order
+
+Run the tasks in this order:
+
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 9
+
+Task 0 first, because Tasks 3 and 6 import the corruption registry and must not
+reach it through the command-line layer. **Task 9, the CLI, runs last**: it wires
+together every other component, including the sampling-plan artifact from Task 13,
+so building it earlier would mean building it twice. Task numbering is left as
+written so that cross-references stay stable; the sequence above is authoritative.
+
 ## Global Constraints
 
 - No outcome-generating provider call in any task. Task 9 is `--dry-run` only. Spending is a separate decision made after the manifest-based cost recompute.
@@ -20,6 +32,123 @@
 - One corruption realisation per prompt, frozen and reused at every rung.
 - No em dashes in any prose, docstring, or comment.
 - Run `uv run pytest -q` before every commit. All 175 existing tests must stay green.
+- An unrecognised failure is **fatal**, never scored. A two-class scheme scores its
+  own bugs as science: an SDK change or an unsupported option would otherwise
+  arrive as evidence that load degraded judging.
+- Recovery is a **paired** outcome. Exactly one outcome per (prompt, rung), never
+  one per call, or a prompt whose two sides both fail contributes twice.
+- The response side that satisfied the full arm operation set is frozen at
+  screening and reused. Re-deriving it from the assigned operation picks a side
+  eligible for that operation but not for all eight, silently changing the
+  population from `A_core = 1`.
+- Persist the full SHA-256 of the manifest, not a display prefix.
+
+---
+
+### Task 0: Neutral corruption registry
+
+**Files:**
+- Create: `src/packing/registry.py`
+- Modify: `src/packing/cli.py:561` (import from the registry instead of defining)
+- Test: `tests/test_registry.py`
+
+**Interfaces:**
+- Consumes: `CORRUPTIONS` (`src/packing/corrupt.py:406`), `EXTRA_CORRUPTIONS` (`src/packing/corrupt_extra.py:498`)
+- Produces: `ALL_CORRUPTIONS: tuple[Corruption, ...]`, `corruption_for(key: str) -> Corruption`, `CORRUPTION_KEYS: frozenset[str]`
+
+`ALL_CORRUPTIONS` currently lives in `cli.py:561`. Eligibility screening and
+dataset construction both need it, and importing the command-line layer from a
+data module creates an import cycle that Task 3 would otherwise paper over with a
+function-local import.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+"""The corruption registry, importable without pulling in the CLI."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+
+import pytest
+
+from packing.registry import ALL_CORRUPTIONS, CORRUPTION_KEYS, corruption_for
+
+
+def test_registry_holds_all_twenty_operations():
+    assert len(ALL_CORRUPTIONS) == 20
+    assert len(CORRUPTION_KEYS) == 20
+
+
+def test_lookup_by_key():
+    assert corruption_for("shuffle").targeted_criterion == "coherence"
+    assert corruption_for("numbers").targeted_criterion == "correctness"
+
+
+def test_unknown_key_raises():
+    with pytest.raises(KeyError, match="nope"):
+        corruption_for("nope")
+
+
+def test_importing_the_registry_does_not_import_the_cli():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import packing.registry, sys; "
+            "sys.exit(1 if 'packing.cli' in sys.modules else 0)",
+        ],
+        capture_output=True,
+    )
+    assert result.returncode == 0, "registry must not pull in the CLI layer"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/test_registry.py -q`
+Expected: FAIL with `ModuleNotFoundError: No module named 'packing.registry'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+"""The corruption catalogue, in one neutral place.
+
+Eligibility screening and dataset construction both need the catalogue. Reaching
+it through the command-line module would make data code depend on the CLI, so it
+lives here and `cli.py` imports it like everything else.
+"""
+
+from __future__ import annotations
+
+from .corrupt import CORRUPTIONS, Corruption
+from .corrupt_extra import EXTRA_CORRUPTIONS
+
+ALL_CORRUPTIONS: tuple[Corruption, ...] = CORRUPTIONS + EXTRA_CORRUPTIONS
+CORRUPTION_KEYS: frozenset[str] = frozenset(c.key for c in ALL_CORRUPTIONS)
+_BY_KEY: dict[str, Corruption] = {c.key: c for c in ALL_CORRUPTIONS}
+
+
+def corruption_for(key: str) -> Corruption:
+    if key not in _BY_KEY:
+        raise KeyError(f"unknown corruption {key!r}; known: {sorted(_BY_KEY)}")
+    return _BY_KEY[key]
+```
+
+Then in `src/packing/cli.py`, delete the `ALL_CORRUPTIONS = CORRUPTIONS + EXTRA_CORRUPTIONS` line at 561 and import it instead: `from .registry import ALL_CORRUPTIONS`.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `uv run pytest tests/test_registry.py -q`
+Expected: PASS, 4 tests
+
+- [ ] **Step 5: Run the full suite and commit**
+
+```bash
+uv run pytest -q
+git add src/packing/registry.py src/packing/cli.py tests/test_registry.py
+git commit -m "refactor: move the corruption registry out of the CLI layer"
+```
 
 ---
 
@@ -62,7 +191,9 @@ def test_hash_is_stable_and_order_sensitive():
     c = manifest_for((_criterion("y"), _criterion("x")))
     assert a.hash == b.hash
     assert a.hash != c.hash, "ordering is part of the manifest identity"
-    assert len(a.hash) == 16
+    assert len(a.hash) == 16, "display prefix"
+    assert len(a.full_hash) == 64, "persist the full digest"
+    assert a.full_hash.startswith(a.hash)
 
 
 def test_validate_rejects_wrong_count():
@@ -124,6 +255,11 @@ class CriterionManifest:
 
     @property
     def hash(self) -> str:
+        """Display prefix of `full_hash`. Persist `full_hash`, show this."""
+        return self.full_hash[:16]
+
+    @property
+    def full_hash(self) -> str:
         """Stable identity of the pool, ordering included.
 
         Ordering matters because the ladder draws companions as a prefix of a
@@ -145,7 +281,7 @@ class CriterionManifest:
             sort_keys=True,
             separators=(",", ":"),
         )
-        return hashlib.sha256(payload.encode()).hexdigest()[:16]
+        return hashlib.sha256(payload.encode()).hexdigest()
 
     @property
     def length_stats(self) -> dict[str, int]:
@@ -293,11 +429,23 @@ def test_descriptions_are_distinct_and_present():
     assert len(set(descriptions)) == 20
 
 
-def test_length_distribution_is_recorded_and_bounded():
-    stats = LADDER_MANIFEST.length_stats
-    # A criterion whose prose dwarfs the others would change input-token growth
-    # unevenly across rungs, so the spread is pinned.
-    assert stats["max"] <= 4 * stats["min"], stats
+def test_length_distribution_of_the_new_twenty_is_bounded():
+    # Scoped to the twenty this task authors. The full manifest includes legacy
+    # criteria the task cannot alter, so bounding the whole pool would fail for
+    # reasons outside its control.
+    lengths = [
+        len(c.description) + sum(len(v) for v in c.anchors.values())
+        for c in LADDER_ONLY_CRITERIA
+    ]
+    assert max(lengths) <= 4 * min(lengths), sorted(lengths)
+
+
+def test_serialised_token_length_is_recorded_for_the_pool():
+    # Characters are a proxy; the rendered rubric is what is billed. Recording
+    # both keeps the cost model honest when anchor prose changes.
+    rendered = [len(c.render()) // 4 for c in LADDER_ONLY_CRITERIA]
+    assert min(rendered) > 0
+    assert max(rendered) <= 4 * min(rendered), sorted(rendered)
 
 
 def test_manifest_hash_is_recorded_for_the_run():
@@ -413,8 +561,14 @@ git commit -m "data: add anchored K=40 criterion set"
 - Test: `tests/test_eligibility.py`
 
 **Interfaces:**
-- Consumes: `PairedItem` from `src/packing/dataset.py:25`, `ALL_CORRUPTIONS` from `src/packing/cli.py:561`, `partition_seed` from `src/packing/partition.py:150`
+- Consumes: `PairedItem` from `src/packing/dataset.py:25`, `corruption_for` from Task 0, `partition_seed` from `src/packing/partition.py:150`
 - Produces: `CORE_OPERATIONS: tuple[str, ...]` (8 keys), `NUMBERS_OPERATION: str`, `applies(op_key: str, text: str, prompt: str, *, seed: int) -> bool`, `select_response(item: PairedItem, op_keys: tuple[str, ...], *, seed: int) -> str | None` returning `"a"`, `"b"` or `None`
+
+**The returned side must be persisted by the caller.** It is the side that
+satisfied the *whole* operation set. Calling `select_response` again later with a
+single assigned operation can return the other side, which is eligible for that
+operation but not for all eight, and that silently changes the population from
+`A_core = 1`. Task 9 stores it; nothing re-derives it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -515,6 +669,7 @@ import random
 
 from .dataset import PairedItem
 from .partition import partition_seed
+from .registry import corruption_for
 
 CORE_OPERATIONS: tuple[str, ...] = (
     "flatten",
@@ -530,17 +685,9 @@ CORE_OPERATIONS: tuple[str, ...] = (
 NUMBERS_OPERATION = "numbers"
 
 
-def _registry() -> dict[str, object]:
-    # Imported lazily: cli imports dataset, so a module-level import here would
-    # close an import cycle.
-    from .cli import ALL_CORRUPTIONS
-
-    return {c.key: c for c in ALL_CORRUPTIONS}
-
-
 def applies(op_key: str, text: str, prompt: str, *, seed: int) -> bool:
     """Does this operation change this text?"""
-    corruption = _registry()[op_key]
+    corruption = corruption_for(op_key)
     result = corruption.apply(
         text, seed=seed, severity=None, prompt=prompt
     )
@@ -592,7 +739,7 @@ git commit -m "feat: add the arm eligibility pre-pass"
 
 ---
 
-### Task 4: Frozen-seed lane assignment
+### Task 4: Exact lane split with seeded within-lane order
 
 **Files:**
 - Create: `src/packing/lanes.py`
@@ -600,52 +747,88 @@ git commit -m "feat: add the arm eligibility pre-pass"
 
 **Interfaces:**
 - Consumes: `partition_seed` from `src/packing/partition.py:150`
-- Produces: `LANE_CORE: str`, `LANE_NUMBERS: str`, `assign_lanes(item_ids: list[str], *, seed: int, core_share: float = 0.4157) -> dict[str, str]`, `fill_lane(item_ids: list[str], eligible: Callable[[str], bool], quota: int) -> tuple[list[str], list[str]]` returning `(filled, exhausted_remainder)`
+- Produces: `split_lanes(item_ids: list[str], *, seed: int, core_candidates: int) -> tuple[list[str], list[str]]` returning `(core_stream, numbers_stream)` both in seeded order; `fill_lane(item_ids: list[str], eligible: Callable[[str], bool], quota: int) -> tuple[list[str], list[str]]` returning `(filled, remainder)`
 
-`core_share` default is 508 / 1222, the initial lane split from spec section 5.
+Lane assignment runs before eligibility is inspected. Reversing that order changes
+the core population, because `numbers` eligibility correlates with response
+content (spec section 5).
+
+Two properties the design requires and a hash-threshold assignment would not give:
+
+1. **Exact lane sizes.** A per-prompt hash threshold makes lane membership an
+   independent draw, so a 1,222-prompt frame yields roughly 508 core candidates
+   rather than exactly 508. The 97.5% fill figures in the spec are computed for
+   fixed lane sizes, and adding lane-count variance invalidates them. An index
+   split of the permuted frame is exact.
+2. **Seeded order within a lane.** Filling in source-file order lets any structure
+   in the input file (collection, topic, score) select the sample. Lane membership
+   being order-independent is not enough; the order the lane is consumed in has to
+   be seeded too.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-"""Lane assignment runs before eligibility is inspected. Reversing that order
-changes the core population, because numbers eligibility correlates with response
-content (spec section 5)."""
+"""Lanes are exact index splits of a seed-permuted frame, and each lane is
+consumed in seeded order rather than file order."""
 
 from __future__ import annotations
 
-from packing.lanes import LANE_CORE, LANE_NUMBERS, assign_lanes, fill_lane
+from packing.lanes import fill_lane, split_lanes
 
 
-def test_lanes_are_deterministic_for_a_seed():
+def test_lane_sizes_are_exact():
+    ids = [f"p{i}" for i in range(1222)]
+    core, numbers = split_lanes(ids, seed=11, core_candidates=508)
+    assert len(core) == 508
+    assert len(numbers) == 714
+
+
+def test_lanes_are_disjoint_and_cover_the_frame():
     ids = [f"p{i}" for i in range(100)]
-    first = assign_lanes(ids, seed=11)
-    assert assign_lanes(ids, seed=11) == first
+    core, numbers = split_lanes(ids, seed=11, core_candidates=40)
+    assert set(core) & set(numbers) == set()
+    assert set(core) | set(numbers) == set(ids)
 
 
-def test_lanes_change_with_the_seed():
+def test_split_is_deterministic_for_a_seed():
     ids = [f"p{i}" for i in range(100)]
-    assert assign_lanes(ids, seed=11) != assign_lanes(ids, seed=12)
+    assert split_lanes(ids, seed=11, core_candidates=40) == split_lanes(
+        ids, seed=11, core_candidates=40
+    )
 
 
-def test_every_prompt_gets_exactly_one_lane():
+def test_split_changes_with_the_seed():
     ids = [f"p{i}" for i in range(100)]
-    lanes = assign_lanes(ids, seed=11)
-    assert set(lanes) == set(ids)
-    assert set(lanes.values()) <= {LANE_CORE, LANE_NUMBERS}
+    a = split_lanes(ids, seed=11, core_candidates=40)
+    b = split_lanes(ids, seed=12, core_candidates=40)
+    assert a != b
 
 
-def test_split_matches_the_requested_share():
-    ids = [f"p{i}" for i in range(1000)]
-    lanes = assign_lanes(ids, seed=11, core_share=0.4157)
-    core = sum(1 for v in lanes.values() if v == LANE_CORE)
-    assert 405 <= core <= 425, core
-
-
-def test_assignment_is_independent_of_input_order():
+def test_split_is_independent_of_input_order():
     ids = [f"p{i}" for i in range(200)]
-    a = assign_lanes(ids, seed=11)
-    b = assign_lanes(list(reversed(ids)), seed=11)
-    assert a == b, "lane must be a function of prompt id and seed, not position"
+    a = split_lanes(ids, seed=11, core_candidates=80)
+    b = split_lanes(list(reversed(ids)), seed=11, core_candidates=80)
+    assert a == b, "lane content must not depend on file order"
+
+
+def test_within_lane_order_is_not_file_order():
+    ids = [f"p{i:04d}" for i in range(400)]
+    core, _ = split_lanes(ids, seed=11, core_candidates=200)
+    assert core != sorted(core), "consumption order must be seeded, not sorted"
+
+
+def test_frame_too_small_for_the_requested_core_lane_is_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="frame of 10 cannot supply 20"):
+        split_lanes([f"p{i}" for i in range(10)], seed=1, core_candidates=20)
+
+
+def test_duplicate_ids_are_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="duplicate base-prompt ids"):
+        split_lanes(["p1", "p1", "p2"], seed=1, core_candidates=1)
 
 
 def test_fill_lane_stops_at_the_quota_and_reports_the_remainder():
@@ -677,7 +860,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'packing.lanes'`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-"""Assign base prompts to arm-specific sampling streams before eligibility is
+"""Split the fetched frame into arm-specific streams before eligibility is
 inspected.
 
 The order matters and is the whole reason this module exists. Screening one shared
@@ -687,37 +870,50 @@ correlates with response content. The primary estimate would then describe
 "core-eligible prompts not allocated to numbers" rather than the population the
 estimand names.
 
-Lane is a pure function of prompt id and seed, so it does not depend on fetch
-order and a stream can be extended later without reshuffling what came before.
+The split is an exact index cut of a seed-permuted frame rather than a per-prompt
+hash threshold, so lane sizes are the planned 508 and 714 rather than draws around
+them. The spec's fill probabilities assume fixed lane sizes.
 """
 
 from __future__ import annotations
 
+import random
 from collections.abc import Callable
 
 from .partition import partition_seed
 
-LANE_CORE = "core"
-LANE_NUMBERS = "numbers"
 
-# 508 core candidates and 714 numbers candidates, the initial lane split.
-DEFAULT_CORE_SHARE = 508 / 1222
+def split_lanes(
+    item_ids: list[str], *, seed: int, core_candidates: int
+) -> tuple[list[str], list[str]]:
+    """Exact, seed-permuted, disjoint core and numbers streams.
 
+    Both returned lists are already in the order they should be consumed, so a
+    caller never needs to sort and cannot accidentally fall back to file order.
+    """
+    if len(set(item_ids)) != len(item_ids):
+        seen: set[str] = set()
+        dupes = sorted({i for i in item_ids if i in seen or seen.add(i)})
+        raise ValueError(f"duplicate base-prompt ids: {dupes[:5]}")
+    if core_candidates < 0:
+        raise ValueError(f"core_candidates must be >= 0, got {core_candidates}")
+    if core_candidates > len(item_ids):
+        raise ValueError(
+            f"frame of {len(item_ids)} cannot supply {core_candidates} core candidates"
+        )
 
-def assign_lanes(
-    item_ids: list[str], *, seed: int, core_share: float = DEFAULT_CORE_SHARE
-) -> dict[str, str]:
-    """Map each prompt id to exactly one lane, deterministically."""
-    if not 0.0 < core_share < 1.0:
-        raise ValueError(f"core_share must be in (0, 1), got {core_share}")
-    cut = int(core_share * (2**32))
-    lanes: dict[str, str] = {}
-    for item_id in item_ids:
-        # A hash of (id, seed) rather than a shuffled index, so lane membership
-        # is stable when the stream is extended.
-        draw = partition_seed(f"{item_id}:lane", 0, 0, seed) % (2**32)
-        lanes[item_id] = LANE_CORE if draw < cut else LANE_NUMBERS
-    return lanes
+    # Sort first so the permutation is a function of ids and seed alone, never of
+    # the order the file happened to list them in.
+    ordered = sorted(item_ids)
+    random.Random(partition_seed("lane-split", 0, 0, seed)).shuffle(ordered)
+    core = ordered[:core_candidates]
+    numbers = ordered[core_candidates:]
+
+    # Consumption order inside each lane is seeded separately, so extending one
+    # lane cannot reshuffle the other.
+    random.Random(partition_seed("core-order", 0, 0, seed)).shuffle(core)
+    random.Random(partition_seed("numbers-order", 0, 0, seed)).shuffle(numbers)
+    return core, numbers
 
 
 def fill_lane(
@@ -725,11 +921,11 @@ def fill_lane(
     eligible: Callable[[str], bool],
     quota: int,
 ) -> tuple[list[str], list[str]]:
-    """Take the first `quota` eligible prompts in frozen order.
+    """Take the first `quota` eligible prompts in the stream's frozen order.
 
-    Returns the filled quota and the untouched remainder of the stream, so a later
-    variance review can extend the sample by continuing where this stopped rather
-    than by drawing afresh.
+    Returns the filled quota and the untouched remainder, so a later variance
+    review extends the sample by continuing where this stopped rather than by
+    drawing afresh.
     """
     if quota < 0:
         raise ValueError(f"quota must be >= 0, got {quota}")
@@ -745,14 +941,14 @@ def fill_lane(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_lanes.py -q`
-Expected: PASS, 8 tests
+Expected: PASS, 11 tests
 
 - [ ] **Step 5: Run the full suite and commit**
 
 ```bash
 uv run pytest -q
 git add src/packing/lanes.py tests/test_lanes.py
-git commit -m "feat: assign arm lanes before eligibility screening"
+git commit -m "feat: split arm lanes exactly, before eligibility screening"
 ```
 
 ---
@@ -923,12 +1119,17 @@ def plan_fixed_position(
     The K = 20 sweep drew a random partition, which coupled load to position:
     position is nested inside the call, so E[position | K] = (K-1)/2 exactly and
     support is triangular. Here the target sits first at every rung and companions
-    pad the call, so load is the only thing that varies.
+    pad the call, which removes the ordinal-position confound.
 
     Companions are a nested prefix of one seeded permutation of the non-target
     criteria, shared by both sides. Without nesting, K would change both the amount
     of trailing load and which particular criteria are present, putting composition
     noise into the endpoint contrast.
+
+    This does not make load the only thing that varies. The target stays first, so
+    K also varies the amount of trailing material, the target's recency, and its
+    distance from the end of the context. Those stay coupled by design and the
+    estimand is written to match.
     """
     pool_size = len(criteria)
     for level in levels:
@@ -1015,23 +1216,32 @@ git commit -m "feat: plan the fixed-position nested ladder"
 
 ---
 
-### Task 6: One frozen corruption realisation per prompt
+### Task 6: Extendable operation queues and one frozen realisation per prompt
 
 **Files:**
 - Create: `src/packing/ladder_dataset.py`
 - Test: `tests/test_ladder_dataset.py`
 
 **Interfaces:**
-- Consumes: `PairedItem`, `build_corrupted_items` (`src/packing/dataset.py:251`), `partition_seed`, `CORE_OPERATIONS` and `select_response` from Task 3
-- Produces: `assign_operations(item_ids: list[str], op_keys: tuple[str, ...], *, seed: int) -> dict[str, str]`, `build_ladder_item(base: PairedItem, op_key: str, side: str, criteria: tuple[Criterion, ...], *, seed: int) -> PairedItem | None`
+- Consumes: `PairedItem` (`src/packing/dataset.py:25`), `corruption_for` from Task 0, `partition_seed`, `Criterion`
+- Produces: `operation_queues(item_ids: list[str], op_keys: tuple[str, ...], *, seed: int, per_op_max: int) -> dict[str, list[str]]`; `activate(queues: dict[str, list[str]], per_op: int) -> dict[str, str]` mapping item id to operation; `build_ladder_item(base: PairedItem, op_key: str, side: str, criteria: tuple[Criterion, ...], *, seed: int) -> PairedItem | None`
 
-The built item sets `meta["base_item"] = base.item_id`. That exact key matters: `analyze.py:164` derives the clustering column `base_unit` from `item.meta["base_item"]`, and `independence_unit` (`analyze.py:413`) falls back to `item_id` when it is absent, which would treat every corrupted item as its own cluster and silently inflate n.
+A single shuffle-and-modulo assignment cannot survive the variance review. If the
+first stage assigns 464 prompts by position in a shuffled list, then the review
+raises the target to 520, re-running the assignment reshuffles everything and
+prompts whose outcomes are already collected can receive a different operation.
+The review is increase-only and keeps first-stage prompts in the analysis, so
+assignment has to be stable under extension.
+
+Queues solve it: deal the frame into one queue per operation once, sized to the
+768-unit maximum, and activate a prefix of each. Raising `per_op` reveals more
+units without touching any prior assignment.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-"""One operation and one realisation per prompt, frozen so that the paired
-difference carries load and not realisation noise."""
+"""Operation assignment must be stable under extension, and each prompt gets one
+frozen corruption realisation reused at every rung."""
 
 from __future__ import annotations
 
@@ -1040,7 +1250,7 @@ from collections import Counter
 from packing.dataset import PairedItem
 from packing.eligibility import CORE_OPERATIONS
 from packing.ladder_criteria import LADDER_CRITERIA
-from packing.ladder_dataset import assign_operations, build_ladder_item
+from packing.ladder_dataset import activate, build_ladder_item, operation_queues
 
 TEXT = (
     "First sentence of the answer. Second sentence adds detail. "
@@ -1061,19 +1271,57 @@ def _base(item_id: str) -> PairedItem:
     )
 
 
-def test_operations_are_assigned_in_equal_quotas():
-    ids = [f"p{i}" for i in range(80)]
-    assigned = assign_operations(ids, CORE_OPERATIONS, seed=5)
+def test_queues_are_equal_sized_and_disjoint():
+    ids = [f"p{i}" for i in range(96 * 8)]
+    queues = operation_queues(ids, CORE_OPERATIONS, seed=5, per_op_max=96)
+    assert set(queues) == set(CORE_OPERATIONS)
+    assert all(len(q) == 96 for q in queues.values())
+    flat = [i for q in queues.values() for i in q]
+    assert len(set(flat)) == len(flat)
+
+
+def test_activation_yields_exact_equal_quotas():
+    ids = [f"p{i}" for i in range(96 * 8)]
+    queues = operation_queues(ids, CORE_OPERATIONS, seed=5, per_op_max=96)
+    assigned = activate(queues, per_op=58)
     counts = Counter(assigned.values())
     assert set(counts) == set(CORE_OPERATIONS)
-    assert max(counts.values()) - min(counts.values()) <= 1
+    assert all(c == 58 for c in counts.values())
+    assert len(assigned) == 58 * 8
 
 
-def test_operation_assignment_is_deterministic():
+def test_extending_does_not_reassign_any_earlier_prompt():
+    ids = [f"p{i}" for i in range(96 * 8)]
+    queues = operation_queues(ids, CORE_OPERATIONS, seed=5, per_op_max=96)
+    first = activate(queues, per_op=58)
+    second = activate(queues, per_op=65)
+    for item_id, op in first.items():
+        assert second[item_id] == op, item_id
+    assert len(second) == 65 * 8
+
+
+def test_queues_are_deterministic_for_a_seed():
     ids = [f"p{i}" for i in range(80)]
-    assert assign_operations(ids, CORE_OPERATIONS, seed=5) == assign_operations(
-        ids, CORE_OPERATIONS, seed=5
+    assert operation_queues(ids, CORE_OPERATIONS, seed=5, per_op_max=10) == (
+        operation_queues(ids, CORE_OPERATIONS, seed=5, per_op_max=10)
     )
+
+
+def test_a_frame_too_small_for_the_maximum_is_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="needs 800 units, frame has 80"):
+        operation_queues([f"p{i}" for i in range(80)], CORE_OPERATIONS,
+                         seed=5, per_op_max=100)
+
+
+def test_activating_beyond_the_queue_is_rejected():
+    import pytest
+
+    ids = [f"p{i}" for i in range(80)]
+    queues = operation_queues(ids, CORE_OPERATIONS, seed=5, per_op_max=10)
+    with pytest.raises(ValueError, match="per_op 11 exceeds queue depth 10"):
+        activate(queues, per_op=11)
 
 
 def test_realisation_is_identical_across_repeated_builds():
@@ -1086,28 +1334,25 @@ def test_realisation_is_identical_across_repeated_builds():
 
 
 def test_the_targeted_criterion_is_the_operations_target():
-    base = _base("p1")
-    item = build_ladder_item(base, "shuffle", "a", LADDER_CRITERIA, seed=9)
+    item = build_ladder_item(_base("p1"), "shuffle", "a", LADDER_CRITERIA, seed=9)
     assert item.targeted_criterion == "coherence"
+
+
+def test_base_item_key_is_set_for_clustering():
+    item = build_ladder_item(_base("p1"), "shuffle", "a", LADDER_CRITERIA, seed=9)
+    assert item.meta["base_item"] == "p1"
 
 
 def test_inapplicable_operation_yields_none_rather_than_an_unchanged_item():
     base = PairedItem(
-        item_id="p2",
-        prompt="p",
-        response_a="Short.",
-        response_b="Short.",
-        human_a={},
-        human_b={},
-        dataset="test",
-        meta={},
+        item_id="p2", prompt="p", response_a="Short.", response_b="Short.",
+        human_a={}, human_b={}, dataset="test", meta={},
     )
     assert build_ladder_item(base, "shuffle", "a", LADDER_CRITERIA, seed=9) is None
 
 
 def test_only_the_selected_side_is_corrupted():
-    base = _base("p1")
-    item = build_ladder_item(base, "shuffle", "a", LADDER_CRITERIA, seed=9)
+    item = build_ladder_item(_base("p1"), "shuffle", "a", LADDER_CRITERIA, seed=9)
     assert item.response_a != TEXT
     assert item.response_b == TEXT
 ```
@@ -1120,15 +1365,16 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'packing.ladder_datase
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-"""Build ladder items: one operation, one realisation, frozen per prompt.
+"""Build ladder units: one operation, one realisation, both frozen per prompt.
 
-The realisation is frozen because it is reused at every rung. If it were redrawn
-per rung, the paired difference between K = 1 and K = 40 would carry realisation
-noise on top of the load effect, and the estimator has no way to separate them.
+Assignment is queue-based rather than shuffle-and-modulo so that it survives the
+increase-only variance review. Dealing into per-operation queues once and
+activating a prefix means raising the target reveals new units without changing
+any assignment already collected.
 
-Equal quotas are assigned by position in a seeded permutation rather than by
-independent draws, so a run of 464 prompts lands 58 per operation exactly rather
-than approximately.
+The realisation is frozen because it is reused at every rung. Redrawn per rung,
+the paired difference between K = 1 and K = 40 would carry realisation noise on
+top of the load effect and the estimator could not separate them.
 """
 
 from __future__ import annotations
@@ -1138,19 +1384,51 @@ import random
 from .criteria import Criterion
 from .dataset import PairedItem
 from .partition import partition_seed
+from .registry import corruption_for
 
 
-def assign_operations(
-    item_ids: list[str], op_keys: tuple[str, ...], *, seed: int
-) -> dict[str, str]:
-    """Randomised assignment subject to exact equal quotas."""
+def operation_queues(
+    item_ids: list[str],
+    op_keys: tuple[str, ...],
+    *,
+    seed: int,
+    per_op_max: int,
+) -> dict[str, list[str]]:
+    """Deal the frame into one fixed queue per operation, sized to the maximum."""
     if not op_keys:
         raise ValueError("op_keys must be non-empty")
-    order = list(item_ids)
-    random.Random(partition_seed("operation-assignment", 0, 0, seed)).shuffle(order)
+    if per_op_max < 1:
+        raise ValueError(f"per_op_max must be >= 1, got {per_op_max}")
+    needed = per_op_max * len(op_keys)
+    if len(item_ids) < needed:
+        raise ValueError(
+            f"queue plan needs {needed} units, frame has {len(item_ids)}"
+        )
+    ordered = sorted(item_ids)
+    random.Random(partition_seed("operation-queues", 0, 0, seed)).shuffle(ordered)
     return {
-        item_id: op_keys[index % len(op_keys)]
-        for index, item_id in enumerate(order)
+        op: ordered[index * per_op_max : (index + 1) * per_op_max]
+        for index, op in enumerate(op_keys)
+    }
+
+
+def activate(queues: dict[str, list[str]], per_op: int) -> dict[str, str]:
+    """Reveal the first `per_op` units of every queue.
+
+    Monotone in `per_op` by construction: a larger value returns a superset with
+    identical operations for every unit already returned.
+    """
+    if per_op < 0:
+        raise ValueError(f"per_op must be >= 0, got {per_op}")
+    for op, queue in queues.items():
+        if per_op > len(queue):
+            raise ValueError(
+                f"per_op {per_op} exceeds queue depth {len(queue)} for {op}"
+            )
+    return {
+        item_id: op
+        for op, queue in queues.items()
+        for item_id in queue[:per_op]
     }
 
 
@@ -1165,13 +1443,10 @@ def build_ladder_item(
     """Apply one frozen realisation of `op_key` to one side of `base`.
 
     Returns None when the operation does not apply, rather than an unchanged item
-    carrying a ground-truth claim, which would be a false label.
+    carrying a ground-truth claim, which would be a false label. Task 14 treats a
+    None here as an invariant violation, because eligibility was screened first.
     """
-    from .cli import ALL_CORRUPTIONS
-
-    corruption = next((c for c in ALL_CORRUPTIONS if c.key == op_key), None)
-    if corruption is None:
-        raise ValueError(f"unknown corruption {op_key!r}")
+    corruption = corruption_for(op_key)
     if corruption.targeted_criterion not in {c.key for c in criteria}:
         raise ValueError(
             f"{corruption.targeted_criterion!r} not in the criterion pool"
@@ -1210,22 +1485,27 @@ def build_ladder_item(
     )
 ```
 
+`meta["base_item"]` is the exact key that matters: `analyze.py:164` derives the
+clustering column `base_unit` from it, and `independence_unit` (`analyze.py:413`)
+falls back to `item_id` when it is absent, which would treat every corrupted item
+as its own cluster and silently inflate n.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_ladder_dataset.py -q`
-Expected: PASS, 6 tests
+Expected: PASS, 11 tests
 
 - [ ] **Step 5: Run the full suite and commit**
 
 ```bash
 uv run pytest -q
 git add src/packing/ladder_dataset.py tests/test_ladder_dataset.py
-git commit -m "feat: freeze one corruption realisation per ladder prompt"
+git commit -m "feat: extendable operation queues and frozen realisations"
 ```
 
 ---
 
-### Task 7: Unevaluable-output scoring rule
+### Task 7: Three failure classes and the composite outcome value
 
 **Files:**
 - Create: `src/packing/unevaluable.py`
@@ -1233,23 +1513,34 @@ git commit -m "feat: freeze one corruption realisation per ladder prompt"
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks
-- Produces: `FailureClass` enum-like constants `INFRASTRUCTURE: str`, `MODEL_OUTPUT: str`; `classify_failure(message: str) -> str`; `score_unevaluable(rule: str) -> float | None` where `rule` is `"primary"`, `"complete_case"` or `"best_case"`
+- Produces: `TRANSIENT: str`, `UNEVALUABLE: str`, `FATAL: str`; `classify_failure(message: str) -> str`; `FatalProtocolError(RuntimeError)`; `unevaluable_value(rule: str, group_size: int, reference_size: int) -> float | None`
+
+Two classes are not enough. A substring classifier that defaults unknown failures
+to "model output" scores its own bugs as science: an SDK change, an unsupported
+option, or a stray `KeyError` would arrive as evidence that load degraded judging.
+So an unrecognised failure is **fatal** and aborts the run. The burden sits on the
+harness to classify, not on the estimate to absorb.
+
+Timeouts split by phase rather than by keyword. A connection timeout is transient.
+A read or generation timeout is unevaluable, because generation time plausibly
+rises with K and replacing those calls would erase part of the treatment effect.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-"""Unevaluable output needs a defined value, because heavy load is exactly what
-produces it. Infrastructure failures are replaced; model-output failures are not."""
+"""Three failure classes. Transient failures are replaced, unevaluable ones are
+scored, and anything unrecognised aborts rather than becoming a quiet miss."""
 
 from __future__ import annotations
 
 import pytest
 
 from packing.unevaluable import (
-    INFRASTRUCTURE,
-    MODEL_OUTPUT,
+    FATAL,
+    TRANSIENT,
+    UNEVALUABLE,
     classify_failure,
-    score_unevaluable,
+    unevaluable_value,
 )
 
 
@@ -1257,14 +1548,15 @@ from packing.unevaluable import (
     "message",
     [
         "Connection reset by peer",
-        "Request timed out after 120s",
+        "connection aborted",
         "rate limit exceeded, retry after 2s",
         "provider returned 503 Service Unavailable",
         "502 Bad Gateway",
+        "connect timeout after 5s",
     ],
 )
-def test_transient_transport_failures_are_infrastructure(message):
-    assert classify_failure(message) == INFRASTRUCTURE
+def test_transient_infrastructure(message):
+    assert classify_failure(message) == TRANSIENT
 
 
 @pytest.mark.parametrize(
@@ -1276,36 +1568,73 @@ def test_transient_transport_failures_are_infrastructure(message):
         "context_length_exceeded: 41000 tokens > 32768",
         "content_filter triggered on the response",
         "model refused to answer",
-        "criterion key set mismatch: got {...} expected {...}",
-        "invalid_request_error: unsupported parameter",
+        "read timeout while streaming the completion",
+        "generation timeout after 120s",
     ],
 )
-def test_load_sensitive_failures_are_model_output(message):
-    assert classify_failure(message) == MODEL_OUTPUT
+def test_treatment_or_system_unevaluable(message):
+    assert classify_failure(message) == UNEVALUABLE
 
 
-def test_unknown_failures_default_to_model_output():
-    # Defaulting to model output is conservative: it keeps the observation in the
-    # analysis rather than replacing it, so an unrecognised load-induced failure
-    # cannot be silently dropped.
-    assert classify_failure("something nobody anticipated") == MODEL_OUTPUT
+@pytest.mark.parametrize(
+    "message",
+    [
+        "invalid_request_error: unsupported parameter",
+        "criterion key set mismatch: got {'a'} expected {'b'}",
+        "unexpected KeyError('scores')",
+        "TypeError: got an unexpected keyword argument",
+        "something nobody anticipated",
+    ],
+)
+def test_fatal_protocol_and_configuration(message):
+    assert classify_failure(message) == FATAL
 
 
-def test_primary_rule_scores_unevaluable_as_a_miss():
-    assert score_unevaluable("primary") == 0.0
+def test_unrecognised_is_fatal_not_unevaluable():
+    # The conservative direction is to stop, not to score. Scoring an unknown
+    # failure as a miss turns a harness bug into a load effect.
+    assert classify_failure("???") == FATAL
+
+
+def test_primary_rule_scores_unevaluable_as_zero_at_both_endpoints():
+    assert unevaluable_value("primary", 1, 1) == 0.0
+    assert unevaluable_value("primary", 40, 1) == 0.0
+
+
+def test_lower_bound_imputes_oppositely_at_the_endpoints():
+    # d = Y40 - Y1, so the lower bound on d needs Y1 high and Y40 low.
+    assert unevaluable_value("lower_bound", 1, 1) == 1.0
+    assert unevaluable_value("lower_bound", 40, 1) == 0.0
+
+
+def test_upper_bound_imputes_the_other_way():
+    assert unevaluable_value("upper_bound", 1, 1) == 0.0
+    assert unevaluable_value("upper_bound", 40, 1) == 1.0
 
 
 def test_complete_case_excludes_the_observation():
-    assert score_unevaluable("complete_case") is None
+    assert unevaluable_value("complete_case", 40, 1) is None
 
 
-def test_best_case_scores_unevaluable_as_a_hit():
-    assert score_unevaluable("best_case") == 1.0
+def test_a_single_constant_would_not_bound_the_difference():
+    # Regression guard for the bug this replaced: assigning every unevaluable Y
+    # the same value leaves d unchanged and bounds nothing.
+    lower = (
+        unevaluable_value("lower_bound", 40, 1)
+        - unevaluable_value("lower_bound", 1, 1)
+    )
+    upper = (
+        unevaluable_value("upper_bound", 40, 1)
+        - unevaluable_value("upper_bound", 1, 1)
+    )
+    assert lower == -1.0
+    assert upper == 1.0
+    assert lower < upper
 
 
 def test_unknown_rule_is_rejected():
     with pytest.raises(ValueError, match="unknown rule"):
-        score_unevaluable("whatever")
+        unevaluable_value("whatever", 40, 1)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1316,28 +1645,39 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'packing.unevaluable'`
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-"""Failure classification and the scoring rule for unevaluable output.
+"""Failure classification and the composite-outcome value for unevaluable output.
 
-Two categories, because conflating them biases the result. Model-output failures
-may become more common at K = 40, which makes them part of the load effect;
-replacing those prompts would condition the analysis on surviving high load and
-bias degradation downward.
+Three classes, because two conflate a harness bug with a treatment effect:
 
-A failure is infrastructural only if it is transient and independent of the
-request's content and length. Anything that could plausibly be caused by a
-40-criterion prompt stays in the analysis.
+1. TRANSIENT: exogenous and content-independent. Retried, then the prompt is
+   replaced from its own lane. Never scored.
+2. UNEVALUABLE: plausibly caused by the request itself, so part of the treatment.
+   Retained and scored, because replacing it would condition the analysis on
+   surviving high load.
+3. FATAL: the harness or its configuration is wrong. The run aborts.
+
+An unrecognised failure is FATAL. Defaulting the unknown case to UNEVALUABLE would
+let an SDK change or an unsupported option arrive as evidence that load degraded
+judging, which is the one error mode no amount of sample size fixes.
 """
 
 from __future__ import annotations
 
-INFRASTRUCTURE = "infrastructure"
-MODEL_OUTPUT = "model_output"
+TRANSIENT = "transient_infrastructure"
+UNEVALUABLE = "treatment_unevaluable"
+FATAL = "fatal_protocol"
+
+
+class FatalProtocolError(RuntimeError):
+    """Raised to abort a run rather than score a harness failure."""
+
 
 _TRANSIENT_MARKERS = (
     "connection reset",
     "connection aborted",
-    "timed out",
-    "timeout",
+    "connection error",
+    "connect timeout",
+    "connection timeout",
     "rate limit",
     "429",
     "500 ",
@@ -1349,49 +1689,77 @@ _TRANSIENT_MARKERS = (
     "temporarily unavailable",
 )
 
+_UNEVALUABLE_MARKERS = (
+    "truncated",
+    "max_completion_tokens",
+    "did not parse",
+    "empty content",
+    "context_length_exceeded",
+    "context length",
+    "content_filter",
+    "content filter",
+    "refused",
+    "refusal",
+    "read timeout",
+    "generation timeout",
+    "stream timeout",
+)
+
 
 def classify_failure(message: str) -> str:
-    """Infrastructure only for transient, content-independent failures.
+    """Transient, unevaluable, or fatal. Unknown means fatal.
 
-    Unrecognised failures default to MODEL_OUTPUT. That is the conservative
-    direction: an unrecognised load-induced failure stays in the analysis rather
-    than being replaced out of it.
+    Order matters: the transient markers are checked first so that a connect
+    timeout is not caught by the generic timeout language in the unevaluable set.
     """
     lowered = message.lower()
     if any(marker in lowered for marker in _TRANSIENT_MARKERS):
-        return INFRASTRUCTURE
-    return MODEL_OUTPUT
+        return TRANSIENT
+    if any(marker in lowered for marker in _UNEVALUABLE_MARKERS):
+        return UNEVALUABLE
+    return FATAL
 
 
-def score_unevaluable(rule: str) -> float | None:
-    """Value for an observation whose targeted score cannot be determined.
+def unevaluable_value(
+    rule: str, group_size: int, reference_size: int
+) -> float | None:
+    """Outcome value for an unevaluable paired unit at one rung.
 
-    `primary` scores it a miss: recovery requires the judge to move the targeted
-    score in the seeded direction, and a judgment that cannot be read is not a
-    demonstrated recovery. The other two rules are the pre-specified brackets.
+    The estimand is a difference, d = Y_cmp - Y_ref, so bounding it requires
+    imputing oppositely at the two endpoints. A single constant for every
+    unevaluable Y leaves d untouched and bounds nothing, which is the bug this
+    signature exists to prevent: the rule needs to know which rung it is scoring.
+
+    `primary` is not an imputation. Y is defined as demonstrated,
+    machine-readable directional recovery, so an unreadable judgment is a 0 by
+    definition.
     """
+    at_reference = group_size == reference_size
     if rule == "primary":
         return 0.0
+    if rule == "lower_bound":
+        return 1.0 if at_reference else 0.0
+    if rule == "upper_bound":
+        return 0.0 if at_reference else 1.0
     if rule == "complete_case":
         return None
-    if rule == "best_case":
-        return 1.0
     raise ValueError(
-        f"unknown rule {rule!r}; expected primary, complete_case or best_case"
+        f"unknown rule {rule!r}; expected primary, lower_bound, upper_bound "
+        "or complete_case"
     )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_unevaluable.py -q`
-Expected: PASS, 20 tests
+Expected: PASS, 27 tests
 
 - [ ] **Step 5: Run the full suite and commit**
 
 ```bash
 uv run pytest -q
 git add src/packing/unevaluable.py tests/test_unevaluable.py
-git commit -m "feat: classify failures and score unevaluable output"
+git commit -m "feat: three failure classes and endpoint-aware sensitivity bounds"
 ```
 
 ---
@@ -1658,7 +2026,9 @@ git commit -m "analysis: add the stratified endpoint estimator"
 
 **Interfaces:**
 - Consumes: everything from Tasks 1 to 8
-- Produces: `packing ladder` click command with options `--items PATH`, `--model TEXT`, `--core-n INTEGER` (default 464), `--numbers-n INTEGER` (default 184), `--levels TEXT` (default `1,5,10,20,40`), `--seed INTEGER` (default 20260908), `--dry-run/--no-dry-run` (default `--dry-run`)
+- Produces: `packing ladder` click command with options `--items`, `--model`, `--core-n` (464), `--numbers-n` (184), `--core-candidates` (508), `--per-op-max` (96), `--levels` (`1,5,10,20,40`), `--seed` (20260908), `--plan-out` (`runs/ladder-plan.json`), `--allow-short` (flag, development only), `--dry-run/--no-dry-run` (default dry). Writes a `SamplingPlan` from Task 13.
+
+This task runs **last**: it wires together every other component. See the execution order at the top.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1762,7 +2132,8 @@ Expected: FAIL, exit code 2 with `No such command 'ladder'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add to `src/packing/cli.py`:
+Add to `src/packing/cli.py`. Note the guards: every one of them exists because
+its absence would silently change the experiment rather than fail.
 
 ```python
 @cli.command("ladder")
@@ -1770,48 +2141,93 @@ Add to `src/packing/cli.py`:
 @click.option("--model", default="gpt-5-mini", show_default=True)
 @click.option("--core-n", type=int, default=464, show_default=True)
 @click.option("--numbers-n", type=int, default=184, show_default=True)
+@click.option("--core-candidates", type=int, default=508, show_default=True)
+@click.option("--per-op-max", type=int, default=96, show_default=True)
 @click.option("--levels", default="1,5,10,20,40", show_default=True)
 @click.option("--seed", type=int, default=20260908, show_default=True)
+@click.option("--plan-out", type=click.Path(), default="runs/ladder-plan.json", show_default=True)
+@click.option("--allow-short", is_flag=True, default=False,
+              help="Development only. Never use for the pre-registered budget.")
 @click.option("--dry-run/--no-dry-run", default=True, show_default=True)
 def ladder_cmd(
     items_path: str,
     model: str,
     core_n: int,
     numbers_n: int,
+    core_candidates: int,
+    per_op_max: int,
     levels: str,
     seed: int,
+    plan_out: str,
+    allow_short: bool,
     dry_run: bool,
 ) -> None:
     """The fixed-position load ladder: does trailing load change recovery?"""
     from .eligibility import CORE_OPERATIONS, NUMBERS_OPERATION, select_response
-    from .ladder_criteria import LADDER_MANIFEST, LADDER_CRITERIA
-    from .ladder_dataset import assign_operations, build_ladder_item
-    from .lanes import LANE_CORE, LANE_NUMBERS, assign_lanes, fill_lane
+    from .ladder_criteria import LADDER_CRITERIA, LADDER_MANIFEST
+    from .ladder_dataset import activate, build_ladder_item, operation_queues
+    from .lanes import fill_lane, split_lanes
     from .runner import plan_fixed_position
+    from .sampling_plan import SamplingPlan, Unit, file_sha256, write_plan
 
     LADDER_MANIFEST.validate(expect=40)
-    swept = tuple(int(x) for x in levels.split(","))
+
+    # Pricing must not silently become zero. A missing catalogue entry is a
+    # configuration error, not a free model.
+    if model not in CATALOG:
+        raise click.ClickException(
+            f"no pricing for {model!r}; add it to CATALOG before costing a run"
+        )
+    entry = CATALOG[model]
+
+    swept = tuple(int(x) for x in levels.split(",") if x.strip())
+    if len(set(swept)) != len(swept):
+        raise click.ClickException(f"levels must be unique, got {swept}")
+    if swept[0] != 1 or swept[-1] != len(LADDER_CRITERIA):
+        raise click.ClickException(
+            f"levels must run from 1 to {len(LADDER_CRITERIA)}; got {swept}"
+        )
+    if core_n % len(CORE_OPERATIONS) != 0:
+        raise click.ClickException(
+            f"core-n {core_n} is not divisible by {len(CORE_OPERATIONS)}; equal "
+            "quotas are part of the primary estimand"
+        )
+
     path = Path(items_path)
     if not path.exists():
         raise click.ClickException(f"{path} not found; run `packing fetch` first")
     bases = read_jsonl(path)
+    ids = [b.item_id for b in bases]
+    if len(set(ids)) != len(ids):
+        raise click.ClickException("duplicate base-prompt ids in the input file")
     by_id = {b.item_id: b for b in bases}
 
-    lanes = assign_lanes([b.item_id for b in bases], seed=seed)
-    core_stream = [b.item_id for b in bases if lanes[b.item_id] == LANE_CORE]
-    numbers_stream = [b.item_id for b in bases if lanes[b.item_id] == LANE_NUMBERS]
+    core_stream, numbers_stream = split_lanes(
+        ids, seed=seed, core_candidates=core_candidates
+    )
 
-    def core_eligible(item_id: str) -> bool:
-        return select_response(by_id[item_id], CORE_OPERATIONS, seed=seed) is not None
+    # Screen once, and KEEP the side. The side that satisfied all eight core
+    # operations is the one that put this prompt in A_core = 1. Re-deriving it
+    # later from the assigned operation alone can pick the other response, which
+    # is eligible for that operation but not for all eight.
+    core_sides = {
+        item_id: select_response(by_id[item_id], CORE_OPERATIONS, seed=seed)
+        for item_id in core_stream
+    }
+    numbers_sides = {
+        item_id: select_response(by_id[item_id], (NUMBERS_OPERATION,), seed=seed)
+        for item_id in numbers_stream
+    }
 
-    def numbers_eligible(item_id: str) -> bool:
-        return select_response(by_id[item_id], (NUMBERS_OPERATION,), seed=seed) is not None
-
-    core_ids, _ = fill_lane(core_stream, core_eligible, core_n)
-    numbers_ids, _ = fill_lane(numbers_stream, numbers_eligible, numbers_n)
+    core_ids, _ = fill_lane(
+        core_stream, lambda i: core_sides[i] is not None, core_n
+    )
+    numbers_ids, _ = fill_lane(
+        numbers_stream, lambda i: numbers_sides[i] is not None, numbers_n
+    )
 
     console.print(
-        f"K=40 pool, manifest {LADDER_MANIFEST.hash}, "
+        f"K={len(LADDER_CRITERIA)} pool, manifest {LADDER_MANIFEST.hash}, "
         f"lengths {LADDER_MANIFEST.length_stats}"
     )
     console.print(
@@ -1821,36 +2237,69 @@ def ladder_cmd(
         f"numbers lane: {len(numbers_stream)} candidates, "
         f"{len(numbers_ids)}/{numbers_n} filled"
     )
-    if len(core_ids) < core_n or len(numbers_ids) < numbers_n:
-        console.print(
-            "[yellow]lane short of quota: extend the stream before running[/yellow]"
+    short = len(core_ids) < core_n or len(numbers_ids) < numbers_n
+    if short and not allow_short:
+        raise click.ClickException(
+            "lane short of quota. A partial sample costs and plans a different "
+            "experiment, so this is an error rather than a warning. Fetch a larger "
+            "frame, or pass --allow-short for development only."
         )
+    if short:
+        console.print("[yellow]SHORT SAMPLE: development only, not the budget[/yellow]")
 
-    assigned = assign_operations(core_ids, CORE_OPERATIONS, seed=seed)
+    queues = operation_queues(
+        core_ids, CORE_OPERATIONS, seed=seed, per_op_max=per_op_max
+    ) if len(core_ids) >= per_op_max * len(CORE_OPERATIONS) else operation_queues(
+        core_ids, CORE_OPERATIONS, seed=seed,
+        per_op_max=len(core_ids) // len(CORE_OPERATIONS),
+    )
+    assigned = activate(queues, per_op=min(
+        core_n // len(CORE_OPERATIONS), len(next(iter(queues.values())))
+    ))
+
     items: list = []
-    for item_id in core_ids:
-        base = by_id[item_id]
-        op = assigned[item_id]
-        side = select_response(base, (op,), seed=seed) or select_response(
-            base, CORE_OPERATIONS, seed=seed
-        )
-        built = build_ladder_item(base, op, side, LADDER_CRITERIA, seed=seed)
-        if built is not None:
-            items.append(built)
+    units: list[Unit] = []
+    for item_id, op in assigned.items():
+        side = core_sides[item_id]
+        if side is None:
+            raise click.ClickException(
+                f"{item_id} passed screening with no side; invariant violated"
+            )
+        built = build_ladder_item(by_id[item_id], op, side, LADDER_CRITERIA, seed=seed)
+        if built is None:
+            # Screening already proved the operation applies to this side, so a
+            # None here means the two paths disagree. That is a bug, not a
+            # droppable item: skipping it would break equal quotas.
+            raise click.ClickException(
+                f"{item_id}/{op}/{side} screened eligible but did not build"
+            )
+        items.append(built)
+        units.append(Unit(item_id, "core", side, True, op,
+                          built.meta["realisation_seed"], seed, "active"))
     for item_id in numbers_ids:
-        base = by_id[item_id]
-        side = select_response(base, (NUMBERS_OPERATION,), seed=seed)
+        side = numbers_sides[item_id]
         built = build_ladder_item(
-            base, NUMBERS_OPERATION, side, LADDER_CRITERIA, seed=seed
+            by_id[item_id], NUMBERS_OPERATION, side, LADDER_CRITERIA, seed=seed
         )
-        if built is not None:
-            items.append(built)
+        if built is None:
+            raise click.ClickException(
+                f"{item_id}/numbers/{side} screened eligible but did not build"
+            )
+        items.append(built)
+        units.append(Unit(item_id, "numbers", side, True, NUMBERS_OPERATION,
+                          built.meta["realisation_seed"], seed, "active"))
+
+    # Post-build quota check is mandatory: a silent shortfall destroys the equal
+    # weighting the primary estimand assumes.
+    from collections import Counter
+    built_counts = Counter(u.operation for u in units if u.lane == "core")
+    if not allow_short and len(set(built_counts.values())) > 1:
+        raise click.ClickException(f"unequal core quotas after build: {dict(built_counts)}")
 
     specs = plan_fixed_position(
-        items, LADDER_CRITERIA, model=model, levels=swept
+        items, LADDER_CRITERIA, model=model, levels=swept, base_seed=seed
     )
     est = estimate(specs)
-    entry = CATALOG.get(model, {"in": 0.0, "out": 0.0})
     projection = project_cost(est, entry["in"], entry["out"])
     console.print(f"items: {len(items)}  levels={swept}")
     console.print(f"calls: {len(specs)}")
@@ -1858,16 +2307,35 @@ def ladder_cmd(
         f"est input {est.input_tokens:,}, output ceiling {est.output_tokens:,}"
     )
     console.print(f"cost ceiling ${projection:.2f} (actual output will be lower)")
+
+    plan = SamplingPlan(
+        dataset_id=path.stem,
+        dataset_sha256=file_sha256(path),
+        manifest_sha256=LADDER_MANIFEST.full_hash,
+        seed=seed,
+        model=model,
+        model_settings={"reasoning_effort": "low", "temperature": None},
+        levels=swept,
+        units=tuple(units),
+        call_identities=tuple(s.identity for s in specs),
+    )
+    Path(plan_out).parent.mkdir(parents=True, exist_ok=True)
+    write_plan(Path(plan_out), plan)
+    console.print(f"sampling plan written to {plan_out} ({plan.active_count} active units)")
+
     if dry_run:
         console.print("dry run: nothing sent")
         return
     raise click.ClickException(
-        "live execution is a separate decision; re-run with --dry-run reviewed "
-        "and the manifest-based cost recompute recorded in the spec"
+        "live execution consumes the frozen sampling plan and is not implemented "
+        "here; see the live-execution prerequisites in the plan"
     )
 ```
 
-`estimate` and `project_cost` are already imported in `cli.py` from `.runner` (see `src/packing/cli.py:34-41`), and `read_jsonl` from `.dataset`. `estimate` takes only `specs`. The `sweep` command at `src/packing/cli.py:807-812` is the pattern to copy.
+`estimate` and `project_cost` are already imported in `cli.py` from `.runner`
+(`src/packing/cli.py:34-41`), and `read_jsonl` from `.dataset`. `estimate` takes
+only `specs`. The `sweep` command at `src/packing/cli.py:807-812` is the pattern.
+
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1876,8 +2344,20 @@ Expected: PASS, 4 tests
 
 - [ ] **Step 5: Recompute the budget against the real manifest**
 
-Run: `uv run packing ladder --dry-run --core-n 464 --numbers-n 184`
-Record the reported call count and cost ceiling. Update spec section 14, replacing the provisional `$23.40` and `$34.38` extrapolations with the manifest-based figures, and note the token growth per criterion the real 40-criterion prompts produce.
+First fetch a frame large enough to fill both lanes. The 200-prompt file on disk
+is the pilot frame and cannot supply 464 core plus 184 `numbers` units, so running
+the budget command against it would cost a partial plan rather than the planned
+experiment. That is now a hard error rather than a warning.
+
+```bash
+uv run packing fetch --limit 1600
+uv run packing ladder --dry-run --core-n 464 --numbers-n 184 --core-candidates 508
+```
+
+Record the reported call count and cost ceiling. Update spec section 14, replacing
+the provisional `$23.40` and `$34.38` extrapolations with the manifest-based
+figures, and note the per-criterion token growth the real 40-criterion prompts
+produce. Do not pass `--allow-short` for this step.
 
 - [ ] **Step 6: Run the full suite and commit**
 
@@ -1889,35 +2369,45 @@ git commit -m "feat: add the ladder command and recompute cost from the manifest
 
 ---
 
-### Task 10: Persist model-output failures as scorable records
+### Task 10: One paired outcome per prompt and rung
 
 **Files:**
-- Modify: `src/packing/runner.py:176-200` (`_build_record`) and `src/packing/runner.py:260-278` (the concurrent failure branch)
+- Modify: `src/packing/runner.py:176-200` (`_build_record`), `src/packing/runner.py:146-164` (resume), `src/packing/runner.py:260-278` (failure branches)
 - Modify: `src/packing/analyze.py:69-131` (`build_outcomes`)
 - Test: `tests/test_failure_records.py`
 
 **Interfaces:**
-- Consumes: `classify_failure`, `score_unevaluable`, `MODEL_OUTPUT`, `INFRASTRUCTURE` from Task 7
-- Produces: `_build_failure_record(spec: CallSpec, message: str) -> dict[str, Any]` in `runner.py`, emitting `{"identity", "item_id", "side", "model", "nominal_n", "replicate", "partition_hash", "group_index", "group_size", "group", "positions", "failure": str, "failure_class": str, "scores": {}}`. `build_outcomes(records, items, criteria, *, unevaluable_rule: str = "primary")` gains the keyword.
+- Consumes: `classify_failure`, `unevaluable_value`, `TRANSIENT`, `UNEVALUABLE`, `FATAL`, `FatalProtocolError` from Task 7
+- Produces: `_build_failure_record(spec: CallSpec, message: str) -> dict[str, Any]` in `runner.py`; `completed_identities(path: Path) -> set[str]` counting an identity complete only on success or a class-2 record; `build_outcomes(records, items, criteria, *, unevaluable_rule: str = "primary", reference_size: int = 1)` in `analyze.py`
 
-Task 7 defined the scoring rule but nothing calls it, because the runner records a
-failure only in `stats.errors`, which is printed and discarded. An unevaluable
-observation that never becomes a row cannot be scored, so the rule would silently
-degrade to complete-case, which the spec forbids as the primary handling.
+Three things have to be true together, and each one alone is insufficient:
+
+1. A class-2 failure must become a **row**, or the scoring rule from Task 7 has
+   nothing to reach and the primary handling silently degrades to complete-case.
+2. Scoring must happen at the **paired unit**. Calls are side-specific but
+   recovery is a comparison, so a call-level rule emits two observations for a
+   prompt whose two sides both fail.
+3. A class-1 failure must **not** count as a completed identity, or resume treats
+   a transient network error as a finished call and never retries it.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-"""Model-output failures become rows so the scoring rule can reach them.
-A failure that lives only in a log is a complete-case exclusion by default."""
+"""Failure rows, paired-unit scoring, and resume semantics."""
 
 from __future__ import annotations
+
+import json
+
+import pytest
 
 from packing.analyze import build_outcomes, to_frame
 from packing.criteria import HELPSTEER2_CRITERIA
 from packing.dataset import PairedItem
-from packing.runner import _build_failure_record
-from packing.unevaluable import INFRASTRUCTURE, MODEL_OUTPUT
+from packing.runner import _build_failure_record, completed_identities
+from packing.unevaluable import FATAL, TRANSIENT, UNEVALUABLE, FatalProtocolError
+
+ONE = HELPSTEER2_CRITERIA[:1]
 
 
 def _item():
@@ -1931,19 +2421,17 @@ def _item():
         dataset="test",
         meta={"base_item": "hs2-000001", "operation": "shuffle"},
         source="synthetic",
-        targeted_criterion="coherence",
+        targeted_criterion="helpfulness",
     )
 
 
 class _Spec:
-    """Minimal stand-in carrying only what the record builder reads."""
-
-    def __init__(self, item, side, group):
+    def __init__(self, item, side, group, nominal_n=1):
         self.item = item
         self.side = side
         self.group = group
         self.group_index = 0
-        self.nominal_n = len(group)
+        self.nominal_n = nominal_n
         self.replicate = 0
         self.model = "mock"
         self.identity = f"{item.item_id}|{side}|mock|0|deadbeef|0"
@@ -1954,60 +2442,113 @@ class _Spec:
         self.partition = _P()
 
 
-def test_truncation_is_recorded_as_a_model_output_failure():
-    spec = _Spec(_item(), "a", HELPSTEER2_CRITERIA[:1])
-    record = _build_failure_record(spec, "truncated at max_completion_tokens=9352")
-    assert record["failure_class"] == MODEL_OUTPUT
-    assert record["scores"] == {}
-    assert record["group_size"] == 1
-    assert record["positions"] == {"helpfulness": 0}
-
-
-def test_timeout_is_recorded_as_infrastructure():
-    spec = _Spec(_item(), "a", HELPSTEER2_CRITERIA[:1])
-    record = _build_failure_record(spec, "Request timed out after 120s")
-    assert record["failure_class"] == INFRASTRUCTURE
-
-
-def test_primary_rule_turns_a_failure_row_into_a_miss():
-    spec = _Spec(_item(), "a", HELPSTEER2_CRITERIA[:1])
-    failure = _build_failure_record(spec, "content did not parse as JSON")
-    good = {
-        **failure,
-        "failure": None,
-        "failure_class": None,
-        "scores": {"helpfulness": 3},
+def _good(side, score):
+    spec = _Spec(_item(), side, ONE)
+    return {
+        "identity": spec.identity,
+        "item_id": spec.item.item_id,
+        "side": side,
+        "model": "mock",
+        "nominal_n": 1,
+        "replicate": 0,
+        "partition_hash": "deadbeef",
+        "group_index": 0,
+        "group_size": 1,
+        "group": ["helpfulness"],
+        "positions": {"helpfulness": 0},
+        "scores": {"helpfulness": score},
+        "reasoning": {"helpfulness": ""},
         "input_tokens": 10,
         "output_tokens": 10,
         "reasoning_tokens": 0,
         "cached_input_tokens": 0,
+        "near_cap": False,
     }
-    good["side"] = "b"
-    good["identity"] = good["identity"].replace("|a|", "|b|")
-    outcomes = build_outcomes(
-        [failure, good], [_item()], HELPSTEER2_CRITERIA[:1], unevaluable_rule="primary"
+
+
+def test_truncation_is_class_two():
+    record = _build_failure_record(
+        _Spec(_item(), "a", ONE), "truncated at max_completion_tokens=9352"
     )
-    frame = to_frame(outcomes)
-    assert len(frame) == 1
-    assert frame["correct_num"].iloc[0] == 0.0
+    assert record["failure_class"] == UNEVALUABLE
+    assert record["scores"] == {}
 
 
-def test_complete_case_rule_drops_the_failure_row():
-    spec = _Spec(_item(), "a", HELPSTEER2_CRITERIA[:1])
-    failure = _build_failure_record(spec, "content did not parse as JSON")
+def test_connection_error_is_class_one():
+    record = _build_failure_record(
+        _Spec(_item(), "a", ONE), "Connection reset by peer"
+    )
+    assert record["failure_class"] == TRANSIENT
+
+
+def test_a_fatal_failure_raises_rather_than_recording():
+    with pytest.raises(FatalProtocolError, match="unsupported parameter"):
+        _build_failure_record(
+            _Spec(_item(), "a", ONE), "invalid_request_error: unsupported parameter"
+        )
+
+
+def test_one_unevaluable_side_yields_exactly_one_outcome():
+    failure = _build_failure_record(_Spec(_item(), "a", ONE), "did not parse")
+    outcomes = build_outcomes([failure, _good("b", 3)], [_item()], ONE)
+    assert len(outcomes) == 1
+    assert to_frame(outcomes)["correct_num"].iloc[0] == 0.0
+
+
+def test_both_sides_unevaluable_still_yields_exactly_one_outcome():
+    a = _build_failure_record(_Spec(_item(), "a", ONE), "did not parse")
+    b = _build_failure_record(_Spec(_item(), "b", ONE), "truncated")
+    outcomes = build_outcomes([a, b], [_item()], ONE)
+    assert len(outcomes) == 1, "a call-level rule would emit two here"
+
+
+def test_both_sides_valid_scores_normally():
+    outcomes = build_outcomes([_good("a", 1), _good("b", 4)], [_item()], ONE)
+    assert len(outcomes) == 1
+    assert to_frame(outcomes)["correct_num"].iloc[0] in {0.0, 1.0}
+
+
+def test_complete_case_drops_the_unevaluable_pair():
+    failure = _build_failure_record(_Spec(_item(), "a", ONE), "did not parse")
     outcomes = build_outcomes(
-        [failure], [_item()], HELPSTEER2_CRITERIA[:1], unevaluable_rule="complete_case"
+        [failure, _good("b", 3)], [_item()], ONE, unevaluable_rule="complete_case"
     )
     assert outcomes == []
 
 
-def test_infrastructure_failures_are_never_scored():
-    spec = _Spec(_item(), "a", HELPSTEER2_CRITERIA[:1])
-    failure = _build_failure_record(spec, "503 Service Unavailable")
-    outcomes = build_outcomes(
-        [failure], [_item()], HELPSTEER2_CRITERIA[:1], unevaluable_rule="primary"
+def test_bounds_impute_oppositely_by_rung():
+    failure = _build_failure_record(_Spec(_item(), "a", ONE), "did not parse")
+    lower = build_outcomes(
+        [failure, _good("b", 3)], [_item()], ONE,
+        unevaluable_rule="lower_bound", reference_size=1,
     )
-    assert outcomes == [], "infrastructure failures are replaced, not scored"
+    upper = build_outcomes(
+        [failure, _good("b", 3)], [_item()], ONE,
+        unevaluable_rule="upper_bound", reference_size=1,
+    )
+    # This pair sits at the reference rung, so the lower bound on d puts it high.
+    assert to_frame(lower)["correct_num"].iloc[0] == 1.0
+    assert to_frame(upper)["correct_num"].iloc[0] == 0.0
+
+
+def test_class_one_failures_are_never_scored():
+    failure = _build_failure_record(_Spec(_item(), "a", ONE), "503 Service Unavailable")
+    outcomes = build_outcomes([failure, _good("b", 3)], [_item()], ONE)
+    assert outcomes == [], "transient failures are replaced, not scored"
+
+
+def test_resume_does_not_count_a_transient_failure_as_complete(tmp_path):
+    path = tmp_path / "calls.jsonl"
+    transient = _build_failure_record(_Spec(_item(), "a", ONE), "connection aborted")
+    unevaluable = _build_failure_record(_Spec(_item(), "b", ONE), "truncated")
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(transient) + "\n")
+        handle.write(json.dumps(unevaluable) + "\n")
+        handle.write(json.dumps(_good("a", 2) | {"identity": "third"}) + "\n")
+    done = completed_identities(path)
+    assert transient["identity"] not in done, "a transient error must be retried"
+    assert unevaluable["identity"] in done, "a class-2 result is terminal"
+    assert "third" in done
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2015,19 +2556,24 @@ def test_infrastructure_failures_are_never_scored():
 Run: `uv run pytest tests/test_failure_records.py -q`
 Expected: FAIL with `ImportError: cannot import name '_build_failure_record'`
 
-- [ ] **Step 3: Add the failure record builder to `runner.py`**
+- [ ] **Step 3: Add the failure record builder and resume filter to `runner.py`**
 
 ```python
 def _build_failure_record(spec: CallSpec, message: str) -> dict[str, Any]:
-    """A failed call as a row, so the scoring rule can reach it.
+    """A failed call as a row, or an abort if the harness is at fault.
 
-    Model-output failures may become more common at high K, which makes them part
-    of the load effect. Recorded only in a log they would be a complete-case
-    exclusion by default, which is exactly the handling the protocol forbids as
-    primary.
+    Class-2 failures may become more common at high K, which makes them part of
+    the load effect. Recorded only in a log they would be a complete-case
+    exclusion by default, which the protocol forbids as primary handling.
     """
-    from .unevaluable import classify_failure
+    from .unevaluable import FATAL, FatalProtocolError, classify_failure
 
+    failure_class = classify_failure(message)
+    if failure_class == FATAL:
+        raise FatalProtocolError(
+            f"{spec.identity}: {message}. This is a protocol or configuration "
+            "error, not a judge behaviour, so the run stops rather than scoring it."
+        )
     return {
         "identity": spec.identity,
         "item_id": spec.item.item_id,
@@ -2041,82 +2587,101 @@ def _build_failure_record(spec: CallSpec, message: str) -> dict[str, Any]:
         "group": [c.key for c in spec.group],
         "positions": {c.key: i for i, c in enumerate(spec.group)},
         "failure": message,
-        "failure_class": classify_failure(message),
+        "failure_class": failure_class,
         "scores": {},
         "input_tokens": 0,
         "output_tokens": 0,
         "reasoning_tokens": 0,
         "cached_input_tokens": 0,
     }
+
+
+def completed_identities(path: Path) -> set[str]:
+    """Identities that need no further attempt.
+
+    A transient failure is not complete: resume must retry it. Only a success or
+    a terminal class-2 record closes an identity.
+    """
+    from .unevaluable import TRANSIENT
+
+    done: set[str] = set()
+    if not path.exists():
+        return done
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                # A torn final line from a hard kill. Redo that call.
+                continue
+            if record.get("failure_class") == TRANSIENT:
+                continue
+            identity = record.get("identity")
+            if identity:
+                done.add(identity)
+    return done
 ```
 
-- [ ] **Step 4: Write the failure record in the concurrent path**
+Replace the body of the existing resume reader at `src/packing/runner.py:146-164` with a call to `completed_identities`, and in both failure branches write the record under `write_lock` exactly as successes are written. Let `FatalProtocolError` propagate: do not catch it in the bare `except Exception` branch.
 
-In `src/packing/runner.py`, inside the `except ProviderError as exc:` branch at line 260, after `stats.errors.append(...)`, add:
+- [ ] **Step 4: Score at the paired unit in `analyze.py`**
+
+`build_outcomes` already looks up `rec_a` and `rec_b` for each (item, rung). Extend
+that pairing rather than appending separately:
 
 ```python
-                        # Model-output failures are part of the treatment, so they
-                        # are persisted rather than left in a log. Infrastructure
-                        # failures are persisted too, and are filtered out at
-                        # analysis time so they can be counted and replaced.
-                        with write_lock:
-                            fh.write(
-                                json.dumps(_build_failure_record(spec, str(exc)))
-                                + "\n"
-                            )
-                            fh.flush()
+    from .unevaluable import TRANSIENT, unevaluable_value
+
+    def _unevaluable(record: dict[str, Any] | None) -> bool:
+        return bool(record) and bool(record.get("failure"))
+
+    # Transient failures are replaced upstream and carry no information.
+    if (rec_a and rec_a.get("failure_class") == TRANSIENT) or (
+        rec_b and rec_b.get("failure_class") == TRANSIENT
+    ):
+        continue
+
+    if _unevaluable(rec_a) or _unevaluable(rec_b):
+        value = unevaluable_value(
+            unevaluable_rule, rec_a["group_size"], reference_size
+        )
+        if value is None:
+            continue
+        outcomes.append(
+            Outcome(
+                item_id=item.item_id,
+                criterion=item.targeted_criterion,
+                group_size=rec_a["group_size"],
+                position=0,
+                judge_a=None,
+                judge_b=None,
+                human_a=None,
+                human_b=None,
+                correct_num=value,
+                judge_tie=False,
+                unevaluable=True,
+            )
+        )
+        continue
 ```
 
-Apply the identical block in the bare `except Exception as exc:` branch at line 274, using `f"unexpected {exc!r}"` as the message.
+Add `unevaluable: bool = False` to `Outcome` in `src/packing/score.py` and let
+`correct_num` be set directly rather than derived from judge scores when it is set.
 
-- [ ] **Step 5: Teach `build_outcomes` the rule**
-
-In `src/packing/analyze.py`, change the signature at line 69 to accept the rule, and skip or score failure rows before the paired lookup:
-
-```python
-def build_outcomes(
-    records: list[dict[str, Any]],
-    items: list[PairedItem],
-    criteria: tuple[Criterion, ...],
-    *,
-    unevaluable_rule: str = "primary",
-) -> list[Outcome]:
-```
-
-Immediately after the records are indexed by identity, partition them:
-
-```python
-    from .unevaluable import INFRASTRUCTURE, score_unevaluable
-
-    # Infrastructure failures are replaced upstream, so they carry no information
-    # and are dropped here. Model-output failures are scored under the rule.
-    usable = [r for r in records if not r.get("failure")]
-    model_failures = [
-        r
-        for r in records
-        if r.get("failure") and r.get("failure_class") != INFRASTRUCTURE
-    ]
-    unevaluable_value = score_unevaluable(unevaluable_rule)
-```
-
-Then, after the loop that builds outcomes from `usable`, append one outcome per
-model-output failure per criterion in its group when `unevaluable_value` is not
-`None`, using `judge_a=judge_b=None` and `correct_num=unevaluable_value`. Where
-`Outcome` requires judge scores, add an `unevaluable: bool = False` field to
-`Outcome` in `src/packing/score.py` and set `correct_num` directly rather than
-deriving it from scores.
-
-- [ ] **Step 6: Run test to verify it passes**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `uv run pytest tests/test_failure_records.py -q`
-Expected: PASS, 5 tests
+Expected: PASS, 10 tests
 
-- [ ] **Step 7: Run the full suite and commit**
+- [ ] **Step 6: Run the full suite and commit**
 
 ```bash
 uv run pytest -q
 git add src/packing/runner.py src/packing/analyze.py src/packing/score.py tests/test_failure_records.py
-git commit -m "analysis: score model-output failures instead of dropping them"
+git commit -m "analysis: score unevaluable pairs once, and keep transients retryable"
 ```
 
 ---
@@ -2292,6 +2857,11 @@ def stratified_sample_size(
     form gives 352 and the exact form 354, and the pre-registered number is 354.
     A planning function that disagrees with the protocol it plans is worse than
     useless.
+
+    This is still a planning approximation, not the analysis distribution. The
+    analysis uses Welch-Satterthwaite degrees of freedom, which depend on the
+    individual stratum variances; this function has only their root-mean-square
+    summary and uses df = n - 1. Label it as planning, never as the test.
     """
     if mde <= 0:
         raise ValueError("mde must be > 0")
@@ -2370,49 +2940,75 @@ flight, and K = 1 and K = 40 for the same prompt are always adjacent.
 Append to `tests/test_ladder_plan.py`:
 
 ```python
-def test_call_order_is_interleaved_across_rungs():
+def _order_key(spec):
+    """Stable identity for ordering assertions.
+
+    Deliberately not `spec.identity`: identity embeds the partition hash, which
+    changes when the companion permutation changes, so an identity comparison
+    would report a difference the ordering algorithm did not cause.
+    """
+    return (spec.item.item_id, spec.side, spec.nominal_n)
+
+
+def _prompt_major(items, levels):
+    """The order Task 5 produces before interleaving, for comparison."""
+    return [
+        (item.item_id, side, level)
+        for item in items
+        for level in levels
+        for side in ("a", "b")
+    ]
+
+
+def test_order_is_not_prompt_major():
     items = [_item(f"i{i}", "precision") for i in range(12)]
     specs = plan_fixed_position(
-        items, LADDER_CRITERIA, model="mock", levels=LEVELS
+        items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=7
     )
-    levels_in_order = [s.nominal_n for s in specs]
-    # A prompt-major order would emit each prompt's five rungs consecutively, so
-    # runs of identical nominal_n would be short and the sequence would cycle
-    # through levels in blocks. Interleaving mixes them.
-    blocks = 1
-    for a, b in zip(levels_in_order, levels_in_order[1:]):
-        if a != b:
-            blocks += 1
-    assert blocks > len(items) * 2, blocks
+    assert [_order_key(s) for s in specs] != _prompt_major(items, LEVELS)
 
 
-def test_interleaving_is_deterministic_for_a_seed():
-    items = [_item(f"i{i}", "precision") for i in range(8)]
-    first = [
-        s.identity
-        for s in plan_fixed_position(
-            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=42
-        )
+def test_one_prompts_calls_are_not_contiguous():
+    items = [_item(f"i{i}", "precision") for i in range(12)]
+    specs = plan_fixed_position(
+        items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=7
+    )
+    positions = [
+        index for index, s in enumerate(specs) if s.item.item_id == "i0"
     ]
-    second = [
-        s.identity
-        for s in plan_fixed_position(
-            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=42
-        )
-    ]
-    assert first == second
+    span = max(positions) - min(positions) + 1
+    assert span > len(positions), (
+        "a prompt's ten calls should be spread through the run, not adjacent"
+    )
 
 
-def test_interleaving_changes_with_the_seed():
+def test_ordering_is_deterministic_for_a_seed():
     items = [_item(f"i{i}", "precision") for i in range(8)]
     a = [
-        s.identity
+        _order_key(s)
+        for s in plan_fixed_position(
+            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=42
+        )
+    ]
+    b = [
+        _order_key(s)
+        for s in plan_fixed_position(
+            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=42
+        )
+    ]
+    assert a == b
+
+
+def test_ordering_changes_with_the_seed():
+    items = [_item(f"i{i}", "precision") for i in range(8)]
+    a = [
+        _order_key(s)
         for s in plan_fixed_position(
             items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=1
         )
     ]
     b = [
-        s.identity
+        _order_key(s)
         for s in plan_fixed_position(
             items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=2
         )
@@ -2420,19 +3016,22 @@ def test_interleaving_changes_with_the_seed():
     assert a != b
 
 
-def test_interleaving_preserves_the_spec_set():
+def test_ordering_preserves_the_call_set_exactly():
     items = [_item(f"i{i}", "precision") for i in range(6)]
     specs = plan_fixed_position(
         items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=3
     )
-    assert len(specs) == 6 * len(LEVELS) * 2
-    assert len({s.identity for s in specs}) == len(specs)
+    assert sorted(_order_key(s) for s in specs) == sorted(
+        _prompt_major(items, LEVELS)
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_ladder_plan.py -q`
-Expected: FAIL on `test_call_order_is_interleaved_across_rungs`, and both seed tests pass trivially because the order is currently deterministic and seed-independent. Confirm the interleave test is the one failing.
+Expected: FAIL on `test_order_is_not_prompt_major`, `test_one_prompts_calls_are_not_contiguous` and `test_ordering_changes_with_the_seed`. The first two fail because Task 5 emits prompt-major; the third fails because the order does not yet depend on the seed at all. `test_ordering_is_deterministic_for_a_seed` and `test_ordering_preserves_the_call_set_exactly` pass before the change, which is correct: they are regression guards, not the red test.
+
+An earlier version of this task counted runs of identical `nominal_n` and asserted the count exceeded `len(items) * 2`. That assertion is satisfied by the unmodified prompt-major planner, which already produces about five blocks per prompt, so it would never have gone red. Comparing against the explicit prompt-major construction is the check that actually discriminates.
 
 - [ ] **Step 3: Add the shuffle**
 
@@ -2461,9 +3060,281 @@ git commit -m "feat: interleave ladder call order across rungs"
 
 ---
 
+### Task 13: Frozen sampling-plan artifact
+
+**Files:**
+- Create: `src/packing/sampling_plan.py`
+- Test: `tests/test_sampling_plan.py`
+
+**Interfaces:**
+- Consumes: nothing from earlier tasks
+- Produces: `Unit` dataclass (`base_item_id`, `lane`, `side`, `eligible`, `operation`, `realisation_seed`, `companion_seed`, `status`); `SamplingPlan` dataclass (`dataset_id`, `dataset_sha256`, `manifest_sha256`, `seed`, `model`, `model_settings`, `levels`, `units`, `call_identities`); `write_plan(path: Path, plan: SamplingPlan) -> None`; `read_plan(path: Path) -> SamplingPlan`; `file_sha256(path: Path) -> str`
+
+Printing the manifest hash to a console is not freezing anything. Without a
+durable artifact, the live run would repeat screening and assignment from
+command-line arguments, and every guarantee the design rests on becomes a
+coincidence: a reordered input file selects a different sample, an extension
+reassigns collected units, and edited anchor prose merges into a resumed run.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+"""The sampling plan is the frozen record the live run consumes."""
+
+from __future__ import annotations
+
+import pytest
+
+from packing.sampling_plan import (
+    SamplingPlan,
+    Unit,
+    file_sha256,
+    read_plan,
+    write_plan,
+)
+
+
+def _plan(units=None):
+    return SamplingPlan(
+        dataset_id="helpsteer2",
+        dataset_sha256="a" * 64,
+        manifest_sha256="b" * 64,
+        seed=20260908,
+        model="gpt-5-mini",
+        model_settings={"reasoning_effort": "low", "temperature": None},
+        levels=(1, 5, 10, 20, 40),
+        units=units
+        or (
+            Unit(
+                base_item_id="hs2-000001",
+                lane="core",
+                side="b",
+                eligible=True,
+                operation="shuffle",
+                realisation_seed=123,
+                companion_seed=456,
+                status="active",
+            ),
+        ),
+        call_identities=("hs2-000001|b|gpt-5-mini|0|abc|0",),
+    )
+
+
+def test_round_trips_through_disk(tmp_path):
+    path = tmp_path / "plan.json"
+    write_plan(path, _plan())
+    assert read_plan(path) == _plan()
+
+
+def test_hashes_are_full_sha256(tmp_path):
+    path = tmp_path / "plan.json"
+    write_plan(path, _plan())
+    loaded = read_plan(path)
+    assert len(loaded.dataset_sha256) == 64
+    assert len(loaded.manifest_sha256) == 64
+
+
+def test_file_sha256_is_stable_and_content_sensitive(tmp_path):
+    a = tmp_path / "a.jsonl"
+    b = tmp_path / "b.jsonl"
+    a.write_text("x\n", encoding="utf-8")
+    b.write_text("y\n", encoding="utf-8")
+    assert file_sha256(a) == file_sha256(a)
+    assert file_sha256(a) != file_sha256(b)
+    assert len(file_sha256(a)) == 64
+
+
+def test_active_and_reserve_units_are_distinguished():
+    plan = _plan(
+        units=(
+            Unit("p1", "core", "a", True, "shuffle", 1, 2, "active"),
+            Unit("p2", "core", "b", True, "filler", 3, 4, "reserve"),
+        )
+    )
+    assert [u.status for u in plan.units] == ["active", "reserve"]
+    assert plan.active_count == 1
+
+
+def test_duplicate_base_items_are_rejected():
+    with pytest.raises(ValueError, match="duplicate base item"):
+        _plan(
+            units=(
+                Unit("p1", "core", "a", True, "shuffle", 1, 2, "active"),
+                Unit("p1", "numbers", "b", True, "numbers", 3, 4, "active"),
+            )
+        )
+
+
+def test_a_unit_may_belong_to_only_one_arm():
+    # Enforced by the duplicate check above, stated separately because it is the
+    # design constraint rather than an implementation detail.
+    with pytest.raises(ValueError, match="duplicate base item"):
+        _plan(
+            units=(
+                Unit("p9", "core", "a", True, "flatten", 1, 2, "active"),
+                Unit("p9", "numbers", "a", True, "numbers", 1, 2, "active"),
+            )
+        )
+
+
+def test_unknown_status_is_rejected():
+    with pytest.raises(ValueError, match="status must be"):
+        _plan(units=(Unit("p1", "core", "a", True, "shuffle", 1, 2, "maybe"),))
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/test_sampling_plan.py -q`
+Expected: FAIL with `ModuleNotFoundError: No module named 'packing.sampling_plan'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+"""The frozen sampling plan.
+
+The dry run writes this and the live run consumes it. That ordering is what makes
+the design's guarantees real rather than incidental: the response side is visibly
+frozen before an operation is assigned, an extension cannot reassign a collected
+unit, a reordered input file cannot select a different sample, and edited anchor
+prose cannot merge into a resumed run because the manifest digest is recorded here.
+
+Hashes are full SHA-256. A 16-character prefix is fine for a console line and not
+fine for an artifact that decides whether two runs are the same experiment.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+_STATUSES = ("active", "reserve")
+
+
+@dataclass(frozen=True)
+class Unit:
+    base_item_id: str
+    lane: str
+    side: str
+    eligible: bool
+    operation: str
+    realisation_seed: int
+    companion_seed: int
+    status: str
+
+    def __post_init__(self) -> None:
+        if self.status not in _STATUSES:
+            raise ValueError(f"status must be one of {_STATUSES}, got {self.status!r}")
+        if self.side not in ("a", "b"):
+            raise ValueError(f"side must be 'a' or 'b', got {self.side!r}")
+
+
+@dataclass(frozen=True)
+class SamplingPlan:
+    dataset_id: str
+    dataset_sha256: str
+    manifest_sha256: str
+    seed: int
+    model: str
+    model_settings: dict[str, object]
+    levels: tuple[int, ...]
+    units: tuple[Unit, ...]
+    call_identities: tuple[str, ...] = field(default=())
+
+    def __post_init__(self) -> None:
+        ids = [u.base_item_id for u in self.units]
+        if len(set(ids)) != len(ids):
+            seen: set[str] = set()
+            dupes = sorted({i for i in ids if i in seen or seen.add(i)})
+            raise ValueError(
+                f"duplicate base item in the plan: {dupes[:5]}. A base prompt "
+                "contributes to at most one arm."
+            )
+        for name, digest in (
+            ("dataset_sha256", self.dataset_sha256),
+            ("manifest_sha256", self.manifest_sha256),
+        ):
+            if len(digest) != 64:
+                raise ValueError(f"{name} must be a full SHA-256, got {len(digest)}")
+
+    @property
+    def active_count(self) -> int:
+        return sum(1 for u in self.units if u.status == "active")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_plan(path: Path, plan: SamplingPlan) -> None:
+    payload = asdict(plan)
+    payload["levels"] = list(plan.levels)
+    payload["call_identities"] = list(plan.call_identities)
+    Path(path).write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def read_plan(path: Path) -> SamplingPlan:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return SamplingPlan(
+        dataset_id=payload["dataset_id"],
+        dataset_sha256=payload["dataset_sha256"],
+        manifest_sha256=payload["manifest_sha256"],
+        seed=payload["seed"],
+        model=payload["model"],
+        model_settings=payload["model_settings"],
+        levels=tuple(payload["levels"]),
+        units=tuple(Unit(**u) for u in payload["units"]),
+        call_identities=tuple(payload["call_identities"]),
+    )
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `uv run pytest tests/test_sampling_plan.py -q`
+Expected: PASS, 7 tests
+
+- [ ] **Step 5: Run the full suite and commit**
+
+```bash
+uv run pytest -q
+git add src/packing/sampling_plan.py tests/test_sampling_plan.py
+git commit -m "feat: freeze the sampling plan as a durable artifact"
+```
+
+---
+
+## Prerequisites for live execution
+
+None of these is built here, and all are required before a paid run. Listing them
+so the boundary is explicit rather than discovered later.
+
+1. **Prompt replacement after persistent transient failure.** Task 10 keeps a
+   class-1 identity retryable, but nothing yet draws the replacement from the next
+   candidate in the same lane in frozen order.
+2. **A live command that consumes the sampling plan.** Task 9 writes the artifact;
+   the live path must read it rather than re-screen, or every guarantee the
+   artifact exists to provide is bypassed.
+3. **Archival outside the ignore rule.** `runs/` is gitignored, and the K = 20
+   sweep was nearly lost to that (METHODS section 10.8). The run directory is
+   copied out before analysis begins.
+4. **The blinded variance review, and its null simulation.** Spec section 8 fixes
+   the rule; Task 11 supplies the variance function it calls. The review runs after
+   160 complete core prompts, so it needs real data, and its type-I error has to be
+   simulated under the null from the pilot distributions before it is used.
+5. **Fatal-abort drill.** `FatalProtocolError` from Task 7 must be shown to stop a
+   real run rather than being swallowed by the concurrent executor's bare
+   `except Exception` branch.
+
 ## Not in this plan
 
 - **Live execution.** Task 9 refuses it by design. Spending is a separate decision after the manifest-based recompute.
-- **The blinded variance review itself** (spec section 8). Task 11 supplies the variance function it calls, but the review runs after 160 complete core prompts, so it needs real data. Its null simulation is a separate plan.
+- **The blinded variance review itself.** Listed above as a live-execution prerequisite.
 - **`rename` and `scramble_list`.** Spec section 11 assigns them retained pilot data only, no prompts, no quota, no calls.
 - **Deck corrections.** `presentation/index.html` slide 14 still frames load against position as unadjudicated, and its two MDE cards are wrong. Tracked separately from the experiment machinery.

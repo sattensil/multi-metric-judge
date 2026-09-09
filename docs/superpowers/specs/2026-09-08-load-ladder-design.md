@@ -151,6 +151,28 @@ The design therefore assigns arms **before** eligibility is inspected:
 > for its own arm's eligibility. The streams are extended in that same
 > deterministic order if the blinded variance review raises the core target.
 
+**Lane sizes are exact, not probabilistic.** The fetched frame is permuted by the
+frozen seed and split by index, so the core lane holds exactly its candidate count
+and the `numbers` lane exactly its own. A hash-threshold assignment would make
+lane membership an independent draw per prompt, adding lane-count variance the
+fill calculations below do not model.
+
+**Within-lane order is seeded, not file order.** Each lane is ordered by
+`partition_seed(f"{item_id}:lane-order", ...)` before screening, so any structure
+in the source file's ordering (collection, topic, score) cannot select the sample.
+
+**The selected response side is frozen at screening.** Eligibility is evaluated
+against the full arm operation set, and the side that qualified is persisted with
+the unit. Re-deriving the side later from the assigned operation alone would pick
+a response eligible for that operation but not for all eight, silently changing
+the population from `A_core = 1`.
+
+**Operation quotas are preassigned to the maximum.** The 768-unit core maximum is
+dealt into eight operation queues of 96 units each, and the initial run activates
+the first 58 of each. Raising the target reveals further units from each queue
+without altering any assignment already collected, which is what the increase-only
+variance review requires.
+
 Lane sizes, binomial, at 97.5% probability of filling each quota:
 
 | Lane | Quota | Rate | Candidates |
@@ -364,47 +386,76 @@ failures may become **more** common at K = 40, which makes them part of the load
 effect; dropping and replacing them conditions the analysis on surviving high load
 and biases degradation downward.
 
-> **Infrastructure failure.** Transient, exogenous transport or service failures:
-> network errors, rate limits, timeouts, and provider 5xx responses. Three
-> transport-level retries (`max_retries=3`, `openai_provider.py:56`), no
-> application-level retry. On persistent failure the prompt is replaced from the
-> next candidate in its own lane, in frozen order.
+> **1. Transient infrastructure.** Connection errors, rate limits, provider 5xx,
+> temporary outage, connection-establishment timeouts. Three transport retries
+> (`max_retries=3`, `openai_provider.py:56`). On persistent failure the prompt is
+> replaced from the next candidate in its own lane, in frozen order. These are
+> **not** scored and **not** treated as completed identities on resume.
 >
-> **Model or system output failure.** Deterministic request rejection,
-> context-limit errors, content filtering, refusals, malformed output, and
-> truncation. **Not replaced**, because any of these may be caused by K = 40
-> itself, and replacing them would erase part of the treatment effect.
+> **2. Treatment or system unevaluable.** Truncation, malformed returned content,
+> content filtering, refusal, context-limit rejection, and read or generation
+> timeouts. **Retained and scored** under the composite-outcome rule below,
+> because any of these may be caused by K = 40 itself, and replacing them would
+> erase part of the treatment effect.
+>
+> **3. Fatal protocol or configuration error.** Unsupported parameter, invalid
+> schema emitted by the client, criterion-key mismatch, corrupt input, unexpected
+> exception, or any invariant violation. **The run aborts.** These are never
+> scored.
 
-The distinction is drawn on cause, not on convenience: a failure is
-infrastructural only if it is transient and independent of the request's content
-and length.
+The third class exists because a two-class scheme scores its own bugs as science:
+an SDK change or an unsupported model option would otherwise arrive as evidence
+that load degraded judging. An unrecognised failure is fatal, not unevaluable, so
+the burden is on the harness to classify rather than on the estimate to absorb.
 
-### Scoring rule for unevaluable output
+Timeouts are split by phase rather than by string match: a connection timeout is
+class 1, while a read or generation timeout is class 2, since generation time
+plausibly rises with K.
 
-`Y` is directional recovery, so it needs a defined value in exactly the cases
-heavy load is most likely to produce. Pre-specified:
+**Resume semantics.** An identity counts as complete only when it has a success or
+a class-2 record. Class-1 failures are written to a separate attempts log so a
+transient error cannot be mistaken for a finished call.
 
-| Case | Primary rule |
+### The outcome is a composite, not an imputation
+
+`Y` is defined as **demonstrated, machine-readable directional recovery**: the
+judge moved the targeted score in the seeded direction *and* returned output the
+harness could read. Scoring an unreadable judgment as 0 is therefore part of the
+outcome definition, not a missing-data convention, and it is pre-registered as
+such. A judge that stops returning usable output under load has failed to
+demonstrate recovery, and because unevaluable output may itself rise with K, this
+keeps that effect inside the estimate rather than outside it.
+
+**Scoring happens at the paired unit, not the call.** Recovery is a comparison
+between the clean and corrupted sides, so a call-level rule would create two
+observations for one prompt when both sides fail. Exactly one outcome is emitted
+per (prompt, rung):
+
+| Case | Outcome |
 |---|---|
-| Target score absent | **Miss** |
-| Only one side of the pair valid | **Miss**, the directional comparison cannot be formed |
-| Output malformed, target score unambiguously extractable | Use the extracted score; log a parse-repair event |
-| Target score readable more than one way | **Miss** |
+| Both sides evaluable | Directional recovery as normal |
+| Either side unevaluable | One unevaluable outcome |
+| Both sides unevaluable | One unevaluable outcome |
 
-The rationale for scoring absence as a miss: recovery requires the judge to move
-the targeted score in the seeded direction, and a judgment that cannot be read is
-not a demonstrated recovery. Because unevaluable output may itself rise with K,
-this keeps that effect inside the estimate rather than outside it.
+Within a side, a malformed payload whose targeted score is unambiguously
+extractable is used, with a parse-repair event logged; a score readable more than
+one way is unevaluable.
 
-The primary rule is the worst case for the treatment by construction, so two
-pre-specified sensitivity analyses bracket it:
+### Sensitivity bounds
 
-1. **Complete case.** Unevaluable observations dropped. Reported as a sensitivity
-   check only, never as the primary handling rule.
-2. **Best case.** Every unevaluable observation scored as a hit.
+The estimand is a difference, `d = Y_40 - Y_1`, so bounding it requires opposite
+imputations at the two endpoints. Assigning every unevaluable `Y` the same value
+does not bound `d`. Three pre-specified analyses:
 
-If the primary result and both brackets do not agree in sign, the finding is
-reported as sensitive to the rule rather than as a load effect.
+| Analysis | Unevaluable at K = 1 | Unevaluable at K = 40 |
+|---|---|---|
+| **Primary** | 0 | 0 |
+| **Lower bound on d** | 1 | 0 |
+| **Upper bound on d** | 0 | 1 |
+| **Complete case** | pair excluded | pair excluded |
+
+If the primary estimate and the two bounds do not agree in sign, the finding is
+reported as sensitive to the outcome definition rather than as a load effect.
 
 **Unevaluable frequency by K is itself a reported diagnostic outcome**, since a
 judge that stops returning usable output under load is degrading in a way
@@ -442,7 +493,17 @@ All unadjusted, none supporting confirmatory claims:
   `temperature`; `reasoning_effort` fixed (METHODS §3.1).
 - Hold the corruption realisation and companion sequence identical across all
   rungs, so the paired difference carries load and not composition noise.
-- Record the criterion manifest hash with the run.
+- Record the criterion manifest hash with the run, as the full SHA-256 in
+  metadata and call records rather than a display prefix. Anchor prose is part of
+  the treatment, so a pool whose keys are unchanged but whose descriptors differ
+  must not resume into an earlier run.
+- **Freeze a sampling-plan artifact before execution.** The dry run writes it and
+  the live run consumes it rather than repeating screening and assignment. It
+  carries the source dataset id and file hash, the manifest hash, the study seed,
+  the model and its fixed settings, the levels, and per unit: base-prompt id,
+  lane, selected side, eligibility result, assigned operation, corruption
+  realisation seed, companion order seed, active or reserve status, and the
+  planned call identities.
 - Retain `runs/` artefacts. The K = 20 sweep was nearly lost to `.gitignore`
   (METHODS §10.7); the run directory is archived outside the ignore rule before
   analysis begins.
@@ -560,17 +621,42 @@ figure is the one used for the spend decision.
 > screened only for its own arm. Assigning arms after screening a shared frame
 > would leave the core pool 4.8% `numbers`-eligible against a population value of
 > 31.0%, so the primary estimate would no longer describe the population in the
-> estimand. Lanes are 508 core and 714 `numbers` initially, extended in frozen
-> order to 837 core if the variance review raises the target.
+> estimand. Lanes are exact index splits of the seed-permuted frame, 508 core and
+> 714 `numbers` initially, extended in frozen order to 837 core if the variance
+> review raises the target. Within each lane, screening order is seeded rather
+> than file order. The response side that satisfied the full arm operation set is
+> frozen at screening and reused, never re-derived from the assigned operation.
+> Core operation quotas are dealt from eight preassigned queues sized to the
+> 768-unit maximum, so raising the target cannot reassign a collected unit.
 >
-> **Failure handling.** Infrastructure failures, meaning transient exogenous
-> transport or service errors, receive three transport retries and are then
-> replaced from the same lane. Deterministic request rejection, context-limit
-> errors, content filtering, refusals, malformed output and truncation are
-> model-output failures: they are **not** replaced, because K = 40 may cause them.
-> An observation whose targeted score cannot be uniquely determined is scored a
-> miss; complete-case and best-case analyses are pre-specified as brackets, and
-> unevaluable frequency by K is reported as a diagnostic outcome.
+> **Frozen sampling plan.** The dry run writes a sampling-plan artifact carrying
+> the dataset and manifest hashes, the seed, the model settings, the levels, and
+> every unit's lane, side, eligibility, operation, realisation seed, companion
+> seed and active or reserve status. The live run consumes it rather than
+> repeating screening and assignment.
+>
+> **Outcome definition.** `Y` is demonstrated, machine-readable directional
+> recovery: the judge moved the targeted score in the seeded direction and
+> returned readable output. An unreadable judgment scores 0 by definition, not by
+> imputation. Exactly one outcome is emitted per (prompt, rung), so a pair with
+> either or both sides unevaluable yields one unevaluable outcome.
+>
+> **Sensitivity bounds.** Because the estimand is a difference, the bounds impute
+> oppositely at the endpoints: lower bound on d sets unevaluable K = 1 to 1 and
+> K = 40 to 0; upper bound reverses that; complete case excludes the pair. A sign
+> disagreement across primary and both bounds is reported as sensitivity to the
+> outcome definition, not as a load effect.
+>
+> **Failure handling, three classes.** Transient infrastructure (connection
+> errors, rate limits, 5xx, connection timeouts) receives three transport retries
+> then prompt replacement from the same lane, is never scored, and never counts as
+> a completed identity on resume. Treatment or system unevaluable (truncation,
+> malformed content, content filtering, refusal, context-limit rejection, read and
+> generation timeouts) is retained and scored. Fatal protocol or configuration
+> errors (unsupported parameter, invalid schema, criterion mismatch, corrupt
+> input, unexpected exception, invariant violation) abort the run and are never
+> scored. An unrecognised failure is fatal rather than unevaluable. Unevaluable
+> frequency by K is reported as a diagnostic outcome.
 >
 > **Secondary analyses.** Tie rate by K is diagnostic. Intermediate K levels,
 > operation-specific effects, `rename` and `scramble_list` are exploratory;
