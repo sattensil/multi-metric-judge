@@ -17,8 +17,6 @@ from rich.console import Console
 from rich.table import Table
 
 from . import analyze, calibrate as calib, cost, design, power
-from .corrupt import CORRUPTIONS
-from .corrupt_extra import EXTRA_CORRUPTIONS
 from .criteria import HELPSTEER2_CRITERIA, get_criteria
 from .synthetic_criteria import SYNTHETIC_ONLY_CRITERIA
 from .dataset import (
@@ -30,6 +28,7 @@ from .dataset import (
     write_jsonl,
 )
 from .partition import nominal_levels
+from .registry import ALL_CORRUPTIONS
 from .providers.base import CATALOG, get_provider
 from .runner import (
     estimate,
@@ -558,7 +557,6 @@ def ties(dataset: str, items_path: Path | None) -> None:
         )
 
 
-ALL_CORRUPTIONS = CORRUPTIONS + EXTRA_CORRUPTIONS
 ALL_CRITERIA = HELPSTEER2_CRITERIA + SYNTHETIC_ONLY_CRITERIA
 # METHODS 3.4: a hypothesis, replaced by measurement here.
 SEMANTIC_KEYS = {

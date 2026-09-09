@@ -76,9 +76,16 @@ import pytest
 from packing.registry import ALL_CORRUPTIONS, CORRUPTION_KEYS, corruption_for
 
 
-def test_registry_holds_all_twenty_operations():
-    assert len(ALL_CORRUPTIONS) == 20
-    assert len(CORRUPTION_KEYS) == 20
+def test_registry_holds_the_eighteen_surviving_operations():
+    # METHODS 3.4 catalogues twenty. Two were removed after calibration
+    # (METHODS 10, `unsupport` on discrimination and `vague` for inverting), so
+    # the live catalogue is eighteen. `jargon` stays in the pool as packing load
+    # and is excluded from measurement by MUTE_OPERATIONS rather than removed.
+    assert len(ALL_CORRUPTIONS) == 18
+    assert len(CORRUPTION_KEYS) == 18
+    assert "unsupport" not in CORRUPTION_KEYS
+    assert "vague" not in CORRUPTION_KEYS
+    assert "jargon" in CORRUPTION_KEYS
 
 
 def test_lookup_by_key():

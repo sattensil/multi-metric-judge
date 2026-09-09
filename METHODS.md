@@ -126,6 +126,12 @@ declares the direction the targeted score must move. **Ground truth is an orderi
 relation, not an absolute score**: a padded response is more verbose than its base;
 it is not "verbosity = 4."
 
+Twenty operations were designed. Two do not survive calibration and are absent
+from the shipped catalogue, which holds **eighteen**: `unsupport` and `vague` were
+removed (§10), while `jargon` is retained as packing load and excluded from
+measurement. The table below is the design, with the outcome of each recorded in
+§8.2.
+
 | Operation | Target criterion | Dir | Sev | Stoch | Applicability | Detection class (hypothesised) |
 |---|---|---|---|---|---|---|
 | `contradict` | consistency | ↓ | 1 | Y | 95.0% | **semantic** |
