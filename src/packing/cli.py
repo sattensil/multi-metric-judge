@@ -1122,3 +1122,256 @@ def power_cmd(name: str, reference: int, comparison: int | None) -> None:
 
 if __name__ == "__main__":
     cli()
+
+
+@cli.command("ladder")
+@click.option(
+    "--items", "items_path", type=click.Path(),
+    default="data/helpsteer2.jsonl", show_default=True,
+)
+@click.option("--model", default="gpt-5-mini", show_default=True)
+@click.option("--core-n", type=int, default=464, show_default=True)
+@click.option("--numbers-n", type=int, default=184, show_default=True)
+@click.option("--core-candidates", type=int, default=508, show_default=True)
+@click.option("--per-op-max", type=int, default=96, show_default=True)
+@click.option("--levels", default="1,5,10,20,40", show_default=True)
+@click.option("--seed", type=int, default=20260908, show_default=True)
+@click.option(
+    "--plan-out", type=click.Path(),
+    default="runs/ladder-plan.json", show_default=True,
+)
+@click.option(
+    "--allow-short", is_flag=True, default=False,
+    help="Development only. Never use for the pre-registered budget.",
+)
+@click.option("--dry-run/--no-dry-run", default=True, show_default=True)
+def ladder_cmd(
+    items_path: str,
+    model: str,
+    core_n: int,
+    numbers_n: int,
+    core_candidates: int,
+    per_op_max: int,
+    levels: str,
+    seed: int,
+    plan_out: str,
+    allow_short: bool,
+    dry_run: bool,
+) -> None:
+    """The fixed-position load ladder: does trailing load change recovery?"""
+    from collections import Counter
+
+    from .eligibility import CORE_OPERATIONS, NUMBERS_OPERATION, select_response
+    from .ladder_criteria import LADDER_CRITERIA, LADDER_MANIFEST
+    from .ladder_dataset import activate, build_ladder_item, operation_queues
+    from .lanes import fill_lane, split_lanes
+    from .runner import plan_fixed_position
+    from .sampling_plan import SamplingPlan, Unit, file_sha256, write_plan
+
+    LADDER_MANIFEST.validate(expect=len(LADDER_CRITERIA))
+
+    # Pricing must not silently become zero. A missing catalogue entry is a
+    # configuration error, not a free model.
+    if model not in CATALOG:
+        raise click.ClickException(
+            f"no pricing for {model!r}; add it to CATALOG before costing a run"
+        )
+    entry = CATALOG[model]
+
+    swept = tuple(int(x) for x in levels.split(",") if x.strip())
+    if len(set(swept)) != len(swept):
+        raise click.ClickException(f"levels must be unique, got {swept}")
+    if not swept or swept[0] != 1 or swept[-1] != len(LADDER_CRITERIA):
+        raise click.ClickException(
+            f"levels must run from 1 to {len(LADDER_CRITERIA)}; got {swept}"
+        )
+    if core_n % len(CORE_OPERATIONS) != 0:
+        raise click.ClickException(
+            f"core-n {core_n} is not divisible by {len(CORE_OPERATIONS)}; equal "
+            "quotas are part of the primary estimand"
+        )
+
+    path = Path(items_path)
+    if not path.exists():
+        raise click.ClickException(f"{path} not found; run `packing fetch` first")
+    bases = read_jsonl(path)
+    ids = [b.item_id for b in bases]
+    if len(set(ids)) != len(ids):
+        raise click.ClickException("duplicate base-prompt ids in the input file")
+    by_id = {b.item_id: b for b in bases}
+
+    try:
+        core_stream, numbers_stream = split_lanes(
+            ids, seed=seed, core_candidates=core_candidates
+        )
+    except ValueError as exc:
+        # A frame too small for the requested lane split is a user error with an
+        # obvious remedy, so it reads as a message rather than a traceback.
+        raise click.ClickException(
+            f"{exc}. Fetch a larger frame with `packing fetch --limit N`, or "
+            "lower --core-candidates."
+        ) from exc
+
+    # Screen once, and KEEP the side. The side that satisfied all eight core
+    # operations is the one that put this prompt in A_core = 1. Re-deriving it
+    # later from the assigned operation alone can pick the other response, which
+    # is eligible for that operation but not for all eight.
+    core_sides = {
+        item_id: select_response(by_id[item_id], CORE_OPERATIONS, seed=seed)
+        for item_id in core_stream
+    }
+    numbers_sides = {
+        item_id: select_response(by_id[item_id], (NUMBERS_OPERATION,), seed=seed)
+        for item_id in numbers_stream
+    }
+
+    core_ids, _ = fill_lane(
+        core_stream, lambda i: core_sides[i] is not None, core_n
+    )
+    numbers_ids, _ = fill_lane(
+        numbers_stream, lambda i: numbers_sides[i] is not None, numbers_n
+    )
+
+    console.print(
+        f"K={len(LADDER_CRITERIA)} pool, manifest {LADDER_MANIFEST.hash}, "
+        f"lengths {LADDER_MANIFEST.length_stats}"
+    )
+    console.print(
+        f"core lane: {len(core_stream)} candidates, "
+        f"{len(core_ids)}/{core_n} filled"
+    )
+    console.print(
+        f"numbers lane: {len(numbers_stream)} candidates, "
+        f"{len(numbers_ids)}/{numbers_n} filled"
+    )
+    short = len(core_ids) < core_n or len(numbers_ids) < numbers_n
+    if short and not allow_short:
+        raise click.ClickException(
+            "lane short of quota. A partial sample costs and plans a different "
+            "experiment, so this is an error rather than a warning. Fetch a "
+            "larger frame, or pass --allow-short for development only."
+        )
+    if short:
+        console.print(
+            "[yellow]SHORT SAMPLE: development only, not the budget[/yellow]"
+        )
+
+    per_op = min(core_n // len(CORE_OPERATIONS), per_op_max)
+    queue_depth = min(per_op_max, len(core_ids) // len(CORE_OPERATIONS))
+    if queue_depth < 1:
+        raise click.ClickException(
+            f"only {len(core_ids)} core units for {len(CORE_OPERATIONS)} "
+            "operations; cannot form queues"
+        )
+    queues = operation_queues(
+        core_ids, CORE_OPERATIONS, seed=seed, per_op_max=queue_depth
+    )
+    assigned = activate(queues, per_op=min(per_op, queue_depth))
+
+    items: list = []
+    units: list = []
+    for item_id, op in assigned.items():
+        side = core_sides[item_id]
+        if side is None:
+            raise click.ClickException(
+                f"{item_id} passed screening with no side; invariant violated"
+            )
+        built = build_ladder_item(
+            by_id[item_id], op, side, LADDER_CRITERIA, seed=seed
+        )
+        if built is None:
+            # Screening already proved the operation applies to this side, so a
+            # None here means the two paths disagree. That is a bug, not a
+            # droppable item: skipping it would break equal quotas.
+            raise click.ClickException(
+                f"{item_id}/{op}/{side} screened eligible but did not build"
+            )
+        items.append(built)
+        units.append(
+            Unit(
+                base_item_id=item_id,
+                lane="core",
+                side=side,
+                eligible=True,
+                operation=op,
+                realisation_seed=built.meta["realisation_seed"],
+                companion_seed=seed,
+                status="active",
+            )
+        )
+    for item_id in numbers_ids:
+        side = numbers_sides[item_id]
+        if side is None:
+            raise click.ClickException(
+                f"{item_id} passed screening with no side; invariant violated"
+            )
+        built = build_ladder_item(
+            by_id[item_id], NUMBERS_OPERATION, side, LADDER_CRITERIA, seed=seed
+        )
+        if built is None:
+            raise click.ClickException(
+                f"{item_id}/numbers/{side} screened eligible but did not build"
+            )
+        items.append(built)
+        units.append(
+            Unit(
+                base_item_id=item_id,
+                lane="numbers",
+                side=side,
+                eligible=True,
+                operation=NUMBERS_OPERATION,
+                realisation_seed=built.meta["realisation_seed"],
+                companion_seed=seed,
+                status="active",
+            )
+        )
+
+    # A silent shortfall would destroy the equal weighting the primary estimand
+    # assumes, so the post-build check is mandatory rather than advisory.
+    built_counts = Counter(u.operation for u in units if u.lane == "core")
+    if not allow_short and len(set(built_counts.values())) > 1:
+        raise click.ClickException(
+            f"unequal core quotas after build: {dict(built_counts)}"
+        )
+
+    specs = plan_fixed_position(
+        items, LADDER_CRITERIA, model=model, levels=swept, base_seed=seed
+    )
+    est = estimate(specs)
+    projection = project_cost(est, entry["in"], entry["out"])
+    console.print(f"items: {len(items)}  levels={swept}")
+    console.print(f"calls: {len(specs)}")
+    console.print(
+        f"est input {est['est_input_tokens']:,}, "
+        f"output ceiling {est['est_output_tokens_ceiling']:,}"
+    )
+    console.print(
+        f"[bold]cost ceiling ${projection['usd_total_ceiling']:.2f}[/bold] "
+        "(actual output will be lower)"
+    )
+
+    plan = SamplingPlan(
+        dataset_id=path.stem,
+        dataset_sha256=file_sha256(path),
+        manifest_sha256=LADDER_MANIFEST.full_hash,
+        seed=seed,
+        model=model,
+        model_settings={"reasoning_effort": "low", "temperature": None},
+        levels=swept,
+        units=tuple(units),
+        call_identities=tuple(s.identity for s in specs),
+    )
+    Path(plan_out).parent.mkdir(parents=True, exist_ok=True)
+    write_plan(Path(plan_out), plan)
+    console.print(
+        f"sampling plan written to {plan_out} "
+        f"({plan.active_count} active units)"
+    )
+
+    if dry_run:
+        console.print("dry run: nothing sent")
+        return
+    raise click.ClickException(
+        "live execution consumes the frozen sampling plan and is not implemented "
+        "here; see the live-execution prerequisites in the plan"
+    )

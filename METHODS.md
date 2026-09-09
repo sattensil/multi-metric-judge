@@ -889,7 +889,7 @@ rungs using nested prefixes of one seeded companion sequence.
 | Target n | 464 prompts, 58 per operation |
 | Planning variance | `sigma_eff` 0.3288, cluster bootstrap CI [0.2651, 0.3693] |
 | Key secondary | `numbers` correctness sentinel, n = 184, smallest effect of interest 0.10 |
-| Budget | 6,480 calls, about $23.40 at list price, provisional |
+| Budget | 6,480 calls, $50.58 dry-run ceiling, about $26 expected |
 
 The operation set is narrowed to eight because joint eligibility depends on which
 operations are kept: all eleven test operations share only 8.2% of responses,
@@ -902,6 +902,11 @@ correctness-targeting operation; its eligible set is a strict subset of the core
 The estimand is deliberately narrower than "the effect of load". With the target
 fixed at position 0, K = 40 means 39 trailing items, so load remains coupled to
 recency and distance from the end of context.
+
+The budget is computed by `packing ladder --dry-run` against the 40-criterion
+manifest, hash `721b8ac2a2a7e15f`. The ceiling assumes every call fills its output
+budget; the expected figure applies the 1.954 ceiling-to-actual ratio measured on
+the K = 20 sweep. Full protocol and per-case figures in the spec.
 
 ## 9. Threats to validity
 

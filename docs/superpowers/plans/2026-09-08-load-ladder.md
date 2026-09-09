@@ -2371,10 +2371,10 @@ uv run packing fetch --limit 1600
 uv run packing ladder --dry-run --core-n 464 --numbers-n 184 --core-candidates 508
 ```
 
-Record the reported call count and cost ceiling. Update spec section 14, replacing
-the provisional `$23.40` and `$34.38` extrapolations with the manifest-based
-figures, and note the per-criterion token growth the real 40-criterion prompts
-produce. Do not pass `--allow-short` for this step.
+Record the reported call count and cost ceiling in spec section 14, alongside an
+expected figure obtained by applying the ceiling-to-actual ratio measured on the
+retained K = 20 sweep. Do not pass `--allow-short` for this step: a partial sample
+costs a different experiment.
 
 - [ ] **Step 6: Run the full suite and commit**
 

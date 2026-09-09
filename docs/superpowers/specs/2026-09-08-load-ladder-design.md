@@ -548,25 +548,28 @@ Ladder {1, 5, 10, 20, 40}, two sides per prompt, `gpt-5-mini` at list price,
 costed from the retained sweep's observed per-call token means
 (`input ~ 619 + 183K`, `output ~ 187 + 78.5K`):
 
-| Case | Core n | `numbers` n | Analyzable | Calls | Cost |
-|---|---|---|---|---|---|
-| **Initial** | 464 | 184 | 648 | 6,480 | **$23.40** |
-| **Adaptive maximum** | 768 | 184 | 952 | 9,520 | **$34.38** |
+Computed by `packing ladder --dry-run` against the real 40-criterion manifest
+(hash `721b8ac2a2a7e15f`) on a 1,600-prompt frame. The dry-run ceiling assumes
+every call fills its output budget, which it will not; the expected column applies
+the ceiling-to-actual ratio measured on the retained K = 20 sweep, where a $44.44
+ceiling produced $22.75 of actual spend, a factor of 1.954.
 
-An endpoint-only implementation of the core endpoint and the pre-registered
-`numbers` endpoint would be 2,592 calls and about $12.15 in the initial case; the
-remaining spend buys the descriptive curve. Cost is not proportional to call count,
-because K = 40 calls dominate: the endpoint-only variant is 40% of the calls but
-52% of the cost.
+| Case | Core n | `numbers` n | Analyzable | Calls | Input tokens | Ceiling | Expected |
+|---|---|---|---|---|---|---|---|
+| **Initial** | 464 | 184 | 648 | 6,480 | 26,908,312 | $50.58 | **~$26** |
+| **Adaptive maximum** | 768 | 184 | 952 | 9,520 | 39,393,570 | $74.28 | **~$38** |
+| Endpoint-only, initial | 464 | 184 | 648 | 2,592 | 13,777,364 | $27.03 | ~$14 |
+
+The endpoint-only variant covers the core endpoint and the pre-registered
+`numbers` endpoint; the remaining spend buys the descriptive curve. Cost is not
+proportional to call count, because K = 40 calls dominate: it is 40% of the calls
+but 53% of the ceiling.
 
 Fetched frame: **1,222** base prompts initially, **1,551** if the blinded variance
 review raises the core target to its 768 maximum, split into arm lanes by the
-frozen seed before eligibility is inspected (§5).
-
-**This budget is provisional.** It extrapolates token usage from a run whose
-maximum K was 20, using a 20-criterion manifest. It is recomputed against the
-actual 40-criterion manifest once the new criteria are authored, and the recomputed
-figure is the one used for the spend decision.
+frozen seed before eligibility is inspected (§5). Verified on a 1,600-prompt
+frame: a 508-candidate core lane filled 464 of 464, and an 837-candidate lane
+filled 768 of 768, both matching the binomial fill predictions.
 
 ## 15. Pre-registration text
 
