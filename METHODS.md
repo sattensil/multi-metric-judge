@@ -404,6 +404,15 @@ output, and reasoning tokens per criterion scored, with cost computed at publish
 list prices and reported both cached and uncached; cache engagement is verified from
 the provider's reported cached-token count rather than assumed.
 
+**Every cost figure in this study is derived from retained call records, which
+makes it a lower bound on spend rather than a measure of it.** A provider-level
+retry is a fully billed call whose tokens never reach the record, because only
+the successful attempt is written. Measured on the K = 40 ladder: 10,216,217
+input tokens billed against 3,042,025 recorded, a factor of 3.4, under a client
+configured with three retries. Record-derived costs are therefore correct as
+per-call economics and are not billing figures. Compare them with each other, not
+with an invoice.
+
 **The cost saving is reported by component, because prompt caching erodes one
 component and not the other.** Solving the pilot's per-call input tokens for
 structure gives `input = 585 + 206 * K`: a 585-token prefix shared across the

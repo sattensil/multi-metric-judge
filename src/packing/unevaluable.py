@@ -61,6 +61,21 @@ _UNEVALUABLE_MARKERS = (
     "read timeout",
     "generation timeout",
     "stream timeout",
+    # A bare timeout, which is what the OpenAI SDK actually raises after its own
+    # retries are exhausted ("Request timed out."). It has to land somewhere, and
+    # it must not be FATAL: a timeout is the most ordinary transient condition
+    # there is, and aborting the run on one would throw away every completed
+    # call's worth of progress for a network hiccup.
+    #
+    # It lands in class 2 rather than class 1 because the phase is unknown and
+    # generation time plausibly rises with K. Section 10 of the spec resolves
+    # that ambiguity toward retention: replacing a failure that the load may have
+    # caused would condition the analysis on surviving high load. The transient
+    # markers are checked first, so a disclosed connect-phase timeout still
+    # classifies as class 1.
+    "timed out",
+    "timeout",
+    "apitimeouterror",
 )
 
 

@@ -111,3 +111,34 @@ def test_intermediate_rungs_are_treated_as_non_reference():
 def test_unknown_rule_is_rejected():
     with pytest.raises(ValueError, match="unknown rule"):
         unevaluable_value("whatever", 40, 1)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Request timed out.",
+        "request timed out",
+        "APITimeoutError()",
+        "unexpected APITimeoutError()",
+    ],
+)
+def test_a_bare_timeout_is_unevaluable_never_fatal(message):
+    """The SDK raises a bare timeout after exhausting its own retries.
+
+    Classified FATAL it would abort the run and discard every completed call's
+    progress over a network hiccup. It is class 2 rather than class 1 because the
+    phase is undisclosed and generation time plausibly rises with K.
+    """
+    assert classify_failure(message) == UNEVALUABLE
+    assert classify_failure(message) != FATAL
+
+
+def test_a_disclosed_connect_timeout_is_still_transient():
+    # Phase-specific messages keep their phase-based class: the transient
+    # markers are checked before the generic timeout language.
+    assert classify_failure("connect timeout after 5s") == TRANSIENT
+    assert classify_failure("connection timeout") == TRANSIENT
+
+
+def test_a_read_timeout_is_still_unevaluable():
+    assert classify_failure("read timeout while streaming") == UNEVALUABLE

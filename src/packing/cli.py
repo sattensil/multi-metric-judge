@@ -8,7 +8,10 @@ money is spent.
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import threading
+import time
 from pathlib import Path
 
 import click
@@ -1421,6 +1424,20 @@ def ladder_cmd(
 @click.option("--workers", type=int, default=16, show_default=True)
 @click.option("--max-failures", type=int, default=40, show_default=True)
 @click.option(
+    "--timeout", type=float, default=90.0, show_default=True,
+    help="Per-request timeout in seconds, passed to the provider client.",
+)
+@click.option(
+    "--sdk-retries", type=int, default=1, show_default=True,
+    help="Provider-level retries. Each retry is a fully billed call whose "
+         "tokens are never recorded, so this bounds invisible spend.",
+)
+@click.option(
+    "--stall-seconds", type=float, default=300.0, show_default=True,
+    help="Abort if no call completes for this long. Written work is resumable, "
+         "so aborting a hung run loses nothing.",
+)
+@click.option(
     "--archive-to", type=click.Path(), default="artifacts", show_default=True,
     help="Where the run is copied after execution. Must not be under runs/.",
 )
@@ -1434,6 +1451,9 @@ def ladder_run_cmd(
     name: str,
     workers: int,
     max_failures: int,
+    timeout: float,
+    sdk_retries: int,
+    stall_seconds: float,
     archive_to: str,
     confirm_spend: bool,
 ) -> None:
@@ -1494,14 +1514,47 @@ def ladder_run_cmd(
         encoding="utf-8",
     )
 
-    provider = get_provider(plan.model)
-    stats = execute_concurrent(
-        specs,
-        provider,
-        run_dir / "calls.jsonl",
-        workers=workers,
-        max_failures=max_failures,
-    )
+    # Three guards, each for a distinct way the first attempt at this run went
+    # wrong. A shorter per-request timeout so a stuck read surfaces as a failure
+    # the retry and replacement path handles. Fewer provider-level retries,
+    # because each retry is a fully billed call whose tokens never reach the
+    # record: the first attempt billed 10.2M input tokens against 3.0M recorded.
+    # And a watchdog, because a hung SSL read never errors at all, so the pool
+    # never drains and nothing detects it.
+    provider = get_provider(plan.model, timeout=timeout, max_retries=sdk_retries)
+    calls_path = run_dir / "calls.jsonl"
+    stop = threading.Event()
+
+    def _watchdog() -> None:
+        last_size = -1
+        last_change = time.monotonic()
+        while not stop.wait(15.0):
+            size = calls_path.stat().st_size if calls_path.exists() else 0
+            if size != last_size:
+                last_size, last_change = size, time.monotonic()
+                continue
+            idle = time.monotonic() - last_change
+            if idle > stall_seconds:
+                console.print(
+                    f"[red]stalled: no call completed for {idle:.0f}s. Aborting. "
+                    "Rerun the same command to resume from what landed.[/red]"
+                )
+                # os._exit, not sys.exit: the worker threads are blocked in a
+                # socket read that will not return, so a clean shutdown would
+                # itself hang and keep billing.
+                os._exit(75)
+
+    threading.Thread(target=_watchdog, daemon=True).start()
+    try:
+        stats = execute_concurrent(
+            specs,
+            provider,
+            calls_path,
+            workers=workers,
+            max_failures=max_failures,
+        )
+    finally:
+        stop.set()
     console.print(
         f"attempted {stats.attempted}, written {stats.written}, "
         f"skipped {stats.skipped}, failed {stats.failed}"

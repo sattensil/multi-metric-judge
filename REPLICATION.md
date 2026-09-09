@@ -114,6 +114,17 @@ request settings, the per-section commands, and the approximate call date range.
 `dist/` itself is gitignored, so 40 MB of append-only call records never enter
 clone history; the archive is a release asset.
 
+## Cost figures are lower bounds, not billing
+
+Every dollar figure in `METHODS.md` is computed from the token counts in retained
+call records. A provider-level retry is billed in full and never written, since
+only the successful attempt reaches the record, so the true spend is higher by
+however many retries occurred. On the K = 40 ladder the gap was a factor of 3.4:
+10,216,217 input tokens billed against 3,042,025 recorded.
+
+Use the reported costs to compare conditions with each other, which is what they
+are for. Do not reconcile them against a provider invoice.
+
 ## Fresh reruns are not expected to reproduce exact numbers
 
 The published values are reproducible by **recomputing** them from the retained

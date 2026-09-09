@@ -36,7 +36,16 @@ class MockJudge:
         base_noise: float = 0.0,
         noise_per_extra_criterion: float = 0.0,
         truth_fn: TruthFn | None = None,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ) -> None:
+        """`timeout` and `max_retries` are accepted and ignored.
+
+        They are client-transport settings with no meaning for an in-process
+        stand-in, but a mock that cannot be constructed the same way as a real
+        provider stops being a usable substitute: the CLI passes them to bound
+        billed retries, and the mock is how that path is tested without spending.
+        """
         self.name = "mock"
         self.model = model
         self.price_in_per_m = price_in_per_m
