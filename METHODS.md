@@ -947,6 +947,12 @@ any call was made. Criterion manifest `721b8ac2a2a7e15f`, frame
 | Retained unevaluable outputs | 30 |
 | Cached input tokens | 19.7% |
 
+> [!NOTE]
+> The K = 30 rung is being collected, which also backfills calls lost to
+> transport failure at other rungs. The figures below are from the artefact as it
+> stood at the end of the first complete pass and are re-derived, along with the
+> `reproduce` pins, once collection settles.
+
 **Primary outcome.** The pre-registered confirmatory contrast is the
 equal-weighted average across the eight core operations of the difference in
 directional recovery between K = 1 and K = 40. One two-sided test at
