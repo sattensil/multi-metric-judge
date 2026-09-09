@@ -121,9 +121,9 @@ def build_outcomes(
                     output_tokens=rec_a.get("output_tokens", 0)
                     + rec_b.get("output_tokens", 0),
                     schema_tokens=rec_a.get("schema_tokens", 0),
-                    # Recomputed rather than trusted: the stored flag was
-                    # miscalibrated before the reasoning-token correction, and
-                    # both inputs are on the record, so old runs stay usable.
+                    # Recomputed rather than trusted: a stored flag can carry a
+                    # different near-cap definition, and both inputs are on the
+                    # record, so every run is analysable on one definition.
                     near_cap=_near_cap_of(rec_a) or _near_cap_of(rec_b),
                 )
             )

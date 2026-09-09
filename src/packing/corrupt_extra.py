@@ -310,11 +310,11 @@ def insert_filler(text: str, seed: int, severity: int) -> CorruptionResult:
     return CorruptionResult(out, True, max(1, severity), {"op": "insert_filler"})
 
 
-# Numerals are vaguified ONLY where they are genuine quantities. An earlier
-# version matched any numeral and turned "Xbox 360" into "Xbox several", which is
-# not a loss of specificity but a factual error -- it corrupted `correctness`
-# while claiming to target `specificity`, exactly the mislabelling the leakage
-# matrix exists to catch.
+# Numerals are vaguified ONLY where they are genuine quantities. Matching any
+# numeral would turn "Xbox 360" into "Xbox several", which is not a loss of
+# specificity but a factual error -- it corrupts `correctness` while claiming to
+# target `specificity`, exactly the mislabelling the leakage matrix exists to
+# catch.
 _VAGUE_PERCENT = re.compile(r"\b\d+(?:\.\d+)?\s*(?:percent|%)", re.I)
 # A quantity is a numeral followed by a lowercase word (a unit or plural noun).
 # The unit is retained and only the number is vaguified.

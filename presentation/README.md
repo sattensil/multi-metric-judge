@@ -68,15 +68,19 @@ stack has a system fallback, so the deck degrades rather than breaking offline.
 
 **The headline claim on slide 5 is `METHODS.md` §8.1**, the K = 5 human-stratum
 pilot: accuracy, tie rate, cost, tokens per criterion, and the paired contrast
-with its clustered interval. This is the best-evidenced result in the study and
-the deck now leads with it. Scale-anchoring figures (slide 9) are §3.3;
-calibration findings (slides 10-11) are §8.2. Controls, randomisation and the output-budget invariant are
-§4.1–4.3. The operation catalogue and detection classes are §3.4; the
-calibration results that reduced 20 operations to 17 measured are §8.2. The
-operation-recovery estimand and the exploratory label are `PREREGISTRATION.md`
-§1a and `METHODS.md` §10.0c. Sweep-level figures (10,880 calls, the design
-table, the cost endpoints, the recovery endpoints, Holm outcomes and the MDE)
-are `METHODS.md` §8.3, with §8.3.1 recording exactly which of them were
-regenerated (the design, reproducible any time via `packing sweep --dry-run`)
-and which are transcribed from the original analysis because `runs/` was not
-retained. Read §8.3.1 before defending a number on stage.
+with its clustered interval. It is the best-evidenced result in the study, which
+is why the deck leads with it. Scale-anchoring figures (slide 9) are §3.3;
+calibration findings (slides 10-11) are §8.2. Controls, randomisation and the
+output-budget rule are §4.1 to §4.3. The operation catalogue and detection
+classes are §3.4; the calibration results narrowing 20 operations to 17 measured
+are §8.2. The operation-recovery estimand and the exploratory label are
+`PREREGISTRATION.md` §1a and `METHODS.md` §10.0c. Sweep-level figures (10,880
+calls, the design table, the cost endpoints, the recovery endpoints, Holm
+outcomes and the MDE) are `METHODS.md` §8.3, recomputed from the retained
+per-call records; §8.3.1 carries the reproduction check. Read §8.3.1 before
+defending a number on stage.
+
+Slide 14 presents load against position as unadjudicated. `METHODS.md` §8.3.2
+adjudicates it: the surface decline attenuates 74.7% once position enters, and
+position-only is the best-fitting model by AIC. Read §8.3.2 before presenting
+slide 14, and state the adjudication rather than the open question.

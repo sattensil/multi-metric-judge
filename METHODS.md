@@ -115,9 +115,9 @@ by the model as the whole scale. The constraint is enforced in code: a criterion
 with an undescribed scale point raises at construction.
 
 The system prompt instructs that each criterion be scored independently on its own
-definition. An earlier formulation ("use the full scale; the anchors are
-definitions, not suggestions") was read as an instruction to use exactly the
-anchored values and was revised.
+definition. It does not tell the judge to "use the full scale", since a judge
+handed that instruction alongside partial anchors reads it as licence to use
+exactly the anchored values.
 
 ### 3.4 Synthetic corruption operations
 
@@ -594,9 +594,9 @@ depth rather than vocabulary.
 ### 8.3 Packing sweep: results
 
 The synthetic-stratum packing sweep was run to completion on `gpt-5-mini` and is
-analysed under the operation-recovery estimand (§10.0c). **Read §8.3.1 before
-citing any figure in this section**: the run artefacts were not retained, and the
-outcome measures below are transcribed rather than recomputed.
+analysed under the operation-recovery estimand (§10.0c). Every figure in this
+section is recomputed from the retained per-call records; see §8.3.1 for the
+artefacts and the reproduction check.
 
 **Design as executed.** Reproduced exactly by `packing sweep --dry-run` against
 `data/helpsteer2.jsonl` at 500 base items (verified 2026-09-05):
@@ -619,9 +619,9 @@ outcome measures below are transcribed rather than recomputed.
 
 These are call counts, not criterion-observations. The generating line is
 `Counter(len(sp.group) for sp in specs)` (`cli.py:815`), one increment per
-`CallSpec`, and the figures sum to exactly 10,880. Earlier revisions of this
-section labelled them criterion-observations, which understates the true spread:
-criterion-observations are `calls x group_size` (27,200 at group size 20 against
+`CallSpec`, and the figures sum to exactly 10,880. They are not
+criterion-observations, and the distinction matters because it understates the
+true spread: criterion-observations are `calls x group_size` (27,200 at group size 20 against
 2,288 at group size 4, a ratio near 12), while the *targeted* observations that
 carry the primary recovery estimand are `calls / 2` (680 at group size 20).
 
@@ -663,8 +663,8 @@ materially different and is reported separately rather than folded in here.
 
 `runs/` is gitignored (`.gitignore`: `runs/*`), so the sweep's artefacts are
 absent from the *repository* while being present in the working checkout. Absent
-from the repository and not retained are different claims; §10.7 records where
-that distinction was previously got wrong.
+from the repository and not retained are different claims, and any figure in §8.3
+should be cited against the artefacts rather than against the repository listing.
 
 | Artefact | Size | Contents |
 |---|---|---|
@@ -675,10 +675,10 @@ that distinction was previously got wrong.
 Also retained: `runs/pilot`, `runs/calib`, `runs/calib2`, `runs/ladder`,
 `runs/select-gpt-5-mini`, `runs/e2e`.
 
-Every outcome figure in §8.3 is **recomputed** rather than transcribed, by
-`packing analyze --run sweep`, and every one reproduces the frozen figure:
+Every outcome figure in §8.3 is **recomputed** by `packing analyze --run sweep`,
+and every one reproduces the figure frozen in the talk specification:
 
-| Figure | Frozen in the talk spec | Recomputed |
+| Figure | Frozen figure | Recomputed |
 |---|---|---|
 | semantic recovery, K = 1 → 20 | 0.705 → 0.720 | 0.7050 → 0.7200 |
 | surface recovery, K = 1 → 20 | 0.788 → 0.683 | 0.7875 → 0.6833 |
@@ -916,76 +916,85 @@ recency and distance from the end of context.
    data. This inflates absolute accuracy but should not bias the `group_size`
    contrast, since every condition sees the same items.
 
-## 10. Deviations from the initial protocol
+## 10. Pre-specification status
 
-Recorded for transparency; each is a substantive change, not a clarification.
+What this protocol pre-registers and what it does not. Choices that are not
+pre-specified are labelled, so nothing post-hoc reads as a priori.
 
-0c. **Synthetic estimand reframed as operation recovery.** An earlier reading
-   treated off-target movement as an automatic invalidation of the synthetic
-   gold. That bar effectively demanded criterion-isolated human constructs from
-   mechanical edits. The completed packing sweep is retained and analysed under
-   the narrower, pre-declared claim: directional recovery of known corruption
-   operations. Leakage remains reported. The sweep is labelled **exploratory**
-   with respect to any stronger criterion-isolation claim, which is not asserted.
+0c. **Synthetic estimand is operation recovery.** The synthetic stratum's estimand
+   is directional recovery of known corruption operations, which is the narrow
+   claim it can carry: off-target movement is reported rather than treated as
+   invalidating the synthetic gold, since demanding criterion-isolated human
+   constructs from mechanical edits is a bar no mechanical edit meets. Leakage is
+   reported and is not a gate. The sweep is **exploratory** with respect to any
+   stronger claim that a corruption isolates a human quality dimension, and that
+   claim is not asserted.
 
-0. **K extended from 5 to 20.** The labelled corpus supports at most five
-   criteria, but a null at K = 5 with no located breaking point is weak evidence.
+0. **K = 20 in the synthetic stratum.** The labelled corpus supports at most five
+   criteria, and a null at K = 5 with no located breaking point is weak evidence.
    Corruption ground truth is not bound by the labelling ceiling, so fifteen
-   synthetic-only criteria were added. The five anchor criteria remain in both
-   strata, which is what keeps them comparable. Judging is restricted to the
-   partition block containing the targeted criterion, which reduces cost from
-   2·⌈K/g⌉ calls per base to 2 and makes K = 20 tractable.
+   synthetic-only criteria join the five anchors. The anchor criteria appear in
+   both strata, which is what keeps them comparable. Judging is restricted to the
+   partition block containing the targeted criterion, reducing cost from
+   2·⌈K/g⌉ calls per base to 2 and making K = 20 tractable.
 
-0a. **`vaguify` corrected.** Its initial numeral rule matched any digit string and
-   rewrote "Xbox 360" as "Xbox several", a factual error introduced while
-   claiming to target specificity, i.e. precisely the mislabelling the leakage
-   matrix exists to detect. Numerals are now vaguified only as quantities
-   (numeral followed by a unit or plural noun) or percentages, with a guard
-   excluding numerals preceded by a capitalised token. Applicability fell from
-   72.0% to 47.2% as a result of the guard, which is the intended effect.
+0a. **`vaguify` numeral rule.** Numerals are vaguified only as quantities (numeral
+   followed by a unit or plural noun) or percentages, with a guard excluding
+   numerals preceded by a capitalised token. Without the guard the rule matches any
+   digit string and rewrites "Xbox 360" as "Xbox several", a factual error
+   introduced while claiming to target specificity, which is precisely the
+   mislabelling the leakage matrix exists to detect. The guard costs applicability,
+   47.2% against 72.0% ungated, which is the intended trade.
 
-0b. **Detection-class stratification introduced.** See §3.4. Roughly twelve of the
-   twenty operations are expected to be detectable without comprehension;
-   estimating a pooled effect across those and the semantic operations would
-   dilute any real effect toward the null.
+0b. **Detection-class stratification.** See §3.4. Roughly twelve of the twenty
+   operations are expected to be detectable without comprehension, and pooling
+   those with the semantic operations would dilute a real effect toward the null.
+   The stratification is **not** a primary axis: the K = 20 class contrast holds in
+   only 8 of 11 leave-one-out fits (§8.3.2), and the planned extension (§8.4) does
+   not stratify on it.
 
-1. **Scale anchoring.** Anchors were initially specified at alternate scale points.
-   The measured collapse to a three-point scale (§3.3) required anchoring every
-   point and revising the system prompt.
-2. **Near-ceiling computation.** Corrected to exclude reasoning tokens (§4.3).
-   Historical runs remain analysable because both quantities are logged.
-3. **Graded severity abandoned.** A swept severity ladder was designed and
-   discarded: severity is a nuisance parameter, and sweeping it answers a question
-   other than the one posed.
-4. **Placement arms abandoned.** Head/random/tail placement arms were designed and
-   discarded as unnecessary given `position` is already a modelled covariate; the
-   residual argument for them concerned common support and did not justify the
-   scope.
-5. **Filler and canary criteria abandoned.** Proposed to extend K beyond 5 using
-   unlabelled padding, and discarded in favour of synthetic corruption, which
-   supplies verifiable ground truth for every criterion rather than for a subset.
-6. **K held at 5.** No public corpus provides more than approximately five fixed,
-   fully-labelled criteria per item. FLASK defines twelve skills but annotates only
-   the three most relevant per instance; BiGGen Bench uses instance-specific
-   rubrics, so criteria differ across items and cannot be packed. K = 5 is the
-   labelled ceiling and covers the practical range for stacked quality dimensions.
-7. **Sweep provenance claim retracted.** §8.3.1 previously recorded the sweep's
-   run artefacts as unretained and its outcome figures as permanently
-   unrecoverable. The artefacts were in the working checkout the whole time,
-   hidden by `runs/*` in `.gitignore`. Every figure is now recomputed and
-   reproduces, and the position decomposition the section called impossible is
-   reported in §8.3.2. The lesson recorded rather than the error alone: "absent
-   from the repository" and "not retained" are different claims, and the second
-   was asserted from the first.
-8. **H2 adjudicated, as exploratory.** The rival was pre-registered and then left
-   unadjudicated on the grounds that the design could not separate position from
-   load. It can, additively, because position varies within fixed group size by
-   randomisation. What the design genuinely cannot do is separate them
-   nonparametrically, since support is triangular (§8.3.2). The earlier blanket
-   claim conflated those. The decomposition is labelled exploratory because the
-   estimator suite has never been validated against a planted *position* effect:
-   the mock judge's noise is a function of `group_size` alone
-   (`mock_provider.py:55-58`), and `position_competition` has no test coverage.
+1. **Every scale point is anchored.** A partially anchored scale becomes the scale:
+   the measured collapse to three points (§3.3) is what the full anchoring exists
+   to prevent. Any criterion with an undescribed scale point is rejected at
+   construction.
+
+2. **Near-ceiling computation excludes reasoning tokens** (§4.3). Both quantities
+   are logged, so every run is analysable under the same definition.
+
+3. **Severity is not swept.** It is a nuisance parameter, and sweeping it answers a
+   question other than the one posed. Severity is fixed per operation at its
+   calibrated value.
+
+4. **No placement arms.** Head, random and tail placement arms are not used;
+   `position` is a modelled covariate instead. The residual argument for them
+   concerns common support, which the planned extension addresses by construction
+   rather than by arm (§8.4).
+
+5. **Unlabelled padding carries no ground truth.** Synthetic corruption supplies a
+   verifiable label for the targeted criterion, which unlabelled filler cannot. The
+   planned extension (§8.4) uses companion criteria as load only, with no
+   ground-truth role, which is the one form in which padding is admissible.
+
+6. **K = 5 in the human stratum.** No public corpus provides more than about five
+   fixed, fully-labelled criteria per item. FLASK defines twelve skills but
+   annotates only the three most relevant per instance; BiGGen Bench uses
+   instance-specific rubrics, so criteria differ across items and cannot be packed.
+   K = 5 is the labelled ceiling and covers the practical range for stacked quality
+   dimensions.
+
+7. **H2 is adjudicated additively, and the adjudication is exploratory.** Position
+   varies within fixed group size by randomisation, so a linear-additive
+   decomposition is identified and is reported in §8.3.2. What the design cannot do
+   is separate load from position nonparametrically, because support is triangular.
+   The decomposition is labelled exploratory because the estimator suite has not
+   been validated against a planted *position* effect: the mock judge's noise is a
+   function of `group_size` alone (`mock_provider.py:55-58`), and
+   `position_competition` has no test coverage.
+
+8. **Artefact retention.** `runs/` is excluded by `.gitignore`, so a run directory
+   is archived outside the ignore rule before analysis begins. A figure that cannot
+   be recomputed from retained per-call records is reported as unavailable rather
+   than as null.
 
 ## References
 

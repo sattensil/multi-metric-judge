@@ -4,7 +4,7 @@ Commit this file, with the placeholders resolved, **before** the confirmatory ru
 Its purpose is to stop the analysis from being chosen after the data is seen. The
 pilot is explicitly exploratory; everything below governs the confirmatory run only.
 
-Status: **DRAFT** — thresholds are proposals until the pilot fills in the
+Status: **DRAFT**. Thresholds are proposals until the pilot fills in the
 variance estimates, at which point this file is frozen and committed.
 
 ## 1. Question
@@ -26,9 +26,8 @@ moves in the seeded direction?
 - The completed packing sweep is **exploratory** under any stronger claim that
   each corruption isolates a single human-quality dimension.
 
-Protocol deviation: an earlier draft treated rival off-target movement as
-automatic invalidation of synthetic gold. That reading is withdrawn; see
-`METHODS.md` §10.0c.
+Off-target movement is reported rather than treated as automatic invalidation of
+synthetic gold; see `METHODS.md` §10.0c for the estimand this protocol carries.
 
 ## 2. Primary outcome
 
@@ -38,8 +37,8 @@ labels do?
 
 Excluded from the human primary outcome:
 
-- **Human ties** — both responses share a human score, so no correct answer exists.
-- **Judge ties** — the judge expressed no preference. Not scored as an error
+- **Human ties**: both responses share a human score, so no correct answer exists.
+- **Judge ties**: the judge expressed no preference. Not scored as an error
   (but see co-primary).
 
 **Synthetic stratum.** Targeted corruption recovery on the operated criterion, as
@@ -98,13 +97,13 @@ Secondary estimators, always reported alongside:
 | Max tolerated failure rate before aborting a run | 25 calls | fixed |
 | Every scale point must carry an anchor | enforced in code | fixed, see §7b |
 
-## 7a. Gate 2 result — MEASURED
+## 7a. Gate 2 result: MEASURED
 
 Run on the full HelpSteer2 train split: 20,324 rows → 10,161 distinct prompts →
 **10,160 valid two-response pairs** (1 prompt dropped for not having exactly two
 responses).
 
-### Unfiltered population — pairwise outcome is not viable
+### Unfiltered population: pairwise outcome is not viable
 
 | Criterion | Human tie rate | Usable n |
 |---|---|---|
@@ -117,10 +116,10 @@ responses).
 Only **7.3%** of items have all five criteria scoreable, 27.0% have at least four,
 54.7% at least three, and **10.3% have none at all**. The mean item carries just
 **2.13 usable criteria of 5**. Three of five criteria breach the 0.50 floor, and
-per-item accuracy — the unit the paired estimator operates on — would be averaged
+per-item accuracy, the unit the paired estimator operates on, would be averaged
 over roughly two criteria. Not viable as specified.
 
-### With the ≥ 4-scoreable filter — viable, on a narrower population
+### With the ≥ 4-scoreable filter: viable, on a narrower population
 
 Filtering to items with at least 4 non-tied criteria leaves **2,741 items (27.0%)**,
 and every criterion becomes pairwise-usable:
@@ -145,7 +144,7 @@ costs is generalisability.
 
 1. **Inclusion filter: ≥ 4 scoreable criteria** (2,741 items). Legitimate because
    it depends only on the human labels, is applied before any judging, and is
-   orthogonal to group size — every surviving item is still judged at every group
+   orthogonal to group size: every surviving item is still judged at every group
    size, so it **cannot bias the group_size contrast**, which is the estimand.
 
 2. **Pairwise remains the primary outcome for all five criteria** on the filtered
@@ -178,11 +177,11 @@ ceiling for 69.2% of responses with *zero* scores at 0 (mean 3.62 on 0–4);
 complexity is the mirror image, compressed into 1–2 (mean 1.85). Both are
 low-information dimensions and will surface in the discriminability check.
 
-## 7b. Rubric anchoring — a measured fix, and a residual threat
+## 7b. Rubric anchoring: what is measured, and a residual threat
 
 **Finding.** In the first live run against `gpt-5-mini` (20 items, group_size 1,
 200 calls), criteria were anchored only at scale points 0, 2 and 4. The judge then
-used *only* 0, 2 and 4 — never 1 or 3 — on all five criteria. Judge score deltas
+used *only* 0, 2 and 4, never 1 or 3, on all five criteria. Judge score deltas
 were distributed `{0: 65, 1: 1, 2: 34}`: it was operating a 3-point scale. It tied
 on **66.3%** of human-scoreable pairs, collapsing 100 observations to **29** usable.
 
@@ -205,7 +204,7 @@ a property of the model.
 | Pairwise accuracy | 0.931 | 0.857 |
 
 The accuracy *drop* is the healthy direction: 0.931 was computed on 29 heavily
-selected observations — only the comparisons obvious enough for a 3-point scale to
+selected observations, only the comparisons obvious enough for a 3-point scale to
 separate. 0.857 on 49 observations is the more honest figure, and still clears the
 0.62 headroom floor with room to degrade.
 
@@ -280,8 +279,8 @@ Three levels, all seeded and reproducible:
 ## 12. Design balance
 
 Replicates are allocated per nominal level to equalise criterion-observations
-across group sizes. A flat allocation leaves the largest group sizes — the cells
-the study is about — with the least data (imbalance 2.33× at K=5). The default
+across group sizes. A flat allocation leaves the largest group sizes, the cells
+the study is about, with the least data (imbalance 2.33× at K=5). The default
 allocation reduces that to 1.25×.
 
 ## 13. Imperfect ground truth
