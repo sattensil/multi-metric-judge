@@ -128,3 +128,87 @@ def test_target_outside_the_pool_is_rejected():
             model="mock",
             levels=(5,),
         )
+
+
+def _order_key(spec):
+    """Stable identity for ordering assertions.
+
+    Deliberately not `spec.identity`: identity embeds the partition hash, which
+    changes when the companion permutation changes, so an identity comparison
+    would report a difference the ordering algorithm did not cause.
+    """
+    return (spec.item.item_id, spec.side, spec.nominal_n)
+
+
+def _prompt_major(items, levels):
+    """The order the planner produces before interleaving, for comparison."""
+    return [
+        (item.item_id, side, level)
+        for item in items
+        for level in levels
+        for side in ("a", "b")
+    ]
+
+
+def test_order_is_not_prompt_major():
+    items = [_item(f"i{i}", "precision") for i in range(12)]
+    specs = plan_fixed_position(
+        items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=7
+    )
+    assert [_order_key(s) for s in specs] != _prompt_major(items, LEVELS)
+
+
+def test_one_prompts_calls_are_not_contiguous():
+    items = [_item(f"i{i}", "precision") for i in range(12)]
+    specs = plan_fixed_position(
+        items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=7
+    )
+    positions = [i for i, s in enumerate(specs) if s.item.item_id == "i0"]
+    span = max(positions) - min(positions) + 1
+    assert span > len(positions), (
+        "a prompt's ten calls should be spread through the run, not adjacent"
+    )
+
+
+def test_ordering_is_deterministic_for_a_seed():
+    items = [_item(f"i{i}", "precision") for i in range(8)]
+    a = [
+        _order_key(s)
+        for s in plan_fixed_position(
+            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=42
+        )
+    ]
+    b = [
+        _order_key(s)
+        for s in plan_fixed_position(
+            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=42
+        )
+    ]
+    assert a == b
+
+
+def test_ordering_changes_with_the_seed():
+    items = [_item(f"i{i}", "precision") for i in range(8)]
+    a = [
+        _order_key(s)
+        for s in plan_fixed_position(
+            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=1
+        )
+    ]
+    b = [
+        _order_key(s)
+        for s in plan_fixed_position(
+            items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=2
+        )
+    ]
+    assert a != b
+
+
+def test_ordering_preserves_the_call_set_exactly():
+    items = [_item(f"i{i}", "precision") for i in range(6)]
+    specs = plan_fixed_position(
+        items, LADDER_CRITERIA, model="mock", levels=LEVELS, base_seed=3
+    )
+    assert sorted(_order_key(s) for s in specs) == sorted(
+        _prompt_major(items, LEVELS)
+    )

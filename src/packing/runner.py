@@ -562,4 +562,11 @@ def plan_fixed_position(
                         model=model,
                     )
                 )
+
+    # Interleave across rungs so provider drift cannot align with load. Emitted
+    # prompt-major, a prompt's K = 1 and K = 40 calls are adjacent and any
+    # mid-run change in provider behaviour lands disproportionately on whichever
+    # rungs were in flight. Resume keys on identity rather than order, so
+    # reordering is safe, and the seed keeps the run reproducible.
+    random.Random(partition_seed("ladder-order", 0, 0, base_seed)).shuffle(specs)
     return specs
