@@ -23,7 +23,7 @@ score movement is reported as construct-overlap context, not an automatic veto.
 
 Packing could hurt (attention divided across criteria, one shared reasoning
 budget) or help (the judge sees the criteria in context and can trade them off
-coherently). Published work leans pessimistic — LongJudgeBench found that adding
+coherently). Published work leans pessimistic: LongJudgeBench found that adding
 a rubric on top of a reference gave *no* improvement on long-form outputs
 (0.578 vs 0.584 for reference alone), with judges barely above a 0.5 random
 baseline overall. But that is a different question from ours: they varied whether
@@ -34,10 +34,13 @@ a rubric was present, not how many criteria shared a call.
 Take items with per-criterion human labels. For each item, draw a **uniformly
 random partition** of the K criteria into groups of size ≤ N, and issue one judge
 call per group. Sweep N from 1 to K. Because partitions are redrawn per item and
-per replicate, criterion identity, criterion pairing, and within-call position
-are all decorrelated from group size. Score each criterion against the human
-label, then model accuracy as a function of the group size that criterion was
-actually judged in.
+per replicate, criterion identity and criterion pairing are decorrelated from
+group size. Within-call **position is not**, and cannot be: position is nested
+inside the call, so `E[position | group_size = g] = (g−1)/2` exactly. Position is
+randomised *within* a group size, which is what makes it a usable covariate and
+what makes the pre-registered rival testable (METHODS.md §8.3.2). Score each
+criterion against the human label, then model accuracy as a function of the group
+size that criterion was actually judged in.
 
 Three levels of randomisation are required, and all three are implemented:
 partition membership, criterion order within a call, and candidate response
@@ -45,13 +48,13 @@ order. Dropping any one of them reintroduces a confound.
 
 ## Ground truth
 
-**HelpSteer2** (NVIDIA, CC-BY-4.0) — 10,681 prompts × 2 responses, every
+**HelpSteer2** (NVIDIA, CC-BY-4.0): 10,681 prompts × 2 responses, every
 response human-scored on helpfulness, correctness, coherence, complexity, and
 verbosity, Likert 0–4, minimum 3 annotators each. Two responses per prompt gives
 **pairwise ground truth**: did the judge order the pair the way humans did? A
 binary outcome with a clean 0.5 baseline.
 
-**SummEval** (replication) — 1,600 summaries scored on coherence, consistency,
+**SummEval** (replication): 1,600 summaries scored on coherence, consistency,
 fluency, relevance, 5-point Likert, 5 crowdworkers + 3 experts each. Different
 domain, different K, different scale. One substrate proves little: JUDGE-BENCH
 found per-dataset variance across 20 datasets large enough that judges have to be
@@ -87,7 +90,7 @@ Evals*](https://arxiv.org/html/2411.00640v1):
   × several group sizes each). Miller measured clustered SEs running over 3×
   larger than naive ones on DROP. Naive SEs are reported nowhere in this repo.
 - **Within-item paired contrasts as the primary estimator.** Every item is judged
-  at every group size, so per-item differences remove item difficulty entirely —
+  at every group size, so per-item differences remove item difficulty entirely,
   roughly a third of the variance at ρ=0.5.
 - **Replicates, not lower temperature, for variance reduction.** Miller shows
   lowering temperature can triple minimum variance and inject bias. With K
@@ -118,7 +121,7 @@ without biasing the group-size *contrast*. That has to be argued, not assumed.
 
 ## Judge model
 
-`gpt-5-mini` ($0.25 / $2.00 per 1M) — deliberately not the cheapest available.
+`gpt-5-mini` ($0.25 / $2.00 per 1M), deliberately not the cheapest available.
 
 The study needs a judge with **headroom to degrade**. If accuracy at group_size 1
 already sits near 0.5, there is no room to detect a decline and the study returns
@@ -144,7 +147,7 @@ QWK, which a preference-only judge could not provide.
 ## Anchor every scale point, or the judge invents a shorter scale
 
 Measured, not theorised. With criteria anchored only at 0, 2 and 4, `gpt-5-mini`
-used only 0, 2 and 4 — never 1 or 3 — and tied on 66% of scoreable pairs, leaving
+used only 0, 2 and 4, never 1 or 3, and tied on 66% of scoreable pairs, leaving
 29 usable observations out of 100. Anchoring all five points took the tie rate to
 43% and usable observations to 49, with all five values in play.
 
@@ -154,7 +157,7 @@ point. A partially anchored scale becomes the scale.
 ## Judge indecision is a co-primary outcome, not a nuisance
 
 When the judge scores both responses equally it has expressed no preference. Those
-observations are excluded from the accuracy outcome — but excluding them is only
+observations are excluded from the accuracy outcome, but excluding them is only
 defensible if the tie rate is itself reported, because **the tie rate may rise with
 group size.** A judge that becomes flatter and more indecisive under packing is
 degrading, and silently dropping those rows would bias the contrast in exactly the
@@ -166,7 +169,7 @@ design and reported alongside.
 A flat sweep of nominal levels 1..K is badly unbalanced in the quantity that
 matters. Ragged partitions produce small groups as a by-product of several levels,
 while the largest group size comes from exactly one. At K=5 with one replicate per
-level, criterion-observations per group size are `{1:7, 2:6, 3:3, 4:4, 5:5}` — the
+level, criterion-observations per group size are `{1:7, 2:6, 3:3, 4:4, 5:5}`, the
 least data in the cells the study is about, a 2.33x imbalance.
 
 Replicates are therefore allocated per nominal level by non-negative least squares
@@ -178,9 +181,9 @@ imbalance to 1.25x for 54% more calls. `packing design` shows the table.
 `tests/test_recovery.py` runs the whole pipeline offline against a mock judge with a
 known degradation rate, and requires both halves:
 
-- **Power** — it recovers a planted effect (correct sign, Holm-significant, and the
+- **Power**: it recovers a planted effect (correct sign, Holm-significant, and the
   LRT correctly prefers the factor form when the planted decline is non-linear).
-- **Calibration** — it produces *no* significant curve on a judge with no planted
+- **Calibration**: it produces *no* significant curve on a judge with no planted
   effect.
 
 An estimator suite that has never been tested against a known answer is not
@@ -212,6 +215,22 @@ uv run packing run --items data/synthetic.jsonl --model mock --name e2e
 uv run packing analyze --run e2e
 ```
 
+## Planned extension: the fixed-position load ladder
+
+**Planned, not run.** The completed K = 20 sweep bounds degradation rather than
+estimating it, and load cannot be separated from criterion position
+nonparametrically, because position is nested inside the call. The next run
+removes that confound by construction: the target criterion sits at position 0 in
+every condition and companion criteria pad the call to reach K in
+{1, 5, 10, 20, 40}, with lower rungs using nested prefixes of one seeded
+companion sequence.
+
+Confirmatory primary is the equal-weighted average across eight
+high-applicability operations, K = 1 against K = 40, at 464 prompts and 58 per
+operation. `numbers` runs as a separate pre-registered correctness sentinel.
+Protocol, power and pre-registration:
+`docs/superpowers/specs/2026-09-08-load-ladder-design.md`.
+
 ## Gates
 
 0. Model selection clears the headroom floor.
@@ -219,7 +238,7 @@ uv run packing analyze --run e2e
    downstream and the resulting curve would look perfectly plausible.
 2. Tie rates measured per criterion.
 3. Pilot effect size feeds Miller's power formula before the confirmatory spend.
-4. Budget control verified — if the effect vanishes, that is the result.
+4. Budget control verified: if the effect vanishes, that is the result.
 5. SummEval replication before any curve is presented.
 
 ## Sources

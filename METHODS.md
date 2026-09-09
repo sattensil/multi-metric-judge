@@ -73,8 +73,8 @@ uncontrolled mediator of a `group_size` effect.
 HelpSteer2 (NVIDIA, CC-BY-4.0). The train split contains 20,324 rows over 10,161
 distinct prompts; 10,160 prompts have exactly two responses and are retained (one
 is discarded for having an irregular response count). Each response carries a
-single integer score on five attributes — helpfulness, correctness, coherence,
-complexity, verbosity — on a 0–4 Likert scale, from at least three annotators,
+single integer score on five attributes (helpfulness, correctness, coherence,
+complexity, verbosity) on a 0-4 Likert scale, from at least three annotators,
 with two additional annotators recruited where initial disagreement exceeded two
 points.
 
@@ -105,8 +105,8 @@ preference judgement.
 
 **Every point on every scale carries an explicit anchor descriptor.** This
 requirement is empirical, not stylistic. In an initial live run, criteria were
-anchored at scale points 0, 2 and 4 only. The judge then used only 0, 2 and 4 —
-never 1 or 3 — across all five criteria; judge score differences were distributed
+anchored at scale points 0, 2 and 4 only. The judge then used only 0, 2 and 4,
+never 1 or 3, across all five criteria; judge score differences were distributed
 {0: 65, 1: 1, 2: 34}, i.e. it operated a three-point scale. It produced tied scores
 on 66.3% of scoreable pairs, reducing 100 observations to 29. Supplying anchors for
 all five points reduced the tie rate to 43.0%, raised usable observations to 49,
@@ -172,7 +172,7 @@ sentence needs a model of what the prompt asked.
 
 Only the semantic class can expose a capability limit. Pooling the two would
 dilute any semantic effect toward the null, because eleven-to-twelve criteria
-pinned at ceiling would average away decline in the remainder — yielding "no
+pinned at ceiling would average away decline in the remainder, yielding "no
 degradation observed" where the correct reading is "the task was too easy to
 degrade." The primary `group_size` estimand is therefore reported **within
 detection class**, never pooled across it.
@@ -180,7 +180,7 @@ detection class**, never pooled across it.
 The substantive hypothesis this permits is sharper than a single frontier:
 operations detectable without comprehension remain flat under packing, while
 operations requiring comprehension may not. If supported, the recommendation is
-conditional rather than global — consolidation is safe for mechanical checks and
+conditional rather than global: consolidation is safe for mechanical checks and
 hazardous for judgement.
 
 Note the careful phrasing. The hypothesis concerns **operations**, not criteria.
@@ -231,8 +231,8 @@ Three invariants are enforced by test:
    not silently produce different items.
 
    Operations declare whether they are stochastic. `drop_answer` is deterministic
-   by construction — its target is the argmax of lexical overlap with the prompt, so
-   there is nothing to randomise — and therefore produces identical variant text on
+   by construction (its target is the argmax of lexical overlap with the prompt, so
+   there is nothing to randomise) and therefore produces identical variant text on
    every replicate. Replication for that operation samples only the judge's own
    nondeterminism, so the variance reduction available from replication (§6.3) is
    correspondingly smaller. `jargon` is stochastic but degenerate where a text
@@ -272,9 +272,9 @@ not share correlated RNG streams:
    criterion's ordinal `position` recorded. This is what makes H2 testable.
 3. **Response order** in the comparison.
 
-Uniformity is established analytically — chunking a uniformly random permutation
+Uniformity is established analytically (chunking a uniformly random permutation
 into fixed-size blocks assigns equal probability to every assignment, since each
-arises from exactly ∏ᵢ (sizeᵢ!) permutations — and guarded empirically by four
+arises from exactly ∏ᵢ (sizeᵢ!) permutations) and guarded empirically by four
 χ² tests over 30,000 draws each (α = 10⁻³): pairing uniformity, ragged-block
 membership, position uniformity per criterion, and criterion × position
 independence via a contingency test. These tests do not establish uniformity, which
@@ -289,7 +289,7 @@ Ragged partitions are retained rather than avoided. K = 5 at N = 2 yields blocks
 A flat replicate allocation is unbalanced in the quantity of interest. Because
 ragged partitions generate small blocks as a by-product of several nominal levels
 while the largest block arises from exactly one, criterion-observations per group
-size at K = 5 are {1: 7, 2: 6, 3: 3, 4: 4, 5: 5} — an imbalance ratio of 2.33, with
+size at K = 5 are {1: 7, 2: 6, 3: 3, 4: 4, 5: 5}, an imbalance ratio of 2.33, with
 the least data in the conditions of primary interest. Replicates are therefore
 allocated per nominal level by non-negative least squares to equalise
 observations; the resulting allocation {1: 1, 2: 1, 3: 3, 4: 2, 5: 2} yields
@@ -340,8 +340,8 @@ responses independently), matches production usage, and avoids entangling
 Calls execute concurrently (default 8 workers) behind a write lock on an
 append-only JSONL log keyed by
 `(item_id, side, model, replicate, partition_hash, group_index)`. Resumption skips
-completed identities. Concurrency does not affect the statistics — calls are
-independent and analysis keys on identity rather than log order — and is verified
+completed identities. Concurrency does not affect the statistics (calls are
+independent and analysis keys on identity rather than log order) and is verified
 equivalent to serial execution by test.
 
 ## 5. Measures
@@ -404,7 +404,7 @@ the provider's reported cached-token count rather than assumed.
 
 Three estimators are reported together, as they fail differently.
 
-**Primary — within-item paired contrast.** Per-item accuracy is averaged across
+**Primary: within-item paired contrast.** Per-item accuracy is averaged across
 that item's criteria and replicates, then differenced across items against a
 `group_size` = 1 reference. Averaging to the item before differencing is required:
 multiple observations on one item are not independent draws, so pooling them would
@@ -412,10 +412,10 @@ be inconsistent (Miller, 2024). Differencing removes item difficulty exactly rat
 than modelling it, and supplies the variance reduction described in §6.3. Reported
 with Holm correction across the group-size ladder.
 
-**Secondary — cluster-robust logistic regression**, clustered on item:
+**Secondary: cluster-robust logistic regression**, clustered on item:
 `correct ~ C(group_size) + position`.
 
-**Secondary — crossed mixed-effects logistic regression**:
+**Secondary: crossed mixed-effects logistic regression**:
 `correct ~ group_size + position + (1|item) + (1|criterion)`, with crossed random
 intercepts because items and criteria differ in difficulty. Fitted variationally;
 posterior standard deviations are approximate and it is never the sole estimator
@@ -436,7 +436,7 @@ LRT is a shape diagnostic and does not itself account for clustering.
 
 | Technique | Used | Rationale |
 |---|---|---|
-| Within-item paired differences | Yes — primary | ≈⅓ variance reduction at ρ = 0.5 (Miller, 2024) |
+| Within-item paired differences | Yes, primary | ≈⅓ variance reduction at ρ = 0.5 (Miller, 2024) |
 | Replication, K per cell | Yes | Var(sᵢ) = σᵢ²/K; item-level means computed before standard errors |
 | Next-token probabilities | No | Requires single-token answers; incompatible with reasoning and structured output |
 | Reduced temperature | No | Can increase minimum variance and inject bias (Miller, 2024) |
@@ -493,7 +493,7 @@ of coverage reads as complete coverage.
 
 A pilot has been completed in the `human` stratum: 150 items, `group_size` ∈ {1, 5},
 `gpt-5-mini`, 3,600 planned calls, 3,599 completed, one failure (0.03%, a truncation
-at `group_size` = 1 — not correlated with the treatment).
+at `group_size` = 1, not correlated with the treatment).
 
 | | group_size = 1 | group_size = 5 |
 |---|---|---|
@@ -527,7 +527,7 @@ approximately zero across all twenty operations while tie rates reached 0.95. Ev
 low-detection operation was therefore *insensitive*, not *inaccurate*: the judge saw
 no difference rather than judging backwards. An initial rule treating detection
 below 0.60 as "near chance" would have excluded five operations that were
-directionally perfect and merely needed more severity — chance would present as
+directionally perfect and merely needed more severity: chance would present as
 ~50% wrong-direction, and these presented 0–10%. Three quantities are now reported
 separately:
 
@@ -537,7 +537,7 @@ separately:
   committing to a direction
 
 **Discrimination on few decided cases is noise.** `jargon` produced discrimination
-of 0.25, 1.00, 0.00, 0.67, 0.67 across a severity ladder — an apparent direction
+of 0.25, 1.00, 0.00, 0.67, 0.67 across a severity ladder, an apparent direction
 inversion computed on one to two decided cases per rung atop a 90% tie rate.
 Discrimination is now suppressed below `MIN_DECIDED` = 8 decided cases, and an
 operation that never reaches that threshold is classified `mute` rather than
@@ -557,30 +557,30 @@ severities 1–16 on 30 items each:
 
 Three distinct no-window diagnoses, with different remedies:
 
-- **mute** — the operation does not move the targeted score at any severity. No
+- **mute**: the operation does not move the targeted score at any severity. No
   remedy; it does not measure its criterion.
-- **capped** — directionally valid but severity is bounded by the text (a response
+- **capped**: directionally valid but severity is bounded by the text (a response
   containing three numerals cannot absorb eight numeral edits), so the tie rate
   cannot be driven down. Usable with reduced power.
-- **inverting** — sufficiently sensitive, but discrimination collapses on adequate
+- **inverting**: sufficiently sensitive, but discrimination collapses on adequate
   decided cases: heavier corruption genuinely reverses the asserted direction.
   Invalid; severity cannot repair a wrong direction.
 
-**Operations removed.** `unsupport` (support) — discrimination 0.50, four hits
+**Operations removed.** `unsupport` (support): discrimination 0.50, four hits
 against four wrong: a genuine accuracy failure, and stripping parentheticals removes
-asides about as often as evidential support. `vague` (specificity) — inverting.
-`jargon` (complexity) — mute; retained in the criterion pool as packing load but
+asides about as often as evidential support. `vague` (specificity): inverting.
+`jargon` (complexity): mute; retained in the criterion pool as packing load but
 excluded from measurement.
 
 **Resulting design.** K = 20 criteria form the packing load; **17 operations are
 measured**. Three criteria are load-only: complexity, specificity, support. Four of
 the five anchor criteria retain valid operations (coherence, correctness,
 helpfulness, verbosity); complexity is lost, so cross-stratum comparison narrows to
-four criteria — the same narrowing §9.1a anticipated on independent grounds.
+four criteria, the same narrowing §9.1a anticipated on independent grounds.
 
 **The hypothesised detection classification largely failed.** Of twenty operations,
 eight contradicted their hypothesised class; only 5 of 12 `surface` operations
-reached ceiling, and `contradict` — hypothesised semantic and difficult — reached
+reached ceiling, and `contradict`, hypothesised semantic and difficult, reached
 0.93. As pre-committed in §3.4, measurement governs and the discrepancies are
 reported rather than reconciled. Two consequences: the dilution risk that motivated
 stratification is smaller than anticipated, and the surface/semantic framing carries
@@ -613,9 +613,17 @@ outcome measures below are transcribed rather than recomputed.
 | Estimated input tokens | 26,440,075 |
 | Cost ceiling at list price | $44.44 |
 
-Criterion-observations per *actual* group size:
+*Calls* per actual group size:
 
     {1: 1360, 2: 1496, 3: 1224, 4: 572, 5: 1360, 8: 1642, 12: 824, 16: 1042, 20: 1360}
+
+These are call counts, not criterion-observations. The generating line is
+`Counter(len(sp.group) for sp in specs)` (`cli.py:815`), one increment per
+`CallSpec`, and the figures sum to exactly 10,880. Earlier revisions of this
+section labelled them criterion-observations, which understates the true spread:
+criterion-observations are `calls x group_size` (27,200 at group size 20 against
+2,288 at group size 4, a ratio near 12), while the *targeted* observations that
+carry the primary recovery estimand are `calls / 2` (680 at group size 20).
 
 **The sweep is not balanced, and unlike §4.2 it makes no attempt to be.** The
 imbalance ratio is 2.87 (1,642 observations at group size 8 against 572 at group
@@ -639,51 +647,210 @@ list price.
 
 **Neither K = 20 contrast survives Holm correction** across the group-size ladder.
 The minimum detectable effect at this sample size is approximately 0.13–0.14, and
-both observed movements — including the 10.5-point surface decline — fall inside
+both observed movements, including the 10.5-point surface decline, fall inside
 it. The sweep therefore bounds degradation rather than estimating it, and no
 packing-degradation claim is made from it.
 
 The surface decline is *hypothesised* to be positional rather than a load effect,
-per the pre-registered rival H2 (§1). **That hypothesis is not adjudicated here.**
-Separating a position effect from a load effect requires a design that varies the
-two independently; `position` is a modelled covariate, but at K = 20 a longer
-criterion list is also a list with more late positions in it, and this sweep
-cannot decompose the two. No coefficient for the positional component is reported
-because none survives in recoverable form (§8.3.1).
+per the pre-registered rival H2 (§1). That hypothesis is **adjudicated in §8.3.2**,
+which was possible only once the retained run artefacts were located (§8.3.1). The
+outcome measures in the table above are position-marginal: they come from
+`synthetic_recovery` and `paired_ladder`, neither of which enters `position`
+(`analyze.py:206-235`, `analyze.py:504-570`). The position-adjusted picture is
+materially different and is reported separately rather than folded in here.
 
-#### 8.3.1 Provenance and what is not recoverable
+#### 8.3.1 Provenance: retained artefacts and recomputed figures
 
-`runs/` is gitignored and its contents were not retained; no run log, per-call
-record, or analysis output from this sweep exists in the repository. The design
-facts in the table above were **regenerated** on 2026-09-05 by re-running
-`packing sweep --dry-run`, which reproduces the call plan deterministically from
-the committed catalogue and `SWEEP_LEVELS`, and they can be re-verified the same
-way at any time. That the planner independently yields exactly 10,880 calls is
-evidence the sweep ran at stock settings.
+`runs/` is gitignored (`.gitignore`: `runs/*`), so the sweep's artefacts are
+absent from the *repository* while being present in the working checkout. Absent
+from the repository and not retained are different claims; §10.7 records where
+that distinction was previously got wrong.
 
-The outcome measures — the four recovery rates, the two cost endpoints, the Holm
-result and the MDE — are **transcribed from the talk design specification**
-(`docs/superpowers/specs/2026-09-03-packing-talk-design.md`), which froze them
-from the original analysis. They have not been recomputed and cannot be, from this
-checkout. Specifically **not** recoverable:
+| Artefact | Size | Contents |
+|---|---|---|
+| `runs/sweep/calls.jsonl` | 22.5 MB | 10,880 records, one per call, matching the design table exactly |
+| `runs/sweep/items.jsonl` | 3.1 MB | corrupted item payloads |
+| `runs/sweep/meta.json` | 1.7 KB | levels, `per_corruption`, `operation_roles`, `detection_classes`, calibration provenance |
 
-- per-level values between K = 1 and K = 20 (only the endpoints survive);
-- clustered standard errors and confidence intervals on either contrast;
-- usable *n* per cell after ties and inapplicable operations;
-- the judge tie rate by group size, which §5.2 makes co-primary;
-- the leakage matrix and specificity rates of §5.3;
-- per-operation and per-criterion breakdowns, and the `group_size × criterion`
-  interaction of §6.4.
+Also retained: `runs/pilot`, `runs/calib`, `runs/calib2`, `runs/ladder`,
+`runs/select-gpt-5-mini`, `runs/e2e`.
 
-Re-running is possible and costed (`--dry-run` ceiling $44.44). It would not
-confirm the figures above: the design reproduces exactly from its seeds, but the
-judge is nondeterministic, so a rerun yields fresh draws. It would also not settle
-the significance question, since the same 680 items carry the same ~0.13–0.14 MDE.
-Resolving that needs more items, not a repetition.
+Every outcome figure in §8.3 is **recomputed** rather than transcribed, by
+`packing analyze --run sweep`, and every one reproduces the frozen figure:
 
-Until a run with retained artefacts exists, **every outcome figure in §8.3 should
-be treated as provisional**, and anything depending on the quantities listed above
-as unavailable rather than null.
+| Figure | Frozen in the talk spec | Recomputed |
+|---|---|---|
+| semantic recovery, K = 1 → 20 | 0.705 → 0.720 | 0.7050 → 0.7200 |
+| surface recovery, K = 1 → 20 | 0.788 → 0.683 | 0.7875 → 0.6833 |
+| MDE | ~0.13-0.14 | 0.1375 semantic, 0.1335 surface |
+| Holm outcome | nothing survives | nothing survives (min `p_holm` = 0.357) |
+
+**The MDE and its inputs.** `paired_contrast` collapses to one value per
+independence unit and keeps only units present at *both* group sizes
+(`analyze.py:530-537`), so the K = 1 against K = 20 contrast runs on far fewer
+units than there are items.
+
+| Class | n units | σ_d | MDE at n |
+|---|---|---|---|
+| semantic | 48 | 0.3400 | 0.1375 |
+| surface | 32 | 0.2697 | 0.1335 |
+| pooled | 53 | 0.3030 | 0.1166 |
+
+The interval's width comes from those 32 to 48 effective units, not from the
+2.87x call-count imbalance, which falls on the intermediate rungs and not on the
+endpoints (group sizes 1 and 20 are both nominal levels and both carry their full
+complement of items).
+
+Items required to reach a target MDE, from the recomputed σ_d:
+
+| Target MDE | semantic | surface |
+|---|---|---|
+| 0.100 | 91 | 58 |
+| 0.075 | 162 | 102 |
+| 0.050 | 364 | 229 |
+| 0.030 | 1,009 | 635 |
+
+**A re-run would not settle significance and is not the cheapest next step.** The
+judge is nondeterministic, so a repetition yields fresh draws at the same n. Three
+levers cost nothing: dropping the ragged by-product group sizes from the ladder,
+pre-registering a single K = 1 against K = 20 rung instead of paying Holm across
+eight (`analyze.py:566`), and one-sided testing of a directional hypothesis. Each
+tightens the headline contrast without another call.
+
+#### 8.3.2 Load and position, separated
+
+The pre-registered rival H2 (§1) holds that an apparent packing effect is really
+about where a criterion sits in the prompt. It is testable here because criterion
+order within each call is randomised and each criterion's ordinal position is
+recorded per observation (`partition.py:139-146`, `runner.py:199`).
+
+**What the design does and does not identify.** Position is nested inside the
+call: `0 ≤ position ≤ group_size − 1`, so `E[position | group_size = g] = (g−1)/2`
+exactly, and the observed means run 0.00 at g = 1 to 9.19 at g = 20. Three
+consequences, which need to be kept apart:
+
+1. **No nonparametric separation exists.** Support is triangular. Position 19
+   occurs only at g = 20, so "19th in the list" and "the g = 20 condition" are the
+   same cell and no contrast in these data can distinguish them.
+2. **The reference cell is degenerate.** g = 1 forces position 0
+   (`partition.py:28`, pinned at `tests/test_partition.py:77-84`), so the baseline
+   contributes nothing to the position curve.
+3. **A linear-additive decomposition *is* identified**, because position varies
+   within fixed g by randomisation. At g = 20 the 20 positions are populated with
+   roughly 34 targeted observations each. This is assumption-based rather than
+   design-based separation, and the assumptions (linearity in position, no
+   g × position interaction) are not testable off triangular support.
+
+Randomisation decorrelates position from criterion *identity*, which is what
+`tests/test_partition.py:164-193` verifies. It cannot decorrelate position from
+group size, and no claim that it does should be made anywhere in this repo.
+
+**Within-K position slopes.** Fitting `correct_num ~ position` inside each fixed
+group size holds load constant by construction. Inverse-variance pooled across
+strata:
+
+| Class | pooled within-K position slope | SE | p |
+|---|---|---|---|
+| semantic | −0.0496 | 0.0180 | 0.006 |
+| surface | −0.0269 | 0.0172 | 0.118 |
+
+**Joint models.** Entering both factors on the primary recovery outcome, by class:
+
+| Class | model | group_size | position | AIC |
+|---|---|---|---|---|
+| semantic | load only | +0.0008 (p = 0.89) | | 1932.7 |
+| semantic | position only | | −0.0220 (p = 0.093) | 1929.7 |
+| semantic | load + position | +0.0260 (p = 0.008) | −0.0508 (p = 0.014) | **1927.7** |
+| surface | load only | −0.0271 (p = 0.003) | | 2138.8 |
+| surface | position only | | −0.0468 (p = 0.0002) | **2133.9** |
+| surface | load + position | −0.0069 (p = 0.66) | −0.0395 (p = 0.067) | 2135.5 |
+
+The `group_size × position` interaction is not significant in either class
+(p = 0.755 semantic, p = 0.117 surface), so the additive form is the one reported.
+
+**Two findings, opposite in character.**
+
+*Surface operations: the decline does not survive position adjustment.* The load
+slope is −0.0271 (p = 0.003) unadjusted and −0.0069 (p = 0.66) once position
+enters, an attenuation of 74.7%, and position-only is the best-fitting model by
+AIC. Decomposing the −0.1042 movement using the within-K position slope
+attributes −0.0443 to the mean position shift of +9.19 and leaves −0.0599 as load
+residual, so estimates of position's share range from ~43% (within-K slope) to
+essentially all of it (adjusted regression). The spread reflects collinearity
+between the two factors and should be read as a range, not a point estimate.
+
+*Semantic operations: a flat total conceals two opposing effects.* Position hurts
+(−0.0496, p = 0.006, within-K) while load *helps* once position is held fixed
+(+0.0260, p = 0.008). The decomposition gives −0.1017 position-attributable
+against +0.1167 load residual, nearly cancelling to the observed +0.0150. This is
+a suppression pattern: the position penalty masks a genuine positive load effect.
+Reporting the position-marginal 0.705 → 0.720 alone hides both.
+
+**The surface decline is entirely an indecision effect.** Wrong-direction counts
+at K = 20 are zero; the tie rate rises 0.2042 → 0.3167 and discrimination rises
+0.9895 → 1.0000. The judge does not get the answer wrong more often under load, it
+declines to commit more often, which is the §5.2 failure mode and the reason tie
+rate is co-primary.
+
+**Status and limits.** These fits are **exploratory**. They are not Holm-corrected
+across the model comparisons above, and while H2 was pre-registered, this
+particular decomposition was not pre-specified. Three further limits:
+
+- The stratification variable is the *hypothesised* detection class, which
+  `meta.json` carries unchanged from §3.4, and §8.2 measured 8 of 20 operations
+  as contradicting it. Reclassifying by measured behaviour could strengthen or
+  destroy the contrast.
+- Detection class is a property of the operation, not the criterion (§9.1a), so
+  none of this attaches to criteria.
+- `position_competition` has no test coverage, and the mock judge used for
+  estimator validation cannot express a position effect at all: its noise is a
+  function of `group_size` only (`mock_provider.py:55-58`). The estimator suite is
+  validated for recovering load and for not fabricating load, **never for
+  distinguishing load from position**. That gap is the main reason these results
+  are labelled exploratory rather than confirmatory.
+
+**Does the detection-class split earn its keep?** Yes, and it was worth checking,
+since splitting costs power (pooled MDE 0.1166 against 0.1375 and 0.1335 split).
+Fitting `correct_num ~ group_size * is_surface + position` on the pooled primary
+frame gives an interaction coefficient of −0.0270 (p = 0.023) and the best AIC of
+the three specifications (4061.4, against 4064.7 for a class intercept alone and
+4071.8 for no class term). The two classes move in opposite directions, so pooling
+averages a positive and a negative effect toward a null, the dilution §10.0b
+anticipated, now measured rather than assumed.
+
+### 8.4 Planned extension: fixed-position load ladder
+
+**Planned, not run.** No outcome-generating call has been made under this design.
+Full protocol and pre-registration in
+`docs/superpowers/specs/2026-09-08-load-ladder-design.md`.
+
+The K = 20 sweep bounds degradation rather than estimating it, and §8.3.2 can
+separate load from position only additively, off triangular support. The planned
+extension removes the confound by construction instead: the target criterion is
+pinned at position 0 and companion criteria pad the call to reach K, with lower
+rungs using nested prefixes of one seeded companion sequence.
+
+| Element | Value |
+|---|---|
+| Ladder | K in {1, 5, 10, 20, 40} |
+| Confirmatory primary | equal-weighted average over eight operations, K = 1 against K = 40 |
+| Core operation set | `flatten`, `truncate`, `shuffle`, `drop_answer`, `agreement`, `depunct`, `duplicate`, `filler` |
+| Target n | 464 prompts, 58 per operation |
+| Planning variance | `sigma_eff` 0.3288, cluster bootstrap CI [0.2651, 0.3693] |
+| Key secondary | `numbers` correctness sentinel, n = 184, smallest effect of interest 0.10 |
+| Budget | 6,480 calls, about $23.40 at list price, provisional |
+
+The operation set is narrowed to eight because joint eligibility depends on which
+operations are kept: all eleven test operations share only 8.2% of responses,
+while the core eight reach 84.8% at response level and 93.5% at base-prompt
+level. That makes a single common eligible population available, so equal quotas
+are meaningful and operation contrasts have a causal reading within it. `numbers`
+is retained as a separate arm for construct coverage, since it is the only
+correctness-targeting operation; its eligible set is a strict subset of the core's.
+
+The estimand is deliberately narrower than "the effect of load". With the target
+fixed at position 0, K = 40 means 39 trailing items, so load remains coupled to
+recency and distance from the end of context.
 
 ## 9. Threats to validity
 
@@ -721,9 +888,9 @@ as unavailable rather than null.
      different things and agreement or disagreement is therefore uninformative
      about instrument validity.
 
-   The stratum and detection-class axes are not themselves confounded — they cross,
+   The stratum and detection-class axes are not themselves confounded (they cross,
    with 3 semantic and 2 surface operations among the human-labelled criteria
-   against 5 and 10 among the synthetic-only ones — so the design does permit the
+   against 5 and 10 among the synthetic-only ones) so the design does permit the
    two effects to be estimated separately. What it does not currently permit is
    separating the *operation* effect from the *construct* effect, because each
    criterion has exactly one operation.
@@ -770,7 +937,7 @@ Recorded for transparency; each is a substantive change, not a clarification.
    2·⌈K/g⌉ calls per base to 2 and makes K = 20 tractable.
 
 0a. **`vaguify` corrected.** Its initial numeral rule matched any digit string and
-   rewrote "Xbox 360" as "Xbox several" — a factual error introduced while
+   rewrote "Xbox 360" as "Xbox several", a factual error introduced while
    claiming to target specificity, i.e. precisely the mislabelling the leakage
    matrix exists to detect. Numerals are now vaguified only as quantities
    (numeral followed by a unit or plural noun) or percentages, with a guard
@@ -802,6 +969,23 @@ Recorded for transparency; each is a substantive change, not a clarification.
    the three most relevant per instance; BiGGen Bench uses instance-specific
    rubrics, so criteria differ across items and cannot be packed. K = 5 is the
    labelled ceiling and covers the practical range for stacked quality dimensions.
+7. **Sweep provenance claim retracted.** §8.3.1 previously recorded the sweep's
+   run artefacts as unretained and its outcome figures as permanently
+   unrecoverable. The artefacts were in the working checkout the whole time,
+   hidden by `runs/*` in `.gitignore`. Every figure is now recomputed and
+   reproduces, and the position decomposition the section called impossible is
+   reported in §8.3.2. The lesson recorded rather than the error alone: "absent
+   from the repository" and "not retained" are different claims, and the second
+   was asserted from the first.
+8. **H2 adjudicated, as exploratory.** The rival was pre-registered and then left
+   unadjudicated on the grounds that the design could not separate position from
+   load. It can, additively, because position varies within fixed group size by
+   randomisation. What the design genuinely cannot do is separate them
+   nonparametrically, since support is triangular (§8.3.2). The earlier blanket
+   claim conflated those. The decomposition is labelled exploratory because the
+   estimator suite has never been validated against a planted *position* effect:
+   the mock judge's noise is a function of `group_size` alone
+   (`mock_provider.py:55-58`), and `position_competition` has no test coverage.
 
 ## References
 
