@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 DECK = Path(__file__).resolve().parents[1] / "presentation"
-SLIDES = 16
+SLIDES = 19
 CHANNEL = "deck-sync-packing-v1"
 
 

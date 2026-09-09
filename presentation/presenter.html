@@ -140,7 +140,10 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "Detection rate hides two different failures",
     "Past the labelled ceiling: twenty criteria by corruption",
     "How far it pushes: the K equals 20 sweep",
-    "What this study could not have seen",
+    "Position, not count",
+    "At forty, it does break",
+    "But three operations carry it",
+    "What this still cannot say",
     "What I will actually claim",
     "If you run judges in production"
   ];
@@ -159,7 +162,10 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "the metric that lies",
     "set up the extension",
     "show it, then discount it",
-    "state the limit first",
+    "the rival wins",
+    "the new result",
+    "temper the average",
+    "state the limit",
     "the one claim",
     "send them home with it"
   ];
@@ -168,11 +174,13 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     "0:00 - 0:45", "0:45 - 2:00", "2:00 - 3:30", "3:30 - 5:00",
     "5:00 - 7:30", "7:30 - 9:30", "9:30 - 11:00", "11:00 - 13:00",
     "13:00 - 15:00", "15:00 - 16:45", "16:45 - 18:15", "18:15 - 20:00",
-    "20:00 - 22:00", "22:00 - 24:00", "24:00 - 25:15", "25:15 - 26:00"
+    "18:15 - 19:30", "19:30 - 20:45", "20:45 - 22:15", "22:15 - 23:15",
+    "23:15 - 24:15", "24:15 - 25:15", "25:15 - 26:00"
   ];
 
   // Seconds elapsed at which each slide should be *left*. Drives the pace readout.
-  const ENDS = [45, 120, 210, 300, 450, 570, 660, 780, 900, 1005, 1095, 1200, 1320, 1440, 1515, 1560];
+  const ENDS = [45, 120, 210, 300, 450, 570, 660, 780, 900, 1005, 1095,
+                1170, 1245, 1335, 1425, 1500, 1560, 1620, 1680];
 
   const NOTES = [
     {
@@ -306,34 +314,61 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     },
     {
       say: [
-        "The limit, before anyone asks. <b>The two halves of this talk are not equally powered and I am not going to pretend otherwise.</b>",
-        "At five criteria the interval is about four points wide - you can act on that. At twenty, the minimum detectable effect is thirteen to fourteen points, and the largest thing I saw was ten and a half. There is also a 2.87x observation imbalance in the sweep.",
-        "<b>Every movement in the sweep sits inside the band it could resolve. Absence of a significant effect there is not evidence of absence.</b> It is a study not powered to settle it.",
-        "The surface drop has two candidate explanations, load or position in the prompt, and this design cannot separate them. Position was pre-registered as the rival so that reading could not be built after seeing the curve.",
-        "And detection class is a property of the operation, not the criterion. Separating the two needs a second operation of the opposite class on the same criterion. Not implemented, so not claimed."
+        "Remember the rival I flagged at the start: not how many criteria share the call, but where each one sits.",
+        "<b>It won.</b> At K = 20 the surface load slope is minus 0.027, p of 0.003. Add position to the model and it goes to minus 0.007, p of 0.66. Seventy-five percent of the effect is absorbed, and position-only is the best-fitting model by AIC.",
+        "The semantic side is stranger. The flat total was hiding two opposing effects: position hurting at minus 0.05, load <i>helping</i> at plus 0.026 once position is held fixed. They nearly cancel.",
+        "<b>So the fix is different from the one you would have guessed.</b> Order your criteria. Do not unpack them."
       ],
-      dir: "<b>Get here before the audience does.</b> If a reviewer raises MDE before you do, every earlier slide gets re-read as overclaiming. Own the asymmetry - it makes slide 15 credible."
+      dir: "<b>This is the honest reversal.</b> I told you at slide 3 this rival was pre-registered, and it beat my own hypothesis. Say that plainly. It also sets up why the next slide had to pin position at zero."
     },
     {
       say: [
-        "So, precisely. <b>On human-labelled data, packing five criteria into one call changed accuracy by half a point, interval minus 3.4 to plus 4.3, while cutting cost forty-six percent.</b>",
-        "Extending to twenty criteria with synthetic corruption showed no degradation surviving correction - but was not powered to find one smaller than thirteen points.",
-        "What I am not claiming: that packing is safe at twenty. That it was not <i>shown</i> to be unsafe is a weaker statement, and it is the one the data supports.",
-        "Not that each corruption isolates a human quality dimension.",
-        "And not generalisation past this judge and this corpus. Per-dataset variance across published benchmark suites is large enough that judges need validating per use case."
+        "So I built the design the last slide demanded. Target criterion pinned at position zero in every condition, companions padding the call up to forty. Position cannot move, because it is nailed down.",
+        "<b>Minus 7.7 points of recovery, confidence interval minus 12.4 to minus 2.9, p of 0.0016.</b> One pre-registered test, so no multiplicity to argue about.",
+        "6,289 calls. The protocol was frozen and committed before the first one went out.",
+        "<b>And it survives the handling decision most able to fake it.</b> Unevaluable output scored four different ways: as a miss, as a hit at the far end, as a hit at the near end, and excluded entirely. All four keep the sign and exclude zero."
       ],
-      dir: "<b>Read the claim box verbatim.</b> This is the sentence that should survive the talk; improvising will weaken it."
+      dir: "<b>This is the new result and the slide they photograph.</b> Give it silence. Lead with the interval, not the point estimate. If someone asks whether it is really load, say no and go to slide 17."
     },
     {
       say: [
-        "If you run judges in production: <b>pack them, up to about five.</b> That range is measured, the saving is metered, the interval is tight. Past that you are extrapolating - so am I.",
-        "Anchor every scale point, or the judge quietly adopts a shorter scale and ties on two thirds of your pairs.",
-        "Report the tie rate next to accuracy. A judge that stops committing is degrading, and dropping ties hides it in the direction you want to find.",
-        "Hold your per-criterion output budget constant, or you will measure your own token ceiling and call it divided attention.",
-        "Randomise criterion order. And <b>plant an effect in your estimators before you trust them on real data.</b>",
-        "Methods, pre-registration and the corruption catalogue are in the repo. <b>Questions.</b>"
+        "One caveat I am not going to bury, because the average flatters itself.",
+        "Three operations carry it. <b>duplicate</b> falls 0.42, <b>agreement</b> and <b>depunct</b> about 0.22 each. The other five are flat or slightly positive; truncate actually improves by 0.14.",
+        "<b>Per-operation MDE is 0.12 to 0.19 at about fifty units each.</b> Five of the eight differences sit inside their own noise.",
+        "So I will tell you the average is real. <b>I will not tell you which operations break</b>, because at this sample size I do not know."
       ],
-      dir: "<b>Aim to arrive at twenty-six minutes.</b> If behind, cut slides 12 and 13 to one line each - never cut 7, 9, or 14."
+      dir: "Volunteer this before anyone squints at the per-operation table. <b>An average of eight things where three do the work is a different claim from a uniform effect</b>, and saying so is what makes the average trustworthy."
+    },
+    {
+      say: [
+        "What the design still cannot separate. The target sits first, so as K rises I am adding trailing material, moving the end of the context further away, and changing recency, all at once.",
+        "<b>The estimand is 39 trailing items behind a first-position target.</b> Not load in the abstract.",
+        "The eight operations were picked for high applicability, so a single eligible population exists. That is a real constraint on generalisation, not a technicality.",
+        "And gpt-5-mini is an alias, not a pinned snapshot. This is one realisation of the experiment.",
+        "<b>What did get removed is the ordinal-position confound.</b> That is what slide 14 said was doing the work at K = 20, and it is gone here by construction."
+      ],
+      dir: "<b>Get here before the audience does.</b> The result is strong enough that someone will over-read it as \"load degrades judges\". Correct that yourself, on your own slide, and the claim survives the Q and A."
+    },
+    {
+      say: [
+        "Precisely, then. <b>Five criteria in one call cost nothing measurable and save 46 percent.</b> Interval minus 3.4 to plus 4.3 points.",
+        "<b>Forty behind a first-position target cost 7.7 points of recovery</b>, interval minus 12.4 to minus 2.9.",
+        "<b>And at twenty, the decline I originally reported was position, not count.</b>",
+        "What I am not claiming: not that load is the mechanism at forty, because recency moves with it. Not which operations break. Not generalisation past this judge and this corpus."
+      ],
+      dir: "<b>Read the claim box verbatim.</b> Three numbers, three scopes. Improvising will blur the middle one, which is the one that took the most work to get right."
+    },
+    {
+      say: [
+        "If you run judges in production: <b>pack to about five.</b> Free, measured, and the saving is metered.",
+        "<b>Forty is too many.</b> That is measured now, not extrapolated.",
+        "<b>Order your criteria before you consider unpacking them.</b> At twenty that was the whole effect.",
+        "Anchor every scale point, or the judge adopts a shorter scale and ties on two thirds of your pairs.",
+        "Report the tie rate next to accuracy. It went from 0.30 to 0.63 across this ladder.",
+        "And plant an effect in your estimators before you trust them on real data.",
+        "<b>Everything here recomputes with one command and no API key. Questions.</b>"
+      ],
+      dir: "<b>Aim for twenty-eight minutes.</b> If behind, cut slide 16 to one line: the average is carried by three operations. Never cut 14, 15 or 17."
     }
   ];
 

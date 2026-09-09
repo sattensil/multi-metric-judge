@@ -8,7 +8,7 @@ stack behind each, so a dead network costs you the typeface and nothing else.
 
 | File | Role |
 |---|---|
-| `index.html` | Projector view, 16 full-screen slides |
+| `index.html` | Projector view, 19 full-screen slides |
 | `presenter.html` | Presenter view: say/direction notes, next slide, 30-minute timer, pace |
 
 ## Presenting
@@ -80,7 +80,9 @@ outcomes and the MDE) are `METHODS.md` §8.3, recomputed from the retained
 per-call records; §8.3.1 carries the reproduction check. Read §8.3.1 before
 defending a number on stage.
 
-Slide 14 presents load against position as unadjudicated. `METHODS.md` §8.3.2
-adjudicates it: the surface decline attenuates 74.7% once position enters, and
-position-only is the best-fitting model by AIC. Read §8.3.2 before presenting
-slide 14, and state the adjudication rather than the open question.
+Slides 14 to 17 carry the two results that came after the original narrative:
+the position adjudication at K = 20 (`METHODS.md` §8.3.2) and the K = 40 ladder
+(§8.5). Slide 14 states that position absorbs 74.7% of the K = 20 surface
+decline; slide 15 gives the K = 40 contrast; slide 16 tempers it with the
+per-operation heterogeneity; slide 17 is the estimand's limit. Read §8.3.2 and
+§8.5 before presenting any of them.

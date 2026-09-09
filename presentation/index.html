@@ -435,61 +435,141 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   </div>
 </section>
 
-<section class="slide" id="s14" data-title="What this study could not have seen">
+<section class="slide" id="s14" data-title="Position, not count">
   <div class="wrap">
-    <p class="kicker">13 &middot; the limit</p>
-    <h2>What this study could not have seen</h2>
+    <p class="kicker">13 &middot; the rival, adjudicated</p>
+    <h2>Position, not count</h2>
+    <p class="lede">The pre-registered rival won. At K = 20 the surface decline is
+      <em class="hl">where a criterion sits</em>, not how many share the call.</p>
     <div class="cols">
-      <div class="card"><p class="stat" style="color:var(--warn)">13&ndash;14<small> pts</small></p><p class="slab">MDE at K = 20</p></div>
-      <div class="card"><p class="stat cy">~4<small> pts</small></p><p class="slab">MDE at K = 5</p></div>
-      <div class="card"><p class="stat" style="color:var(--warn)">2.87&times;</p><p class="slab">observation imbalance in the sweep</p></div>
+      <div class="card rival">
+        <p class="stat" style="color:var(--warn)">&minus;0.027</p>
+        <p class="slab">load slope &middot; p = 0.003</p>
+      </div>
+      <div class="card accent">
+        <p class="stat">&minus;0.007</p>
+        <p class="slab">same slope, position added &middot; p = 0.66</p>
+      </div>
+      <div class="card">
+        <p class="stat cy">74.7%</p>
+        <p class="slab">of the effect absorbed</p>
+      </div>
     </div>
-    <ul class="points tight" style="margin-top:1.8rem">
-      <li><strong>The two halves are not equally powered.</strong></li>
-      <li>At K = 20, <strong>absence of an effect is not evidence of absence</strong>.</li>
-      <li>Load or position? <strong>This design cannot separate them.</strong></li>
-    </ul>
+    <p class="note"><b>Different fix.</b> Order your criteria, do not unpack them.</p>
   </div>
 </section>
 
-<section class="slide" id="s15" data-title="What I will actually claim">
+<section class="slide" id="s15" data-title="At forty, it does break">
   <div class="wrap">
-    <p class="kicker">14 &middot; the defensible claim</p>
+    <p class="kicker">14 &middot; the extension</p>
+    <h2>At forty, it does break</h2>
+    <div class="cols two" style="align-items:center">
+      <div>
+        <svg class="chart" viewBox="0 0 600 150" role="img"
+             aria-label="Recovery change from K equals 1 to K equals 40: point estimate minus 7.7 points, 95 percent confidence interval from minus 12.4 to minus 2.9 points, entirely below zero.">
+          <line class="grid" x1="60" y1="100" x2="540" y2="100"></line>
+          <line x1="470" y1="30" x2="470" y2="112" stroke="#5d7280" stroke-width="1" stroke-dasharray="4 4"></line>
+          <text class="axis" x="470" y="24" text-anchor="middle">no change</text>
+          <rect x="140" y="60" width="222" height="14" rx="7" fill="#f0a35e33" stroke="#f0a35e" stroke-width="1"></rect>
+          <circle cx="251" cy="67" r="7" fill="#f0a35e" stroke="#080b0f" stroke-width="2"></circle>
+          <text class="val" x="140" y="52" text-anchor="middle" fill="#f0a35e">&minus;12.4</text>
+          <text class="val" x="362" y="52" text-anchor="middle" fill="#f0a35e">&minus;2.9</text>
+          <text class="val" x="251" y="95" text-anchor="middle" fill="#f0a35e">&minus;7.7</text>
+          <text class="axis" x="60"  y="120">&minus;15 pts</text>
+          <text class="axis" x="540" y="120" text-anchor="end">+3 pts</text>
+        </svg>
+        <p class="slab" style="margin-top:.5rem">recovery change, K = 1 &rarr; K = 40 &middot; 95% CI</p>
+      </div>
+      <div>
+        <ul class="points tight">
+          <li><strong>p = 0.0016.</strong> One pre-registered test.</li>
+          <li>Target pinned at <strong>position 0</strong> at every rung, so this
+            is not position.</li>
+          <li>Holds under <strong>all four</strong> unevaluable rules.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><b>6,289 calls.</b> Design frozen before the first one.</p>
+  </div>
+</section>
+
+<section class="slide" id="s16" data-title="But three operations carry it">
+  <div class="wrap">
+    <p class="kicker">15 &middot; read the average carefully</p>
+    <h2>But three operations carry it</h2>
+    <div class="cols two">
+      <div class="card rival">
+        <h3>Fell hard</h3>
+        <p><code>duplicate</code> &minus;0.42 &middot; <code>agreement</code>
+          &minus;0.22 &middot; <code>depunct</code> &minus;0.22</p>
+      </div>
+      <div class="card accent">
+        <h3>Flat or up</h3>
+        <p><code>truncate</code> +0.14 &middot; <code>shuffle</code> +0.04 &middot;
+          <code>drop_answer</code>, <code>filler</code>, <code>flatten</code> +0.02</p>
+      </div>
+    </div>
+    <p class="note"><b>Per-operation MDE is 0.12 to 0.19 at n &asymp; 50.</b> Five of
+      the eight sit inside their own noise, so I will not tell you which break.</p>
+  </div>
+</section>
+
+<section class="slide" id="s17" data-title="What this still cannot say">
+  <div class="wrap">
+    <p class="kicker">16 &middot; the limit</p>
+    <h2>What this still cannot say</h2>
+    <ul class="points">
+      <li>The estimand is <strong>39 trailing items behind a first-position
+        target</strong>. Load, recency and distance from the end all move together.</li>
+      <li>Eight operations chosen for <strong>applicability</strong>, not
+        representativeness.</li>
+      <li>One judge, one corpus, and <code>gpt-5-mini</code> is an
+        <strong>alias, not a snapshot</strong>.</li>
+    </ul>
+    <p class="note"><b>Removed, not solved.</b> The ordinal-position confound is
+      gone. The rest of the bundle is not.</p>
+  </div>
+</section>
+
+<section class="slide" id="s18" data-title="What I will actually claim">
+  <div class="wrap">
+    <p class="kicker">17 &middot; the defensible claim</p>
     <h2>What I will actually claim</h2>
     <div class="claim">
-      <p>Packing five criteria into one judge call changed accuracy by
-        <em class="hl">+0.005 (95% CI &minus;0.034 to +0.043)</em> and cut cost
-        <em class="hl">46%</em>. At twenty, no degradation survives correction, and
-        nothing under 13 points was findable.</p>
+      <p>Five criteria in one call cost <em class="hl">nothing measurable</em> and
+        save <em class="hl">46%</em>. Forty behind a first-position target cost
+        <em class="hl">7.7 points</em> of recovery (95% CI &minus;12.4 to &minus;2.9).
+        At twenty, the decline was <em class="hl">position</em>, not count.</p>
     </div>
     <p class="slab" style="margin:1.7rem 0 .8rem">And what I am not claiming</p>
     <ul class="points tight notclaim">
-      <li>Not that packing is <strong>safe</strong> at twenty.</li>
-      <li>Not that a corruption <strong>is</strong> a human quality dimension.</li>
+      <li>Not that <strong>load</strong> is the cause at forty. Recency moves with it.</li>
+      <li>Not <strong>which</strong> operations break.</li>
       <li>Not <strong>generalisation</strong> past this judge, this corpus.</li>
     </ul>
   </div>
 </section>
 
-<section class="slide" id="s16" data-title="If you run judges in production">
+<section class="slide" id="s19" data-title="If you run judges in production">
   <div class="wrap">
-    <p class="kicker">15 &middot; takeaway</p>
+    <p class="kicker">18 &middot; takeaway</p>
     <h2>If you run judges in production</h2>
     <ul class="points">
-      <li><strong>Pack them, up to about five.</strong></li>
+      <li><strong>Pack to about five.</strong> Free, measured, metered.</li>
+      <li><strong>Forty is too many.</strong> Now measured, not extrapolated.</li>
+      <li><strong>Order your criteria</strong> before you unpack them.</li>
       <li><strong>Anchor every scale point.</strong></li>
-      <li><strong>Report the tie rate next to accuracy.</strong></li>
-      <li><strong>Hold the per-criterion output budget constant.</strong></li>
-      <li><strong>Randomise criterion order.</strong></li>
-      <li><strong>Plant an effect in your estimators</strong> before you trust them.</li>
+      <li><strong>Report the tie rate</strong> next to accuracy.</li>
+      <li><strong>Plant an effect in your estimators</strong> before trusting them.</li>
     </ul>
     <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">Questions.</b>
-      <code>METHODS.md</code>, <code>PREREGISTRATION.md</code></p>
+      Everything recomputes: <code>packing reproduce</code></p>
   </div>
 </section>
+
 </main>
 <nav id="dots" aria-label="Slide navigation"></nav>
-<div id="counter"><b id="cnum">1</b> / <span id="ctot">16</span></div>
+<div id="counter"><b id="cnum">1</b> / <span id="ctot">19</span></div>
 
 <script>
 (function () {
