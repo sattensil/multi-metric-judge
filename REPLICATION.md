@@ -62,7 +62,7 @@ check pass.
 | §3.3 scale anchoring, §8.2 calibration verdicts | `runs/calib/`, `runs/calib2/`, `runs/ladder/` | `packing calibration-report --run calib` |
 | §8.3 sweep recovery, tie rates, discrimination | `runs/sweep/` | `packing reproduce` |
 | §8.3.2 position decomposition, attenuation | `runs/sweep/` | `packing reproduce` |
-| §8.4 K = 40 design and budget | none yet | `packing ladder --dry-run` |
+| §8.5 K = 40 ladder: primary contrast, numbers sentinel | `artifacts/ladder-k40/` | `packing reproduce`, and `packing ladder-analyze --run ladder-k40` for the diagnostics |
 
 **A naming collision to be aware of.** `runs/ladder/` is the *severity* ladder
 from calibration. The K = 40 fixed-position ladder is `runs/ladder-k40/`. Two

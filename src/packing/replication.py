@@ -32,7 +32,7 @@ from typing import Any
 FLOAT_TOLERANCE = 1e-4
 
 # Keys whose value must match exactly regardless of type.
-EXACT_KEYS = frozenset({"calls", "n_items"})
+EXACT_KEYS = frozenset({"calls", "n_items", "successful_calls", "numbers_n_items"})
 
 
 class ReplicationError(RuntimeError):
@@ -136,6 +136,46 @@ def compute_claims(load_run) -> dict[str, dict[str, Any]]:
                 continue
             decomposition[f"{detection_class}_{key}"] = value
     claims["methods_8_3_2"] = decomposition
+
+    # ---- METHODS 8.5: fixed-position K = 40 ladder ------------------------
+    # Optional, because the ladder artefacts are a separate bundle from the
+    # K = 20 release. A reproducer who has only the K = 20 archive should get a
+    # pass on what they hold rather than a failure on what they do not.
+    try:
+        items, criteria, records, meta = load_run("ladder-k40")
+    except Exception:
+        return claims
+
+    from .eligibility import CORE_OPERATIONS, NUMBERS_OPERATION
+    from .ladder_criteria import LADDER_CRITERIA
+
+    frame = analyze.to_frame(analyze.build_outcomes(records, items, LADDER_CRITERIA))
+    frame = analyze.annotate_synthetic(frame, items)
+    targeted = analyze.synthetic_recovery_frame(frame[frame["is_target"]])
+    core = targeted[targeted["operation"].isin(CORE_OPERATIONS)]
+
+    primary_40 = analyze.stratified_endpoint(
+        core, 1, 40, operations=tuple(CORE_OPERATIONS)
+    )
+    ladder: dict[str, Any] = {
+        "successful_calls": sum(1 for r in records if not r.get("failure")),
+    }
+    if primary_40 is not None:
+        ladder.update(
+            {
+                "theta": float(primary_40.theta),
+                "se": float(primary_40.se),
+                "ci_low": float(primary_40.ci_low),
+                "ci_high": float(primary_40.ci_high),
+            }
+        )
+    sentinel = analyze.paired_contrast(
+        targeted[targeted["operation"] == NUMBERS_OPERATION], 1, 40
+    )
+    if sentinel is not None:
+        ladder["numbers_mean_difference"] = float(sentinel.mean_difference)
+        ladder["numbers_n_items"] = int(sentinel.n_items)
+    claims["methods_8_5"] = ladder
     return claims
 
 

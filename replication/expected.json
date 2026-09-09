@@ -35,6 +35,15 @@
       "surface_interaction_p": 0.1172,
       "surface_position_p": 0.0667,
       "surface_position_slope": -0.0395
+    },
+    "methods_8_5": {
+      "successful_calls": 6289,
+      "theta": -0.0766,
+      "se": 0.0241,
+      "ci_low": -0.124,
+      "ci_high": -0.0291,
+      "numbers_mean_difference": 0.0904,
+      "numbers_n_items": 166
     }
   },
   "note": "Frozen expected values for `packing reproduce`. Regenerate only when the analysis definition changes, never to make a failing check pass.",
