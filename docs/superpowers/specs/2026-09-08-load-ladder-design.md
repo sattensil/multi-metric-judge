@@ -4,13 +4,14 @@ Status: **planned**. No outcome-generating call has been made under this design.
 
 ## 1. Question
 
-Does packing more criteria into one judge call degrade per-criterion judging, and
-if so where does it start?
+Does appending 39 criteria after a first-position target change directional
+recovery at K = 40 relative to K = 1, and what descriptive pattern appears at
+K = 5, 10 and 20?
 
-The completed K = 20 sweep (METHODS §8.3) bounds degradation rather than
-estimating it, and its load contrast cannot be separated from criterion position
-nonparametrically (§8.3.2). This design answers the load question with position
-removed by construction rather than by covariate adjustment.
+The completed K = 20 sweep (METHODS §8.3) confounded load with target position.
+This design fixes absolute target position at zero while varying trailing load. It
+does not separately identify load, recency, and distance from the end of the
+context, and it makes no inferential claim about a threshold or a shape.
 
 ## 2. Inferential hierarchy
 
@@ -111,40 +112,68 @@ the retained sweep's cluster collapse (440 corrupted items onto 53 clusters)
 makes unavoidable.
 
 **Base-prompt eligibility**, counting a prompt eligible when either response
-qualifies, measured on the 200 local prompts:
+qualifies, measured on the 200 pilot prompts:
 
 | Arm | Base-prompt eligibility |
 |---|---|
 | core 8 | **93.5%** (187 / 200) |
 | `numbers` | **29.0%** (58 / 200) |
 
-Four-cell overlap:
+Four-cell overlap in the pilot:
 
 | Cell | Share |
 |---|---|
 | core only | 64.5% |
 | both | 29.0% |
-| `numbers` only | **0.0%** |
+| `numbers` only | 0.0% |
 | neither | 6.5% |
 
-**`numbers`-eligible is a strict subset of core-eligible.** So one shared fetched
-frame serves both arms, and its size is set by the core requirement after the
-`numbers` quota is carved out, not by summing the two screening counts. Expected
-counts give a minimum shared frame of **N = 700**; requiring at least 97.5%
-probability on each constraint under a binomial model gives **N = 715**.
+In the 200-prompt pilot, every `numbers`-eligible base prompt was also
+core-eligible. The operation predicates do not logically imply that, so it is an
+empirical observation rather than a structural guarantee. The implementation
+allows and records a `numbers`-only cell.
 
-Screening counts for reference, using base-prompt rates throughout:
+### Arm assignment must precede eligibility screening
 
-| Arm | Needed | Rate | Expected screen | Screen for 95% fill |
+`P(numbers-eligible | core-eligible)` is 31.0% in the pilot, so a representative
+core arm of 464 contains about 144 `numbers`-eligible prompts. Screening one
+shared frame and then carving the `numbers` quota out of it destroys that: a frame
+of 715 yields about 207 `numbers`-eligible and 669 core-eligible prompts, and
+removing 184 for the `numbers` arm leaves a core pool that is only **4.8%**
+`numbers`-eligible against a target of 31.0%. The primary estimate would then
+apply to "core-eligible prompts not allocated to `numbers`", not to the population
+in §3.
+
+The design therefore assigns arms **before** eligibility is inspected:
+
+> Base prompts are assigned to independent core and `numbers` sampling streams
+> using a frozen seed before eligibility is inspected. Each stream is screened only
+> for its own arm's eligibility. The streams are extended in that same
+> deterministic order if the blinded variance review raises the core target.
+
+Lane sizes, binomial, at 97.5% probability of filling each quota:
+
+| Lane | Quota | Rate | Candidates |
+|---|---|---|---|
+| core, initial | 464 | 93.5% | **508** |
+| core, adaptive maximum | 768 | 93.5% | **837** |
+| `numbers` | 184 | 29.0% | **714** |
+
+Initial total **1,222** base prompts; **1,551** if the core target rises to its
+maximum. The streams are one physical fetch, permuted and split by the frozen seed
+before any eligibility call.
+
+Screening counts, using base-prompt rates throughout:
+
+| Arm | Needed | Rate | 95% fill | 97.5% fill |
 |---|---|---|---|---|
-| core | 464 | 93.5% | 496 | 506 |
-| `numbers` | 184 | 29.0% | 634 | 559 for 145 |
+| core | 464 | 93.5% | 506 | 508 |
+| `numbers` | 184 | 29.0% | 701 | 714 |
 
-A `--limit` above 715 is a conservative fetch cap, not a mathematical
-requirement. HelpSteer2 supplies 10,681 prompts, so the frame is not binding. The
-200 prompts on disk are a pilot frame; they would cap the core arm at 187
-eligible, giving an MDE of 0.067 at the point estimate of `sigma_eff` and 0.076 at
-the upper bound of its CI.
+HelpSteer2 supplies 10,681 prompts, so the frame is not binding. The 200 prompts
+on disk are a pilot frame; they would cap the core arm at 187 eligible, giving an
+MDE of 0.068 at the point estimate of `sigma_eff` and 0.077 at the upper bound of
+its CI.
 
 ## 6. Design
 
@@ -171,11 +200,12 @@ Without nesting, K would change both the amount of load and which particular
 criteria are present, putting composition noise into the endpoint contrast.
 
 **Held constant across rungs.** The corruption realisation, the model and its
-settings, the output-budget rule (`40 + 220 * K`, METHODS §4.3), the target's
-position, and the companion sequence. Only the number of trailing companions
-varies. At K = 40 the rule yields a 9,352-token ceiling, against a predicted
-3,327 tokens of actual output, so the ceiling is not expected to bind. Truncation
-is nonetheless handled as a model-output failure under §10.
+settings, the output-budget rule (`40 + 220 * K` content plus a fixed 512-token
+reasoning headroom, METHODS §4.3), the target's position, and the companion
+sequence. Only the number of trailing companions varies. At K = 40 the content
+budget is 8,840 tokens and the request ceiling 9,352, against a predicted 3,327
+tokens of actual output, so the ceiling is not expected to bind. Truncation is
+nonetheless handled as a model-output failure under §10.
 
 **Criterion pool.** K = 40 requires 20 new synthetic-only criteria beyond the
 current 20. Every scale point of every new criterion must be anchored; partial
@@ -210,14 +240,20 @@ variance, not the variance pooled across all differences:
 
     sigma_eff = sqrt( mean_o( Var(d | O = o) ) )
 
-Estimated on the retained sweep restricted to the eight core operations
-(24 clusters, 165 prompt-operation pairs):
+Estimated on retained-sweep observations belonging to prompts independently
+verified as eligible for all eight core operations, which is the population the
+estimand names (23 clusters):
 
 | Quantity | Value |
 |---|---|
-| `sigma_eff` | **0.3288** |
-| cluster bootstrap 95% CI | [0.2651, 0.3693] |
-| pooled SD across all 11 operations | 0.4238 |
+| `sigma_eff` | **0.3345** |
+| cluster bootstrap 95% CI | [0.2709, 0.3763] |
+| pooled SD across all 11 operations, all prompts | 0.4238 |
+
+Restricting to `A_core = 1` rather than merely to the eight operations moves the
+estimate from 0.3288 to 0.3345 and widens the interval slightly. The restricted
+figure is the one used, because `Var(d | O = o, A_core = 1)` is the quantity the
+primary analysis operates on.
 
 Within-operation SDs of `d`: `agreement` 0.154, `depunct` 0.222, `drop_answer`
 0.276, `filler` 0.255, `shuffle` 0.255, `truncate` 0.375, `duplicate` 0.417,
@@ -232,29 +268,28 @@ Required analyzable prompts at a 0.05 effect:
 
 | `sigma_eff` | n | Equal-quota rounding |
 |---|---|---|
-| 0.2651 (CI low) | 223 | 224 |
-| 0.3288 (point) | 342 | 344 |
-| 0.3693 (CI high) | 431 | **432** |
+| 0.2709 (CI low) | 233 | 240 |
+| 0.3345 (point) | 354 | 360 |
+| 0.3763 (CI high) | 447 | **448** |
 
 **Chosen target: 464 analyzable prompts, 58 per operation.** The upper bootstrap
-bound implies a minimum equal-quota target of 432 prompts under the planning
-approximation. 464 is a pre-specified 7.4% buffer above that minimum, yielding
-about 82.9% power at that variance bound.
+bound implies a minimum equal-quota target of 448 prompts under the planning
+approximation. 464 is a pre-specified 3.6% buffer above that minimum.
 
-Power at a true effect of 0.05, evaluated at the upper bound of the variance CI:
+Power at a true effect of 0.05:
 
-| n | Power at `sigma_eff` = 0.3693 |
-|---|---|
-| 344 | 70.7% |
-| 400 | 77.1% |
-| 432 | 80.2% |
-| **464** | **82.9%** |
-| 576 | 90.0% |
+| n | At `sigma_eff` = 0.3345 (point) | At 0.3763 (CI high) |
+|---|---|---|
+| 360 | 80.7% | 71.0% |
+| 448 | 88.4% | 80.1% |
+| **464** | **89.5%** | **81.5%** |
+| 576 | 94.8% | 88.9% |
+| 768 (adaptive max) | 98.5% | 95.7% |
 
 **Two documented assumptions.** `sigma_eff` is measured on the K = 1 against
 K = 20 contrast, while the planned endpoint is K = 40; `SD(Y_40 - Y_1)` is not
-directly estimated and could be larger or smaller. And it rests on 20 to 23
-clusters per operation.
+directly estimated and could be larger or smaller. And it rests on 23 eligible
+clusters.
 
 ### Effect-blinded variance review
 
@@ -304,6 +339,7 @@ Sizing, with the same upper-bound discipline applied to the core:
 | n at the point estimate | 145 |
 | n at the CI upper bound | **184** (80.1% power at that bound) |
 | power of n = 145 at the CI upper bound | 70.1% |
+| candidates to fill 184 at 29.0% | 701 for 95%, **714** for 97.5% |
 
 **Target: 184 prompts.** Sizing this arm from a point estimate while the core is
 sized from an upper bound would be inconsistent; 145 would deliver only 70.1%
@@ -321,25 +357,58 @@ that correctness degradation of practical importance is absent. If that is the
 conclusion wanted, it requires a pre-specified non-inferiority test with margin
 -0.10, which this design does not currently specify.
 
-## 10. Failure handling
+## 10. Failure handling and the unevaluable-output rule
 
 Two distinct categories, because conflating them biases the result. Model-output
 failures may become **more** common at K = 40, which makes them part of the load
-effect; dropping and replacing them conditions the analysis on surviving high
-load and biases degradation downward.
+effect; dropping and replacing them conditions the analysis on surviving high load
+and biases degradation downward.
 
-> **Infrastructure failure.** Transport error, provider outage, or any failure
-> occurring before a valid model response. Retry a fixed number of times; after
-> persistent failure, replace the prompt from the same sampling frame.
+> **Infrastructure failure.** Transient, exogenous transport or service failures:
+> network errors, rate limits, timeouts, and provider 5xx responses. Three
+> transport-level retries (`max_retries=3`, `openai_provider.py:56`), no
+> application-level retry. On persistent failure the prompt is replaced from the
+> next candidate in its own lane, in frozen order.
 >
-> **Model-output failure.** Truncated, malformed, incomplete, refusing, or
-> otherwise unevaluable output returned by the model. **Do not replace.** Retain
-> under a pre-specified scoring rule, report frequency by K, and provide a
-> sensitivity analysis where directional recovery cannot be uniquely assigned.
+> **Model or system output failure.** Deterministic request rejection,
+> context-limit errors, content filtering, refusals, malformed output, and
+> truncation. **Not replaced**, because any of these may be caused by K = 40
+> itself, and replacing them would erase part of the treatment effect.
 
-Complete-case analysis is reported as a sensitivity check, never as the primary
-handling rule. A prompt losing a rung to infrastructure failure is dropped whole
-rather than analysed on a partial ladder.
+The distinction is drawn on cause, not on convenience: a failure is
+infrastructural only if it is transient and independent of the request's content
+and length.
+
+### Scoring rule for unevaluable output
+
+`Y` is directional recovery, so it needs a defined value in exactly the cases
+heavy load is most likely to produce. Pre-specified:
+
+| Case | Primary rule |
+|---|---|
+| Target score absent | **Miss** |
+| Only one side of the pair valid | **Miss**, the directional comparison cannot be formed |
+| Output malformed, target score unambiguously extractable | Use the extracted score; log a parse-repair event |
+| Target score readable more than one way | **Miss** |
+
+The rationale for scoring absence as a miss: recovery requires the judge to move
+the targeted score in the seeded direction, and a judgment that cannot be read is
+not a demonstrated recovery. Because unevaluable output may itself rise with K,
+this keeps that effect inside the estimate rather than outside it.
+
+The primary rule is the worst case for the treatment by construction, so two
+pre-specified sensitivity analyses bracket it:
+
+1. **Complete case.** Unevaluable observations dropped. Reported as a sensitivity
+   check only, never as the primary handling rule.
+2. **Best case.** Every unevaluable observation scored as a hit.
+
+If the primary result and both brackets do not agree in sign, the finding is
+reported as sensitive to the rule rather than as a load effect.
+
+**Unevaluable frequency by K is itself a reported diagnostic outcome**, since a
+judge that stops returning usable output under load is degrading in a way
+recovery rate alone will not show.
 
 ## 11. Other secondary and exploratory analyses
 
@@ -403,7 +472,7 @@ The criteria commit carries static checks for:
 | Fixed-position nested planner: target at position 0, seeded companion prefixes | `runner.py`, `plan_targeted_blocks` |
 | One frozen realisation per prompt, reused across rungs | `dataset.py` |
 | Equal-weight estimator, Satterthwaite SE, variance-review rule, failure handling | `analyze.py` |
-| Wider base frame | `packing fetch --limit 800` |
+| Wider base frame, lane split by frozen seed | `packing fetch --limit 1600` |
 
 Commit sequence:
 
@@ -418,19 +487,20 @@ Ladder {1, 5, 10, 20, 40}, two sides per prompt, `gpt-5-mini` at list price,
 costed from the retained sweep's observed per-call token means
 (`input ~ 619 + 183K`, `output ~ 187 + 78.5K`):
 
-| Arm | n | Calls | Cost |
-|---|---|---|---|
-| Core, 8 operations at 58 each | 464 | 4,640 | $16.76 |
-| `numbers` sentinel | 184 | 1,840 | $6.65 |
-| **Total** | | **6,480** | **$23.40** |
+| Case | Core n | `numbers` n | Analyzable | Calls | Cost |
+|---|---|---|---|---|---|
+| **Initial** | 464 | 184 | 648 | 6,480 | **$23.40** |
+| **Adaptive maximum** | 768 | 184 | 952 | 9,520 | **$34.38** |
 
 An endpoint-only implementation of the core endpoint and the pre-registered
-`numbers` endpoint would be 2,592 calls and about $12.15; the remaining spend buys
-the descriptive curve. Cost is not proportional to call count, because K = 40
-calls dominate: the endpoint-only variant is 40% of the calls but 52% of the cost.
+`numbers` endpoint would be 2,592 calls and about $12.15 in the initial case; the
+remaining spend buys the descriptive curve. Cost is not proportional to call count,
+because K = 40 calls dominate: the endpoint-only variant is 40% of the calls but
+52% of the cost.
 
-Shared fetched frame: **715 base prompts**, which fills both arms at 97.5%
-probability on each constraint.
+Fetched frame: **1,222** base prompts initially, **1,551** if the blinded variance
+review raises the core target to its 768 maximum, split into arm lanes by the
+frozen seed before eligibility is inspected (§5).
 
 **This budget is provisional.** It extrapolates token usage from a run whose
 maximum K was 20, using a 20-criterion manifest. It is recomputed against the
@@ -468,9 +538,11 @@ figure is the one used for the spend decision.
 > degrees of freedom. Two-sided, alpha = 0.05. One confirmatory hypothesis, no
 > multiplicity adjustment.
 >
-> **Sample size.** Target 464 analyzable prompts, 58 per operation, a 7.4% buffer
-> above the 432 implied by the upper bound of the planning-variance CI, giving
-> about 82.9% power for a 0.05 effect at that bound. One effect-blinded variance
+> **Sample size.** Target 464 analyzable prompts, 58 per operation, a 3.6% buffer
+> above the 448 implied by the upper bound of the planning-variance CI
+> (`sigma_eff` 0.3345, CI [0.2709, 0.3763], estimated on prompts verified eligible
+> for all eight core operations), giving 81.5% power for a 0.05 effect at that
+> bound. One effect-blinded variance
 > review after 160 complete prompts may raise N to a maximum of 768 but may not
 > lower it.
 >
@@ -483,9 +555,22 @@ figure is the one used for the spend decision.
 > practically important correctness degradation; that would require a
 > non-inferiority test with margin -0.10, which is not specified here.
 >
-> **Failure handling.** Infrastructure failures are retried and replaced.
-> Model-output failures are retained, scored under a pre-specified rule, and
-> reported by K, because their frequency may itself vary with load.
+> **Sampling.** Base prompts are assigned to independent core and `numbers`
+> streams by a frozen seed **before** eligibility is inspected, and each stream is
+> screened only for its own arm. Assigning arms after screening a shared frame
+> would leave the core pool 4.8% `numbers`-eligible against a population value of
+> 31.0%, so the primary estimate would no longer describe the population in the
+> estimand. Lanes are 508 core and 714 `numbers` initially, extended in frozen
+> order to 837 core if the variance review raises the target.
+>
+> **Failure handling.** Infrastructure failures, meaning transient exogenous
+> transport or service errors, receive three transport retries and are then
+> replaced from the same lane. Deterministic request rejection, context-limit
+> errors, content filtering, refusals, malformed output and truncation are
+> model-output failures: they are **not** replaced, because K = 40 may cause them.
+> An observation whose targeted score cannot be uniquely determined is scored a
+> miss; complete-case and best-case analyses are pre-specified as brackets, and
+> unevaluable frequency by K is reported as a diagnostic outcome.
 >
 > **Secondary analyses.** Tie rate by K is diagnostic. Intermediate K levels,
 > operation-specific effects, `rename` and `scramble_list` are exploratory;
