@@ -743,3 +743,118 @@ def fit_mixed(frame: pd.DataFrame) -> Any:
             "correct_num ~ group_size + position", vc, res
         )
         return model.fit_vb(verbose=False)
+
+
+# ------------------------------------------- stratified endpoint estimator ---
+
+
+@dataclass(frozen=True)
+class StratifiedResult:
+    """Equal-weight average across operation-specific endpoint differences."""
+
+    theta: float
+    se: float
+    df: float
+    t_stat: float
+    p_value: float
+    ci_low: float
+    ci_high: float
+    per_operation: dict[str, tuple[float, int]]
+
+    def as_row(self) -> dict[str, Any]:
+        return {
+            "theta": round(self.theta, 4),
+            "se": round(self.se, 4),
+            "df": round(self.df, 1),
+            "t": round(self.t_stat, 3),
+            "p": self.p_value,
+            "ci_low": round(self.ci_low, 4),
+            "ci_high": round(self.ci_high, 4),
+        }
+
+
+def stratified_endpoint(
+    frame: pd.DataFrame,
+    reference_size: int,
+    comparison_size: int,
+    *,
+    operations: tuple[str, ...],
+    min_units: int = 3,
+) -> StratifiedResult | None:
+    """Equal weight per operation, not per observation.
+
+    Equal quotas define the weights, so the estimator must apply them. An
+    unqualified mean over all per-unit differences would re-weight operations by
+    however many units each happened to contribute, which is exactly what quotas
+    exist to prevent.
+
+        theta = (1/O) * sum_o mean(d_o)
+        Var   = (1/O^2) * sum_o s_o^2 / n_o
+        df    = Welch-Satterthwaite over the same strata
+
+    Returns None rather than a partial answer when any operation is missing or
+    thin: the estimand is an average over all of them, so a subset is a different
+    quantity and should not be reported under the same name.
+    """
+    res = resolved(frame)
+    cluster = independence_unit(res)
+    if "operation" not in res.columns:
+        raise ValueError("frame has no `operation` column")
+
+    per_unit = (
+        res[res["group_size"].isin([reference_size, comparison_size])]
+        .groupby([cluster, "operation", "group_size"])["correct_num"]
+        .mean()
+        .unstack("group_size")
+    )
+    if reference_size not in per_unit or comparison_size not in per_unit:
+        return None
+    paired = per_unit[[reference_size, comparison_size]].dropna()
+    if paired.empty:
+        return None
+    diffs = (paired[comparison_size] - paired[reference_size]).rename("d")
+
+    means: list[float] = []
+    variance_terms: list[float] = []
+    df_terms: list[float] = []
+    per_operation: dict[str, tuple[float, int]] = {}
+    for operation in operations:
+        try:
+            values = diffs.xs(operation, level="operation").to_numpy()
+        except KeyError:
+            return None
+        n = len(values)
+        if n < min_units:
+            return None
+        mean = float(values.mean())
+        per_operation[operation] = (round(mean, 4), n)
+        means.append(mean)
+        term = float(values.var(ddof=1)) / n if n > 1 else 0.0
+        variance_terms.append(term)
+        df_terms.append(term**2 / (n - 1) if n > 1 else 0.0)
+
+    count = len(operations)
+    theta = float(np.mean(means))
+    variance = sum(variance_terms) / count**2
+    se = float(np.sqrt(variance))
+    if not se or np.isnan(se):
+        return None
+    denominator = sum(df_terms)
+    df = (
+        float(sum(variance_terms) ** 2 / denominator)
+        if denominator > 0
+        else float(count - 1)
+    )
+    t_stat = theta / se
+    p_value = float(2 * stats.t.sf(abs(t_stat), df=df))
+    crit = float(stats.t.ppf(0.975, df=df))
+    return StratifiedResult(
+        theta=theta,
+        se=se,
+        df=df,
+        t_stat=t_stat,
+        p_value=p_value,
+        ci_low=theta - crit * se,
+        ci_high=theta + crit * se,
+        per_operation=per_operation,
+    )
