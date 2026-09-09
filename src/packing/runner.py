@@ -34,6 +34,7 @@ from .partition import (
 from .prompt import build, token_estimate
 from .providers.base import JudgeProvider, ProviderError
 from .schema import schema_token_estimate
+from .unevaluable import FATAL, TRANSIENT, FatalProtocolError, classify_failure
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,46 @@ def project_cost(
 # ------------------------------------------------------------------- resume ---
 
 
+def _build_failure_record(spec: CallSpec, message: str) -> dict[str, Any]:
+    """A failed call as a row, or an abort if the harness is at fault.
+
+    Class-2 failures may become more common at high K, which makes them part of
+    the load effect. Recorded only in a log they would be a complete-case
+    exclusion by default, which the protocol forbids as primary handling.
+
+    A fatal failure raises instead. Scoring an unrecognised failure as a miss
+    would turn a configuration or protocol bug into evidence that load degraded
+    judging, and no sample size fixes that.
+    """
+    failure_class = classify_failure(message)
+    if failure_class == FATAL:
+        raise FatalProtocolError(
+            f"{spec.identity}: {message}. This is a protocol or configuration "
+            "error rather than a judge behaviour, so the run stops instead of "
+            "scoring it."
+        )
+    return {
+        "identity": spec.identity,
+        "item_id": spec.item.item_id,
+        "side": spec.side,
+        "model": spec.model,
+        "nominal_n": spec.nominal_n,
+        "replicate": spec.replicate,
+        "partition_hash": spec.partition.hash,
+        "group_index": spec.group_index,
+        "group_size": len(spec.group),
+        "group": [c.key for c in spec.group],
+        "positions": {c.key: i for i, c in enumerate(spec.group)},
+        "failure": message,
+        "failure_class": failure_class,
+        "scores": {},
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cached_input_tokens": 0,
+    }
+
+
 def completed_identities(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -164,6 +205,11 @@ def completed_identities(path: Path) -> set[str]:
             except json.JSONDecodeError:
                 # A partial final line from a hard kill. Skip it; the call will
                 # simply be redone.
+                continue
+            # A transient failure is not complete: resume must retry it. Only a
+            # success or a terminal class-2 record closes an identity, or a
+            # network blip would silently become a permanent hole in the design.
+            if record.get("failure_class") == TRANSIENT:
                 continue
             identity = record.get("identity")
             if identity:
@@ -267,6 +313,14 @@ def execute_concurrent(
                 try:
                     outcome = future.result()
                 except ProviderError as exc:
+                    # Persisted, not just logged: a class-2 failure is part of
+                    # the treatment and has to reach the scoring rule.
+                    failure_record = _build_failure_record(spec, str(exc))
+                    with write_lock:
+                        fh.write(
+                            json.dumps(failure_record, separators=(",", ":")) + "\n"
+                        )
+                        fh.flush()
                     with state_lock:
                         stats.failed += 1
                         stats.errors.append(f"{spec.identity}: {exc}")
@@ -278,11 +332,16 @@ def execute_concurrent(
                         # their results are not paid for and thrown away.
                         abort.set()
                     continue
+                except FatalProtocolError:
+                    # The harness or its configuration is wrong. Stop rather than
+                    # let the error become a scored observation.
+                    abort.set()
+                    raise
                 except Exception as exc:  # noqa: BLE001 - unexpected, still must not lose the run
-                    with state_lock:
-                        stats.failed += 1
-                        stats.errors.append(f"{spec.identity}: unexpected {exc!r}")
-                    continue
+                    # Unrecognised failures classify as fatal, so this raises and
+                    # aborts rather than recording a quiet miss.
+                    _build_failure_record(spec, f"unexpected {exc!r}")
+                    raise  # pragma: no cover - _build_failure_record always raises here
 
                 if outcome is None:
                     continue

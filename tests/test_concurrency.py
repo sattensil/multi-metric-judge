@@ -17,6 +17,7 @@ import pytest
 from packing.budget import Budget
 from packing.criteria import get_criteria
 from packing.providers.base import JudgeResult, ProviderError
+from packing.unevaluable import FatalProtocolError
 from packing.runner import (
     completed_identities,
     execute,
@@ -40,11 +41,21 @@ class SlowProvider:
     price_in_per_m = 0.0
     price_out_per_m = 0.0
 
-    def __init__(self, truth_fn, delay: float = 0.002, fail_every: int | None = None):
+    def __init__(
+        self,
+        truth_fn,
+        delay: float = 0.002,
+        fail_every: int | None = None,
+        failure_message: str = "truncated at max_completion_tokens=772",
+    ):
         self.model = "slow"
         self.truth_fn = truth_fn
         self.delay = delay
         self.fail_every = fail_every
+        # The message decides the failure class, so it is realistic rather than
+        # generic: an unrecognised message classifies as fatal and aborts the run
+        # by design, which is a different behaviour from a judge failing.
+        self.failure_message = failure_message
         self.calls = 0
         self._lock = threading.Lock()
 
@@ -56,7 +67,7 @@ class SlowProvider:
             n = self.calls
         time.sleep(self.delay)
         if self.fail_every and n % self.fail_every == 0:
-            raise ProviderError(f"synthetic failure #{n}")
+            raise ProviderError(f"{self.failure_message} (call {n})")
         return JudgeResult(
             evaluations={
                 c.key: {
@@ -134,7 +145,8 @@ def test_concurrent_resume_is_idempotent(tmp_path: Path) -> None:
     assert len(completed_identities(path)) == len(specs)
 
 
-def test_failures_are_counted_not_fatal(tmp_path: Path) -> None:
+def test_treatment_failures_are_counted_not_fatal(tmp_path: Path) -> None:
+    """A judge that truncates is data, not a crash: the run continues."""
     items = _items(10, seed=24)
     path = tmp_path / "calls.jsonl"
     stats = execute_concurrent(
@@ -165,6 +177,54 @@ def test_max_failures_aborts_and_preserves_work(tmp_path: Path) -> None:
     # Whatever succeeded before the abort is intact and resumable.
     for record in read_records(path):
         assert "identity" in record
+
+
+def test_an_unrecognised_failure_aborts_rather_than_being_scored(
+    tmp_path: Path,
+) -> None:
+    """Unknown failures are fatal by design.
+
+    A two-class scheme would score a configuration or SDK bug as a judge miss,
+    which is the one error mode no sample size fixes. So an unrecognised message
+    stops the run instead of becoming an observation.
+    """
+    items = _items(10, seed=26)
+    path = tmp_path / "calls.jsonl"
+    with pytest.raises(FatalProtocolError, match="unsupported parameter"):
+        execute_concurrent(
+            _specs(items),
+            SlowProvider(
+                _truth_fn(items),
+                fail_every=7,
+                failure_message="invalid_request_error: unsupported parameter",
+            ),
+            path,
+            workers=4,
+            max_failures=1000,
+        )
+
+
+def test_a_transient_failure_is_not_a_completed_identity(tmp_path: Path) -> None:
+    """Resume must retry a network blip rather than treat it as done."""
+    items = _items(10, seed=27)
+    path = tmp_path / "calls.jsonl"
+    stats = execute_concurrent(
+        _specs(items),
+        SlowProvider(
+            _truth_fn(items),
+            fail_every=5,
+            failure_message="Connection reset by peer",
+        ),
+        path,
+        workers=4,
+        max_failures=1000,
+    )
+    assert stats.failed > 0
+    done = completed_identities(path)
+    failures = [r for r in read_records(path) if r.get("failure")]
+    assert failures, "the failure rows are persisted"
+    for record in failures:
+        assert record["identity"] not in done
 
 
 def test_workers_one_is_valid(tmp_path: Path) -> None:

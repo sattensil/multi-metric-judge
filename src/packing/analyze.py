@@ -32,6 +32,7 @@ from .criteria import Criterion
 from .dataset import PairedItem
 from .budget import near_cap
 from .score import Outcome, make_outcome, quadratic_weighted_kappa
+from .unevaluable import TRANSIENT, unevaluable_value
 
 SYNTHETIC_POSITIVE_CONTROLS = frozenset(
     {"contradict", "hedge", "lowercase", "offtopic", "slang", "typos"}
@@ -66,16 +67,67 @@ def _near_cap_of(record: dict[str, Any]) -> bool:
     )
 
 
+def _unevaluable_outcome(
+    *,
+    item_id: str,
+    criterion: str,
+    group_size: int,
+    position: int,
+    nominal_n: int,
+    replicate: int,
+    model: str,
+    partition_hash: str,
+    value: float,
+) -> Outcome:
+    """One outcome for a paired unit the judge did not return readable output for.
+
+    Marked resolved: the composite outcome is defined for this unit, and leaving
+    it unresolved would have `resolved()` drop exactly the observations the
+    definition exists to retain.
+    """
+    return Outcome(
+        item_id=item_id,
+        criterion=criterion,
+        group_size=group_size,
+        position=position,
+        nominal_n=nominal_n,
+        replicate=replicate,
+        model=model,
+        partition_hash=partition_hash,
+        human_a=0,
+        human_b=0,
+        judge_a=0,
+        judge_b=0,
+        human_tie=False,
+        judge_tie=False,
+        correct=bool(value),
+        credit=value,
+        abs_error=float("nan"),
+        unevaluable=True,
+    )
+
+
 def build_outcomes(
     records: Iterable[dict[str, Any]],
     items: list[PairedItem],
     criteria: tuple[Criterion, ...],
+    *,
+    unevaluable_rule: str = "primary",
+    reference_size: int = 1,
 ) -> list[Outcome]:
     """Join per-side judge records into per-(item, criterion) outcomes.
 
     A criterion contributes an outcome only when *both* sides were judged in the
     same partition -- a pairwise comparison needs both halves. Half-complete
     pairs are dropped and counted rather than imputed.
+
+    Unevaluable output is scored here rather than at the call, because recovery
+    is a comparison between the two sides. A call-level rule would emit two
+    observations for a prompt whose sides both failed. Exactly one outcome is
+    emitted per (item, criterion, rung) regardless of how many sides failed.
+
+    Transient failures are dropped: they are replaced upstream and carry no
+    information about the judge.
     """
     by_key: dict[tuple[str, str, int, str, int], dict[str, Any]] = {}
     for record in records:
@@ -99,6 +151,39 @@ def build_outcomes(
         if item is None:
             continue
         rec_a, rec_b = sides["a"], sides["b"]
+
+        # Replaced upstream, so they say nothing about judge behaviour.
+        if TRANSIENT in (rec_a.get("failure_class"), rec_b.get("failure_class")):
+            continue
+
+        if rec_a.get("failure") or rec_b.get("failure"):
+            value = unevaluable_value(
+                unevaluable_rule, rec_a["group_size"], reference_size
+            )
+            if value is None:
+                continue
+            for criterion_key, position in rec_a["positions"].items():
+                if criterion_key not in criteria_by_key:
+                    continue
+                if criterion_key != item.targeted_criterion:
+                    # Companions carry no gold, so an unevaluable call says
+                    # nothing about them.
+                    continue
+                outcomes.append(
+                    _unevaluable_outcome(
+                        item_id=item_id,
+                        criterion=criterion_key,
+                        group_size=rec_a["group_size"],
+                        position=position,
+                        nominal_n=rec_a["nominal_n"],
+                        replicate=replicate,
+                        model=model,
+                        partition_hash=partition_hash,
+                        value=value,
+                    )
+                )
+            continue
+
         for criterion_key, position in rec_a["positions"].items():
             if criterion_key not in criteria_by_key:
                 continue

@@ -73,6 +73,15 @@ class Outcome:
     output_tokens: int = 0
     schema_tokens: int = 0
     near_cap: bool = False
+    unevaluable: bool = False
+    """True when the judge returned nothing readable and Y is 0 by definition.
+
+    Y is demonstrated, machine-readable directional recovery, so an unreadable
+    judgment scores 0 as part of the outcome definition rather than as an
+    imputation. The flag exists so the frequency can be reported by group size,
+    which is its own diagnostic: a judge that stops returning usable output under
+    load is degrading in a way the recovery rate alone will not show.
+    """
 
     def as_row(self) -> dict[str, Any]:
         return asdict(self)
