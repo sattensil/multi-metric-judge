@@ -2311,9 +2311,13 @@ def ladder_cmd(
     console.print(f"items: {len(items)}  levels={swept}")
     console.print(f"calls: {len(specs)}")
     console.print(
-        f"est input {est.input_tokens:,}, output ceiling {est.output_tokens:,}"
+        f"est input {est['est_input_tokens']:,}, "
+        f"output ceiling {est['est_output_tokens_ceiling']:,}"
     )
-    console.print(f"cost ceiling ${projection:.2f} (actual output will be lower)")
+    console.print(
+        f"cost ceiling ${projection['usd_total_ceiling']:.2f} "
+        "(actual output will be lower)"
+    )
 
     plan = SamplingPlan(
         dataset_id=path.stem,
@@ -2339,9 +2343,15 @@ def ladder_cmd(
     )
 ```
 
-`estimate` and `project_cost` are already imported in `cli.py` from `.runner`
-(`src/packing/cli.py:34-41`), and `read_jsonl` from `.dataset`. `estimate` takes
-only `specs`. The `sweep` command at `src/packing/cli.py:807-812` is the pattern.
+`estimate` and `project_cost` are already imported in `cli.py` from `.runner`, and
+`read_jsonl` from `.dataset`. `estimate(specs)` takes only `specs` and returns a
+**dict** with keys `calls`, `est_input_tokens` and `est_output_tokens_ceiling`
+(`src/packing/runner.py:113-130`), not an object with attributes.
+`project_cost(est, price_in, price_out)` likewise returns a dict with
+`usd_input`, `usd_output_ceiling` and `usd_total_ceiling`
+(`src/packing/runner.py:133-147`). Both are pessimistic by design: the output
+figure assumes every call fills its budget. The `sweep` command at
+`src/packing/cli.py:807-825` is the pattern to copy.
 
 
 - [ ] **Step 4: Run test to verify it passes**

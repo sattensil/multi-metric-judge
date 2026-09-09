@@ -14,6 +14,7 @@ identical -- so it should be done once and reused for both.
 from __future__ import annotations
 
 import json
+import random
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -23,7 +24,13 @@ from typing import Any, Callable, Iterator
 from .budget import budget_for, near_cap
 from .criteria import Criterion
 from .dataset import PairedItem
-from .partition import Partition, make_partition, nominal_levels, partition_seed
+from .partition import (
+    Partition,
+    Placement,
+    make_partition,
+    nominal_levels,
+    partition_seed,
+)
 from .prompt import build, token_estimate
 from .providers.base import JudgeProvider, ProviderError
 from .schema import schema_token_estimate
@@ -473,4 +480,86 @@ def plan_targeted_blocks(
                         continue
                     seen.add(spec.identity)
                     specs.append(spec)
+    return specs
+
+
+def plan_fixed_position(
+    items: list[PairedItem],
+    criteria: tuple[Criterion, ...],
+    *,
+    model: str,
+    levels: tuple[int, ...],
+    base_seed: int = 20260908,
+) -> list[CallSpec]:
+    """Plan a ladder with the targeted criterion pinned at position 0.
+
+    The K = 20 sweep drew a random partition, which coupled load to position:
+    position is nested inside the call, so E[position | K] = (K-1)/2 exactly and
+    support is triangular. Here the target sits first at every rung and companions
+    pad the call, which removes the ordinal-position confound.
+
+    Companions are a nested prefix of one seeded permutation of the non-target
+    criteria, shared by both sides. Without nesting, K would change both the
+    amount of trailing load and which particular criteria are present, putting
+    composition noise into the endpoint contrast.
+
+    This does not make load the only thing that varies. The target stays first, so
+    K also varies the amount of trailing material, the target's recency, and its
+    distance from the end of the context. Those stay coupled by design and the
+    estimand is written to match.
+    """
+    pool_size = len(criteria)
+    for level in levels:
+        if level < 1:
+            raise ValueError(f"level {level} must be >= 1")
+        if level > pool_size:
+            raise ValueError(f"level {level} exceeds pool size {pool_size}")
+
+    specs: list[CallSpec] = []
+    for item in items:
+        if not item.targeted_criterion:
+            raise ValueError(f"{item.item_id} has no targeted_criterion")
+        target = next(
+            (c for c in criteria if c.key == item.targeted_criterion), None
+        )
+        if target is None:
+            raise ValueError(
+                f"{item.targeted_criterion!r} not in the criterion pool"
+            )
+
+        companions = [c for c in criteria if c.key != target.key]
+        random.Random(
+            partition_seed(f"{item.item_id}:companions", 0, 0, base_seed)
+        ).shuffle(companions)
+
+        for nominal_n in levels:
+            group = (target, *companions[: nominal_n - 1])
+            placements = tuple(
+                Placement(
+                    criterion=c,
+                    group_index=0,
+                    position=index,
+                    group_size=len(group),
+                )
+                for index, c in enumerate(group)
+            )
+            partition = Partition(
+                nominal_n=nominal_n,
+                groups=(group,),
+                seed=base_seed,
+                placements=placements,
+            )
+            for side in ("a", "b"):
+                specs.append(
+                    CallSpec(
+                        item=item,
+                        side=side,
+                        group=group,
+                        group_index=0,
+                        partition=partition,
+                        nominal_n=nominal_n,
+                        replicate=0,
+                        model=model,
+                    )
+                )
     return specs
