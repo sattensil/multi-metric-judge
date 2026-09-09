@@ -1,26 +1,33 @@
 {
-  "archive": "packing-replication-v1.tar.gz",
-  "archive_sha256": "af25db015a4203db26db6b59f0c30fce06dfb52138b29c5ab77f424cd3447516",
-  "archive_size_bytes": 6867043,
+  "archive": "packing-replication-v2.tar.gz",
+  "archive_sha256": "1560bffb0ce61f30a0e5b757b6b3c490eeba18679f3a47f5e8e1caee1d76e143",
+  "archive_size_bytes": 13032422,
   "built_from_branch": "packing-talk",
-  "call_date_range_approximate": {
-    "earliest": "2026-08-26",
-    "latest": "2026-09-03",
-    "note": "From artifact mtimes. Per-call timestamps were not recorded."
+  "call_date_range_approximate": "2026-08-26 to 2026-09-09",
+  "claims_backed": {
+    "METHODS 3.3 and 8.2": "runs/calib, runs/calib2, runs/ladder",
+    "METHODS 8.1": "runs/pilot",
+    "METHODS 8.3 and 8.3.2": "runs/sweep",
+    "METHODS 8.5": "runs/ladder-k40"
   },
-  "code_commit": "e0ea2fe77c1d992ba95fbe055e7ba63e8e42b33b",
+  "code_commit": "8340f95bfefeb026def8596e0a9008b6f9699aef",
+  "cost_figures_are_lower_bounds": "Every dollar figure in METHODS is computed from retained token counts. Retried attempts bill in full and are never written, so true spend is higher. Measured gap on the K = 40 run: 10,216,217 input tokens billed against 3,042,025 recorded during the stalled first attempt.",
   "files": {
-    "MANIFEST.json": "a67c0ab3a95b3b972cede15fdbc7c7a61ae93974e92fb3b56c32039ba8dc5ff0",
+    "MANIFEST.json": "536f4e1b28a83b06d9997e2e1613848caaa1311662ae58ba0a318e1556df144d",
+    "SHA256SUMS": "e54f20e78b7c05acbed6c357a053340120c17cb3285d9942920a6562c6376466",
     "data/helpsteer2.jsonl": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
     "environment/pyproject.toml": "b3e624b55b5fa2e484776c2b03e68014ae8f64e0f322d677d741a634af9144e2",
     "environment/uv.lock": "4737ab77a183092cb6b42fe04532a353a57b27e86dd585a1821edf9556a50fe4",
-    "expected.json": "4633991047bc4ae96ae54b4b10270fd7647c9cb53f1453217daaa9f877b0d4ee",
+    "expected.json": "6de499360cf75edd68d62c12054f3a7a8fcc8c077b83587eff112ea2c743ad01",
     "runs/calib/calls.jsonl": "16c88c402071170fb20dc552cee51f6b3862643c57f82ed2be05490fe7552f79",
     "runs/calib/items.jsonl": "897ca4ea4bac132b197ce6c25248fb6d60dab5af53faf72d54e702fd146c2473",
     "runs/calib/meta.json": "766bae4ea2aad331ed0c7cdcdc87a886927a702934655b7017d71a958cbb40b4",
     "runs/calib2/calls.jsonl": "ff5283d67d9c4fc9fadc4d2503507487c4098451c974206d5515397d19229125",
     "runs/calib2/items.jsonl": "752b9cbbee9991483ae7b24dd70c82ce89354d8ad5d6a3226d8a34695438377b",
     "runs/calib2/meta.json": "34b5629de40a39d344d90eb9cb341c915b8026eaf3b25a7e821f02123c2884be",
+    "runs/ladder-k40/calls.jsonl": "97ea1b16ddf5a37edacb315cd8d538a4ff565187f2269883bc940543e29c3876",
+    "runs/ladder-k40/items.jsonl": "1b338ef4a4ca915c1cbd217ffab32d4ce7798494b9252457dcdef964dec33788",
+    "runs/ladder-k40/meta.json": "46f6390bcb97209f3cf32bc7112bd231765469b9ffd3ec45bf8fb93b24d5f63b",
     "runs/ladder/calls.jsonl": "87bdb7802a58c35ebf78ee37fd54d8967d583075c1d6812bd19319e55b3c0198",
     "runs/ladder/items.jsonl": "6e672b5372af59b18a3878d2694481bb0e7dfc6873b9cb1ab5b4276482c75e29",
     "runs/ladder/meta.json": "155a0c52de03216a418035aaa7c4d1bbc839ad9aaf67223b94fee10a33ee7e7d",
@@ -31,40 +38,38 @@
     "runs/sweep/items.jsonl": "b44aaf2c1d97dfb0f0eef58e3ec5434c91e99d4c2e9224d0396d95e6e6474a54",
     "runs/sweep/meta.json": "852780ec0cc08856f88d22bbf599b63537091b867ef537c7b7da60aaeb7afa85"
   },
+  "frame": {
+    "dataset_licence": "CC-BY-4.0",
+    "dataset_sha256": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
+    "dataset_source": "nvidia/HelpSteer2",
+    "fetch_command": "packing fetch --limit 200",
+    "n_items": 200,
+    "ordered_item_id_sha256": "756c1d1a432f09266e495dd7c3b125cfc7ec1d242aff514e52ff7addbfa6b563",
+    "path": "data/helpsteer2.jsonl"
+  },
   "model": "gpt-5-mini",
   "model_is_an_alias": true,
   "model_snapshot": null,
   "not_recorded": [
     "provider response ids",
     "per-call wall-clock timestamps",
-    "pinned model snapshot"
+    "pinned model snapshot (gpt-5-mini is an alias)"
   ],
-  "release": "packing-replication-v1",
-  "reproduce": [
-    "uv sync --frozen",
-    "uv run packing reproduce --sums SHA256SUMS --root ."
-  ],
+  "pinned_values": 37,
+  "recompute_command": "packing reproduce --sums SHA256SUMS",
+  "release": "packing-replication-v2",
   "request_settings": {
     "reasoning_effort": "low",
     "structured_outputs": "strict",
     "temperature": null
   },
-  "runs_excluded": {
-    "e2e": "smoke test, backs no published claim",
-    "ladder-k40": "K = 40 run in flight at build time",
-    "select-gpt-5-mini": "model screening, backs no published claim"
-  },
+  "run_name_collision": "`ladder` is the severity ladder from calibration. `ladder-k40` is the fixed-position K = 40 experiment. Different runs, adjacent names.",
   "runs_included": [
     "pilot",
     "sweep",
     "calib",
     "calib2",
-    "ladder"
-  ],
-  "section_commands": {
-    "METHODS 3.3 / 8.2": "packing calibration-report --run calib",
-    "METHODS 8.1": "packing reproduce",
-    "METHODS 8.3": "packing reproduce",
-    "METHODS 8.3.2": "packing reproduce"
-  }
+    "ladder",
+    "ladder-k40"
+  ]
 }

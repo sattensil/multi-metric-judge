@@ -112,6 +112,16 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       font-size:.8rem;color:var(--faint);letter-spacing:.06em}
 .meta span b{color:var(--cyan);font-weight:400}
 
+/* Inline, because the deck must present with no network. One path rather than
+   ~500 rects keeps the markup small; crispEdges stops the modules blurring when
+   a projector scales it. */
+.qr{width:clamp(150px,17vh,210px);height:auto;border-radius:8px;
+    background:#e9eff3;padding:8px;display:block}
+.qrrow{display:flex;gap:clamp(1.2rem,3vw,2.4rem);align-items:center}
+.qrrow .qrtext{min-width:0}
+.qrurl{font-family:var(--font-mono);font-size:.82rem;color:var(--cyan);
+       word-break:break-all;margin:.6rem 0 0}
+
 .claim{border:1px solid #2e4a1f;background:linear-gradient(180deg,#141d11,var(--panel));
        border-radius:16px;padding:clamp(1.2rem,2.4vw,2rem)}
 .claim p{margin:0;font-size:clamp(1.05rem,1.9vw,1.5rem);line-height:1.45;color:var(--ink)}
@@ -562,8 +572,15 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       <li><strong>Report the tie rate</strong> next to accuracy.</li>
       <li><strong>Plant an effect in your estimators</strong> before trusting them.</li>
     </ul>
-    <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">Questions.</b>
-      Everything recomputes: <code>packing reproduce</code></p>
+    <div class="qrrow" style="margin-top:1.6rem">
+      <svg class="qr" viewBox="0 0 37 37" role="img" aria-label="QR code linking to https://github.com/sattensil/multi-metric-judge" shape-rendering="crispEdges"><rect width="37" height="37" fill="#e9eff3"/><path d="M0 0h7v1H0zM8 0h1v1H8zM10 0h2v1H10zM13 0h1v1H13zM15 0h1v1H15zM19 0h2v1H19zM22 0h2v1H22zM25 0h1v1H25zM30 0h7v1H30zM0 1h1v1H0zM6 1h1v1H6zM8 1h3v1H8zM12 1h1v1H12zM15 1h3v1H15zM23 1h2v1H23zM26 1h1v1H26zM30 1h1v1H30zM36 1h1v1H36zM0 2h1v1H0zM2 2h3v1H2zM6 2h1v1H6zM10 2h2v1H10zM13 2h3v1H13zM18 2h1v1H18zM21 2h1v1H21zM23 2h1v1H23zM26 2h3v1H26zM30 2h1v1H30zM32 2h3v1H32zM36 2h1v1H36zM0 3h1v1H0zM2 3h3v1H2zM6 3h1v1H6zM9 3h1v1H9zM11 3h3v1H11zM16 3h1v1H16zM18 3h1v1H18zM20 3h2v1H20zM23 3h3v1H23zM28 3h1v1H28zM30 3h1v1H30zM32 3h3v1H32zM36 3h1v1H36zM0 4h1v1H0zM2 4h3v1H2zM6 4h1v1H6zM9 4h1v1H9zM15 4h2v1H15zM19 4h2v1H19zM22 4h5v1H22zM30 4h1v1H30zM32 4h3v1H32zM36 4h1v1H36zM0 5h1v1H0zM6 5h1v1H6zM11 5h1v1H11zM13 5h1v1H13zM15 5h2v1H15zM19 5h1v1H19zM25 5h2v1H25zM28 5h1v1H28zM30 5h1v1H30zM36 5h1v1H36zM0 6h7v1H0zM8 6h1v1H8zM10 6h1v1H10zM12 6h1v1H12zM14 6h1v1H14zM16 6h1v1H16zM18 6h1v1H18zM20 6h1v1H20zM22 6h1v1H22zM24 6h1v1H24zM26 6h1v1H26zM28 6h1v1H28zM30 6h7v1H30zM9 7h1v1H9zM11 7h3v1H11zM16 7h1v1H16zM18 7h1v1H18zM22 7h4v1H22zM27 7h2v1H27zM1 8h1v1H1zM6 8h4v1H6zM11 8h5v1H11zM18 8h1v1H18zM22 8h1v1H22zM24 8h1v1H24zM26 8h1v1H26zM28 8h2v1H28zM35 8h2v1H35zM0 9h2v1H0zM3 9h1v1H3zM5 9h1v1H5zM7 9h2v1H7zM10 9h1v1H10zM15 9h5v1H15zM21 9h3v1H21zM25 9h2v1H25zM28 9h1v1H28zM30 9h2v1H30zM33 9h3v1H33zM1 10h2v1H1zM4 10h1v1H4zM6 10h1v1H6zM11 10h2v1H11zM14 10h2v1H14zM19 10h4v1H19zM25 10h4v1H25zM30 10h1v1H30zM32 10h1v1H32zM34 10h3v1H34zM0 11h6v1H0zM7 11h1v1H7zM12 11h8v1H12zM22 11h3v1H22zM26 11h1v1H26zM30 11h4v1H30zM35 11h2v1H35zM3 12h1v1H3zM6 12h1v1H6zM10 12h1v1H10zM12 12h1v1H12zM16 12h1v1H16zM18 12h1v1H18zM20 12h1v1H20zM23 12h2v1H23zM27 12h2v1H27zM30 12h2v1H30zM33 12h1v1H33zM0 13h2v1H0zM3 13h3v1H3zM7 13h1v1H7zM11 13h1v1H11zM14 13h1v1H14zM18 13h1v1H18zM23 13h1v1H23zM27 13h3v1H27zM31 13h1v1H31zM34 13h1v1H34zM0 14h1v1H0zM3 14h4v1H3zM8 14h2v1H8zM11 14h1v1H11zM13 14h2v1H13zM18 14h4v1H18zM24 14h1v1H24zM26 14h4v1H26zM33 14h1v1H33zM35 14h2v1H35zM0 15h3v1H0zM5 15h1v1H5zM7 15h7v1H7zM15 15h1v1H15zM17 15h1v1H17zM26 15h1v1H26zM29 15h1v1H29zM31 15h4v1H31zM0 16h1v1H0zM4 16h1v1H4zM6 16h1v1H6zM8 16h2v1H8zM11 16h4v1H11zM18 16h1v1H18zM21 16h1v1H21zM25 16h2v1H25zM28 16h3v1H28zM32 16h1v1H32zM34 16h2v1H34zM0 17h2v1H0zM4 17h2v1H4zM7 17h1v1H7zM9 17h1v1H9zM11 17h1v1H11zM13 17h2v1H13zM20 17h1v1H20zM22 17h1v1H22zM24 17h1v1H24zM27 17h3v1H27zM5 18h3v1H5zM9 18h2v1H9zM14 18h1v1H14zM16 18h1v1H16zM19 18h3v1H19zM23 18h1v1H23zM25 18h1v1H25zM27 18h1v1H27zM29 18h1v1H29zM32 18h1v1H32zM36 18h1v1H36zM0 19h1v1H0zM2 19h4v1H2zM8 19h2v1H8zM11 19h4v1H11zM18 19h1v1H18zM20 19h1v1H20zM22 19h1v1H22zM24 19h1v1H24zM29 19h5v1H29zM35 19h1v1H35zM6 20h1v1H6zM8 20h1v1H8zM10 20h1v1H10zM13 20h1v1H13zM16 20h1v1H16zM19 20h1v1H19zM22 20h1v1H22zM24 20h4v1H24zM30 20h6v1H30zM0 21h1v1H0zM4 21h1v1H4zM7 21h1v1H7zM10 21h1v1H10zM14 21h4v1H14zM20 21h4v1H20zM27 21h2v1H27zM31 21h4v1H31zM1 22h2v1H1zM6 22h4v1H6zM11 22h3v1H11zM16 22h3v1H16zM20 22h3v1H20zM27 22h1v1H27zM30 22h1v1H30zM35 22h2v1H35zM0 23h2v1H0zM4 23h2v1H4zM14 23h1v1H14zM20 23h1v1H20zM24 23h1v1H24zM26 23h2v1H26zM29 23h3v1H29zM33 23h1v1H33zM36 23h1v1H36zM1 24h2v1H1zM6 24h4v1H6zM11 24h1v1H11zM13 24h3v1H13zM17 24h2v1H17zM22 24h1v1H22zM25 24h2v1H25zM28 24h6v1H28zM36 24h1v1H36zM0 25h1v1H0zM2 25h1v1H2zM5 25h1v1H5zM8 25h2v1H8zM11 25h2v1H11zM15 25h2v1H15zM21 25h1v1H21zM23 25h1v1H23zM26 25h1v1H26zM28 25h3v1H28zM33 25h1v1H33zM0 26h1v1H0zM6 26h5v1H6zM14 26h3v1H14zM18 26h2v1H18zM24 26h3v1H24zM30 26h1v1H30zM35 26h2v1H35zM0 27h1v1H0zM2 27h3v1H2zM7 27h1v1H7zM9 27h2v1H9zM13 27h1v1H13zM17 27h1v1H17zM19 27h2v1H19zM22 27h2v1H22zM27 27h1v1H27zM29 27h1v1H29zM32 27h1v1H32zM34 27h2v1H34zM0 28h1v1H0zM2 28h1v1H2zM4 28h3v1H4zM8 28h1v1H8zM10 28h1v1H10zM14 28h1v1H14zM22 28h2v1H22zM25 28h2v1H25zM28 28h6v1H28zM35 28h1v1H35zM8 29h1v1H8zM10 29h2v1H10zM15 29h2v1H15zM18 29h6v1H18zM28 29h1v1H28zM32 29h2v1H32zM0 30h7v1H0zM8 30h1v1H8zM16 30h2v1H16zM23 30h1v1H23zM25 30h1v1H25zM28 30h1v1H28zM30 30h1v1H30zM32 30h5v1H32zM0 31h1v1H0zM6 31h1v1H6zM11 31h2v1H11zM14 31h1v1H14zM17 31h3v1H17zM21 31h1v1H21zM24 31h1v1H24zM26 31h3v1H26zM32 31h2v1H32zM0 32h1v1H0zM2 32h3v1H2zM6 32h1v1H6zM9 32h3v1H9zM14 32h1v1H14zM16 32h1v1H16zM20 32h13v1H20zM34 32h1v1H34zM36 32h1v1H36zM0 33h1v1H0zM2 33h3v1H2zM6 33h1v1H6zM11 33h4v1H11zM16 33h3v1H16zM20 33h1v1H20zM22 33h1v1H22zM26 33h3v1H26zM30 33h2v1H30zM33 33h1v1H33zM0 34h1v1H0zM2 34h3v1H2zM6 34h1v1H6zM9 34h3v1H9zM14 34h5v1H14zM20 34h6v1H20zM28 34h2v1H28zM31 34h1v1H31zM34 34h1v1H34zM36 34h1v1H36zM0 35h1v1H0zM6 35h1v1H6zM8 35h1v1H8zM12 35h1v1H12zM16 35h1v1H16zM18 35h1v1H18zM22 35h2v1H22zM28 35h1v1H28zM30 35h1v1H30zM33 35h1v1H33zM36 35h1v1H36zM0 36h7v1H0zM12 36h1v1H12zM15 36h6v1H15zM24 36h1v1H24zM28 36h1v1H28zM33 36h1v1H33zM36 36h1v1H36z" fill="#080b0f"/></svg>
+      <div class="qrtext">
+        <p class="note" style="border-color:var(--lime);margin:0"><b style="color:var(--lime)">Questions.</b>
+          Every number here recomputes from retained calls, no API key:
+          <code>packing reproduce</code></p>
+        <p class="qrurl">github.com/sattensil/multi-metric-judge</p>
+      </div>
+    </div>
   </div>
 </section>
 

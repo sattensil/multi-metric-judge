@@ -1572,7 +1572,17 @@ def ladder_run_cmd(
 # is `ladder-k40`. Two unrelated things called "ladder" is a trap; the names are
 # kept as they are on disk so existing commands keep working, and the collision
 # is called out here and in REPLICATION.md.
-CLAIM_RUNS: tuple[str, ...] = ("pilot", "sweep", "calib", "calib2", "ladder")
+# Every run that backs a published claim. `ladder` is the severity ladder from
+# calibration; `ladder-k40` is the fixed-position K = 40 experiment. The names are
+# confusingly close and mean different things.
+CLAIM_RUNS: tuple[str, ...] = (
+    "pilot",
+    "sweep",
+    "calib",
+    "calib2",
+    "ladder",
+    "ladder-k40",
+)
 
 
 @cli.command("reproduce")

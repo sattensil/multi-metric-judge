@@ -102,14 +102,14 @@ inside the bundle rather than being available on request.
 uv run packing bundle --out dist --version v1
 ```
 
-Builds `dist/packing-replication-v1.tar.gz`, 6.9 MB, containing the pinned frame,
+Builds `dist/packing-replication-v2.tar.gz`, 13.0 MB, containing the pinned frame,
 the retained call records for every run that backs a published claim, the frozen
 expected values, `uv.lock`, a `MANIFEST.json` recording the code commit and
 request settings, and `SHA256SUMS` over every file. Building uploads nothing;
 publishing is a separate deliberate step.
 
 `replication/RELEASE.json` is the committed pointer: release identifier, archive
-SHA-256 `af25db015a4203db`, a digest for all 20 files, the code commit, model and
+SHA-256 `1560bffb0ce61f30`, a digest for all 24 files, the code commit, model and
 request settings, the per-section commands, and the approximate call date range.
 `dist/` itself is gitignored, so 40 MB of append-only call records never enter
 clone history; the archive is a release asset.
