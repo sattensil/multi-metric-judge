@@ -236,7 +236,8 @@ def annotate_synthetic(
     for item in items:
         if item.source != "synthetic" and item.dataset != "synthetic":
             continue
-        operation = item.meta.get("corruption")
+        # `corruption` is the sweep builder's key, `operation` the ladder's.
+        operation = item.meta.get("corruption") or item.meta.get("operation")
         direction = item.meta.get("direction")
         corrupted_side = item.meta.get("corrupted_side")
         if not operation or direction not in (-1, 1) or corrupted_side not in ("a", "b"):

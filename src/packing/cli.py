@@ -62,7 +62,14 @@ def _load_run(name: str):
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
     items = read_jsonl(items_path)
     dataset = meta.get("dataset", "helpsteer2")
-    criteria = ALL_CRITERIA if dataset == "synthetic" else get_criteria(dataset)
+    if dataset == "synthetic":
+        criteria = ALL_CRITERIA
+    elif dataset == "ladder":
+        from .ladder_criteria import LADDER_CRITERIA
+
+        criteria = LADDER_CRITERIA
+    else:
+        criteria = get_criteria(dataset)
     records = list(read_records(calls_path))
     return items, criteria, records, meta
 
@@ -1706,3 +1713,112 @@ def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
     console.print(f"[bold]{archive}[/bold]  {size_mb:.1f} MB")
     console.print(f"archive sha256: {file_sha256(archive)}")
     console.print("\nNothing was uploaded. Publishing the archive is a separate step.")
+
+
+@cli.command("ladder-analyze")
+@click.option("--run", "name", default="ladder-k40", show_default=True)
+@click.option("--reference", type=int, default=1, show_default=True)
+@click.option("--comparison", type=int, default=40, show_default=True)
+def ladder_analyze_cmd(name: str, reference: int, comparison: int) -> None:
+    """The ladder's pre-registered estimand, plus its diagnostics.
+
+    The generic `analyze` command reports the sweep's stratified recovery tables,
+    which is not this design's primary quantity. The primary here is one
+    equal-weighted contrast across the eight core operations.
+    """
+    from .eligibility import CORE_OPERATIONS, NUMBERS_OPERATION
+    from .ladder_criteria import LADDER_CRITERIA
+
+    items, criteria, records, meta = _load_run(name)
+    frame = analyze.to_frame(analyze.build_outcomes(records, items, LADDER_CRITERIA))
+    if frame.empty:
+        raise click.ClickException("no outcomes to analyse")
+    frame = analyze.annotate_synthetic(frame, items)
+
+    # Recovery is defined on the targeted criterion only. Companions are neutral
+    # by construction and contribute ties, not outcomes.
+    targeted = analyze.synthetic_recovery_frame(frame[frame["is_target"]])
+    core = targeted[targeted["operation"].isin(CORE_OPERATIONS)]
+    numbers = targeted[targeted["operation"] == NUMBERS_OPERATION]
+
+    console.print(
+        f"[bold]run {name}[/bold]  manifest {str(meta.get('manifest_sha256'))[:16]}  "
+        f"seed {meta.get('seed')}  levels {meta.get('levels')}"
+    )
+    console.print(
+        f"outcomes: {len(targeted)} targeted "
+        f"({len(core)} core, {len(numbers)} numbers)"
+    )
+
+    _show(
+        targeted.groupby(["operation", "group_size"])["correct_num"]
+        .agg(["size", "mean"])
+        .round(4),
+        "Directional recovery by operation and rung (descriptive)",
+    )
+
+    console.print("\n[bold]PRIMARY: equal-weighted core contrast[/bold]")
+    primary = analyze.stratified_endpoint(
+        core, reference, comparison, operations=tuple(CORE_OPERATIONS)
+    )
+    if primary is None:
+        console.print(
+            "[yellow]not estimable yet: an operation is missing or thin. "
+            "The estimand is an average over all eight, so a subset is a "
+            "different quantity.[/yellow]"
+        )
+    else:
+        console.print(json.dumps(primary.as_row(), indent=2))
+        console.print(f"per operation: {json.dumps(primary.per_operation)}")
+
+    console.print("\n[bold]Sensitivity to the unevaluable rule[/bold]")
+    for rule in ("primary", "lower_bound", "upper_bound", "complete_case"):
+        alt = analyze.to_frame(
+            analyze.build_outcomes(
+                records,
+                items,
+                LADDER_CRITERIA,
+                unevaluable_rule=rule,
+                reference_size=reference,
+            )
+        )
+        if alt.empty:
+            console.print(f"  {rule:<14} no outcomes")
+            continue
+        alt = analyze.annotate_synthetic(alt, items)
+        alt_core = analyze.synthetic_recovery_frame(alt[alt["is_target"]])
+        alt_core = alt_core[alt_core["operation"].isin(CORE_OPERATIONS)]
+        result = analyze.stratified_endpoint(
+            alt_core, reference, comparison, operations=tuple(CORE_OPERATIONS)
+        )
+        if result is None:
+            console.print(f"  {rule:<14} not estimable")
+        else:
+            console.print(
+                f"  {rule:<14} theta {result.theta:+.4f}  "
+                f"CI [{result.ci_low:+.4f}, {result.ci_high:+.4f}]  "
+                f"p {result.p_value:.4g}"
+            )
+
+    console.print("\n[bold]KEY SECONDARY: numbers correctness sentinel[/bold]")
+    paired = analyze.paired_contrast(numbers, reference, comparison)
+    if paired is None:
+        console.print("[yellow]not estimable yet[/yellow]")
+    else:
+        console.print(json.dumps(paired.as_row(), indent=2))
+
+    _show(
+        analyze.synthetic_recovery_frame(frame[frame["is_target"]])
+        .groupby("group_size")
+        .agg(
+            n=("correct_num", "size"),
+            recovery=("correct_num", "mean"),
+            unevaluable=("unevaluable", "mean"),
+        )
+        .round(4),
+        "Diagnostics by rung: recovery and unevaluable frequency",
+    )
+    _show(
+        frame.groupby("group_size")["judge_tie"].agg(["size", "mean"]).round(4),
+        "Judge tie rate by rung (diagnostic secondary)",
+    )
