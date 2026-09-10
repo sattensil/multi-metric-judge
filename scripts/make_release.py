@@ -34,6 +34,11 @@ DERIVED = {
     "pinned_claims",
     "pinned_values",
     "runs_included",
+    # Frame provenance is read from the bundle's own manifest. Carrying it over
+    # as prose is how a published pointer came to describe the 200-item pilot
+    # frame while the ladder had been drawn from a different 1,600-item one.
+    "frames",
+    "frame",
 }
 
 
@@ -68,6 +73,13 @@ def main() -> None:
 
     previous = json.loads(RELEASE.read_text(encoding="utf-8")) if RELEASE.exists() else {}
     expected = json.loads((extracted / "expected.json").read_text(encoding="utf-8"))
+    manifest = json.loads((extracted / "MANIFEST.json").read_text(encoding="utf-8"))
+    frames = manifest.get("frames")
+    if not frames:
+        raise SystemExit(
+            f"{extracted / 'MANIFEST.json'} records no frames; rebuild the "
+            "bundle with a version of `packing bundle` that writes them"
+        )
 
     files = {
         str(path.relative_to(extracted)): sha256(path)
@@ -89,6 +101,7 @@ def main() -> None:
         pinned_claims=sorted(expected["claims"]),
         pinned_values=sum(len(v) for v in expected["claims"].values()),
         runs_included=runs,
+        frames=frames,
     )
 
     RELEASE.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -97,6 +110,9 @@ def main() -> None:
     print(f"  commit   {payload['code_commit'][:12]}")
     print(f"  files    {len(files)}")
     print(f"  pinned   {payload['pinned_values']} values across {len(payload['pinned_claims'])} claims")
+    for frame in frames:
+        tag = "primary" if frame.get("is_primary") else ", ".join(frame.get("used_by") or ["-"])
+        print(f"  frame    {frame['path']}  {frame['n_items']} items  ({tag})")
 
 
 if __name__ == "__main__":

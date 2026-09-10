@@ -193,3 +193,46 @@ def test_the_shipped_expected_file_pins_every_computed_claim():
         (root / "replication" / "expected.json").read_text(encoding="utf-8")
     )["claims"]
     assert coverage_gaps(compute_claims(_load_run), expected) == []
+
+
+def test_the_bundle_carries_every_frame_its_runs_were_drawn_from():
+    """A run's own frame going missing is silent until someone rebuilds.
+
+    `reproduce` reads the already-built `items.jsonl`, so it passes with the
+    frame absent. What breaks is the chain from source frame to sample: the
+    digest gate in `verify_plan` rejects a frame that is not the one the plan
+    was built against, so nobody can check that the units were drawn as
+    claimed. That is how the K = 40 ladder's 1,600-item frame was left out of a
+    published bundle while the 200-item pilot frame stood in for it.
+    """
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    release_path = root / "replication" / "RELEASE.json"
+    if not release_path.exists():
+        pytest.skip("no release pointer committed")
+    release = json.loads(release_path.read_text(encoding="utf-8"))
+
+    bundled = {name for name in release["files"] if name.startswith("data/")}
+    frames = release.get("frames")
+    assert frames, "the release pointer records no frame provenance"
+
+    digests = {frame["dataset_sha256"] for frame in frames}
+    for frame in frames:
+        assert frame["path"] in bundled, (
+            f"{frame['path']} is described in the release but not in the archive"
+        )
+
+    # Every run that names a frame must have that frame in the bundle.
+    for run in release["runs_included"]:
+        meta = root / "runs" / run / "meta.json"
+        if not meta.exists():
+            continue
+        digest = json.loads(meta.read_text(encoding="utf-8")).get("dataset_sha256")
+        if not digest:
+            continue
+        assert digest in digests, (
+            f"run {run!r} was built against frame {digest[:16]}, which the "
+            "bundle does not carry"
+        )

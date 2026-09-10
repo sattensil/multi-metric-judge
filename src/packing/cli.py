@@ -1803,6 +1803,32 @@ def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
     if not frame.exists():
         raise click.ClickException(f"{frame} not found")
 
+    # Every frame a bundled run was actually built against, not just the one
+    # named on the command line. The K = 40 ladder was drawn from a different,
+    # larger frame than the pilot and the sweep, and a bundle carrying only the
+    # primary one cannot rebuild the ladder's sample: the digest gate in
+    # `verify_plan` rejects it. Resolved by digest so the file is identified by
+    # content rather than by a path someone has to remember to pass.
+    available = {file_sha256(path): path for path in sorted(Path("data").glob("*.jsonl"))}
+    frames: dict[str, Path] = {file_sha256(frame): frame}
+    used_by: dict[str, list[str]] = {file_sha256(frame): []}
+    for run in CLAIM_RUNS:
+        meta_path = _run_dir(run) / "meta.json"
+        if not meta_path.exists():
+            continue
+        digest = json.loads(meta_path.read_text(encoding="utf-8")).get("dataset_sha256")
+        if not digest:
+            continue
+        source = available.get(digest)
+        if source is None:
+            raise click.ClickException(
+                f"run {run!r} was built against frame {digest[:16]}, which is "
+                "not in data/. The bundle would omit the frame its own sample "
+                "was drawn from."
+            )
+        frames.setdefault(digest, source)
+        used_by.setdefault(digest, []).append(run)
+
     name = f"packing-replication-{version}"
     staging = Path(out_dir) / name
     if staging.exists():
@@ -1810,7 +1836,8 @@ def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
             f"{staging} already exists; bundles are never overwritten"
         )
     (staging / "data").mkdir(parents=True)
-    shutil.copy2(frame, staging / "data" / frame.name)
+    for source in frames.values():
+        shutil.copy2(source, staging / "data" / source.name)
 
     present, absent = [], []
     for run in CLAIM_RUNS:
@@ -1825,6 +1852,35 @@ def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
             if candidate.exists():
                 shutil.copy2(candidate, destination / filename)
         present.append(run)
+
+    # The sampling plan, where a run has one. The frame says which prompts were
+    # available and the items say what was built; only the plan says which units
+    # were drawn, with what operation, side and seed. Without it a replicator can
+    # recompute the published numbers but cannot check the sample against the
+    # design, which is the claim the plan exists to make falsifiable.
+    plans: list[str] = []
+    for run in present:
+        meta_path = _run_dir(run) / "meta.json"
+        if not meta_path.exists():
+            continue
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        # `plan_paths` where a run spans more than one pass, falling back to the
+        # single `plan_path`. The K = 40 ladder was collected in two passes and
+        # recorded only the second, so bundling one plan would have documented
+        # three of its six rungs.
+        recorded = meta.get("plan_paths") or (
+            [meta["plan_path"]] if meta.get("plan_path") else []
+        )
+        for entry in recorded:
+            source = Path(entry)
+            if not source.exists():
+                raise click.ClickException(
+                    f"run {run!r} names plan {entry}, which is missing. The "
+                    "bundle would omit the record of how its sample was drawn."
+                )
+            (staging / "plans").mkdir(exist_ok=True)
+            shutil.copy2(source, staging / "plans" / source.name)
+            plans.append(f"plans/{source.name}")
 
     (staging / "environment").mkdir()
     for filename in ("uv.lock", "pyproject.toml"):
@@ -1841,6 +1897,7 @@ def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
         "code_commit": commit,
         "runs_included": present,
         "runs_absent": absent,
+        "plans_included": plans,
         "model": "gpt-5-mini",
         "model_is_an_alias": True,
         "request_settings": {
@@ -1848,15 +1905,24 @@ def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
             "reasoning_effort": "low",
             "structured_outputs": "strict",
         },
-        "frame": {
-            "path": f"data/{frame.name}",
-            "dataset_sha256": file_sha256(frame),
-            "ordered_item_id_sha256": ordered_item_id_sha256(frame),
-            "dataset_source": "nvidia/HelpSteer2",
-            "dataset_licence": "CC-BY-4.0",
-            "fetch_command": f"packing fetch --limit {sum(1 for _ in frame.open())}",
-            "n_items": sum(1 for _ in frame.open()),
-        },
+        "frames": [
+            {
+                "path": f"data/{source.name}",
+                "dataset_sha256": digest,
+                "ordered_item_id_sha256": ordered_item_id_sha256(source),
+                "dataset_source": "nvidia/HelpSteer2",
+                "dataset_licence": "CC-BY-4.0",
+                "fetch_command": (
+                    f"packing fetch --limit {sum(1 for _ in source.open())}"
+                ),
+                "n_items": sum(1 for _ in source.open()),
+                # Empty means the frame is the primary one, used by every run
+                # that does not record a digest of its own.
+                "used_by": sorted(used_by.get(digest, [])),
+                "is_primary": source == frame,
+            }
+            for digest, source in frames.items()
+        ],
         "not_recorded": [
             "provider response ids",
             "per-call wall-clock timestamps",

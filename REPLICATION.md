@@ -74,42 +74,70 @@ is over human-**scoreable** pairs, so the denominator excludes human ties.
 Computing it over all outcomes gives 0.5123 → 0.5033. §8.1 says "judge tie rate"
 without naming the denominator, and `packing reproduce` pins the scoreable one.
 
-## The pinned frame
+## The pinned frames
 
 The completed runs are reproducible only against the exact frame, not against the
 fetch recipe, because a hosted dataset need not return the same records forever.
 
-| Field | Value |
-|---|---|
-| Path | `data/helpsteer2.jsonl` |
-| Items | 200 |
-| `dataset_sha256` | `a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6` |
-| `ordered_item_id_sha256` | `756c1d1a432f09266e495dd7c3b125cfc7ec1d242aff514e52ff7addbfa6b563` |
-| Source | `nvidia/HelpSteer2`, CC-BY-4.0 |
-| Fetch recipe | `packing fetch --limit 200` |
+There are two. The pilot, the sweep and the calibration runs were drawn from a
+200-item frame; the K = 40 ladder needed a larger eligible pool and was drawn
+from a 1,600-item one. Both ship in the bundle, and each run's `meta.json`
+records the digest of the frame it was actually built against.
+
+| Field | Pilot, sweep, calibration | K = 40 ladder |
+|---|---|---|
+| Path | `data/helpsteer2.jsonl` | `data/helpsteer2-ladder.jsonl` |
+| Items | 200 | 1,600 |
+| `dataset_sha256` | `a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6` | `d7df63ab1e61de5608ff6a5deee92ef9dabb628319cd1665f4988dfda44df9ae` |
+| `ordered_item_id_sha256` | `756c1d1a432f09266e495dd7c3b125cfc7ec1d242aff514e52ff7addbfa6b563` | `234f0ecb8363787a8e8a1d6516344ba3de0e5d36c5c1e63e910b2fa80fb46c12` |
+| Source | `nvidia/HelpSteer2`, CC-BY-4.0 | `nvidia/HelpSteer2`, CC-BY-4.0 |
+| Fetch recipe | `packing fetch --limit 200` | `packing fetch --limit 1600` |
 
 The ordered-id digest is recorded separately because two files can hold identical
 examples in a different order. Seeded assignment here consumes a sorted
 permutation, so order does not change this sample, but a replicator cannot tell
 the two files apart without it.
 
-Redistribution is permitted under CC-BY-4.0 with attribution, so the frame ships
+Redistribution is permitted under CC-BY-4.0 with attribution, so both frames ship
 inside the bundle rather than being available on request.
+
+The bundle also carries the sampling plans under `plans/`. A frame says which
+prompts were available and a run's `items.jsonl` says what was built from them;
+only the plan says which units were drawn, with which operation, side and seed.
+With all three a replicator can check the sample against the design rather than
+only recomputing the published numbers:
+
+```bash
+python - <<'EOF'
+from pathlib import Path
+from packing.sampling_plan import read_plan
+from packing.live import rebuild_items
+plan = read_plan(Path("plans/ladder-plan-k30.json"))
+items, specs = rebuild_items(plan, Path("data/helpsteer2-ladder.jsonl"))
+print(len(items), "units", len(specs), "calls")
+EOF
+```
+
+`rebuild_items` verifies the frame and manifest digests first and refuses on a
+mismatch, so a wrong frame fails loudly instead of rebuilding a different
+sample. The K = 40 ladder was collected in two passes and both plans are
+included; the union of their call identities is exactly the 7,776 planned
+calls.
 
 ## The replication bundle
 
 ```bash
-uv run packing bundle --out dist --version v4
+uv run packing bundle --out dist --version v5
 ```
 
-Builds `dist/packing-replication-v4.tar.gz`, 15.2 MB, containing the pinned frame,
+Builds `dist/packing-replication-v5.tar.gz`, 16.9 MB, containing both pinned frames, the sampling plans,
 the retained call records for every run that backs a published claim, the frozen
 expected values, `uv.lock`, a `MANIFEST.json` recording the code commit and
 request settings, and `SHA256SUMS` over every file. Building uploads nothing;
 publishing is a separate deliberate step.
 
 `replication/RELEASE.json` is the committed pointer: release identifier, archive
-SHA-256 `cc34a847b954a599`, a digest for all 24 files, the code commit, model and
+SHA-256 `64857357ce85726c`, a digest for all 27 files, the code commit, model and
 request settings, the per-section commands, and the approximate call date range.
 `dist/` itself is gitignored, so 40 MB of append-only call records never enter
 clone history; the archive is a release asset.
@@ -119,9 +147,9 @@ clone history; the archive is a release asset.
 The CLI resolves a run name to `runs/<name>/`, so the archive has to land there:
 
 ```bash
-tar xzf packing-replication-v4.tar.gz
-cp -R packing-replication-v4/runs/. runs/
-cp packing-replication-v4/data/*.jsonl data/
+tar xzf packing-replication-v5.tar.gz
+cp -R packing-replication-v5/runs/. runs/
+cp packing-replication-v5/data/*.jsonl data/
 uv run packing reproduce
 ```
 

@@ -965,7 +965,10 @@ alternative is a silently smaller sample and a different estimand.
 
 Executed on `gpt-5-mini` under the protocol pre-registered in
 `docs/superpowers/specs/2026-09-08-load-ladder-design.md`, frozen before any call
-was made. Criterion manifest `721b8ac2a2a7e15f`, frame `d7df63ab1e61de56`, seed
+was made. Criterion manifest `721b8ac2a2a7e15f`, frame `d7df63ab1e61de56`
+(`data/helpsteer2-ladder.jsonl`, 1,600 items, a larger draw than the 200-item
+frame the pilot and sweep use, because eight-operation joint eligibility needs a
+bigger pool to fill the quotas), seed
 20260908. Rungs K = 1, 5, 10, 20, 30, 40; the K = 30 rung was added after the
 first pass and is exploratory with respect to the pre-registered ladder.
 

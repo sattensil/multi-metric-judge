@@ -6,9 +6,9 @@
     "Same-lane replacement is implemented and covers a replaced unit's whole ladder (METHODS 8.4). It had not run when these records were collected, so 120 planned calls were never completed; they sit in the middle rungs, and seven of 464 endpoint clusters were lost to the pairing requirement (METHODS 10.12).",
     "`packing reproduce` covers METHODS 8.1, 8.3, 8.3.2 and 8.5. The calibration gate needs `packing calibration-report`; the ladder diagnostics in 8.5.2 and 8.5.3 need `packing ladder-analyze`. Use `--strict` to fail on any computed value that is not pinned."
   ],
-  "archive": "packing-replication-v4.tar.gz",
-  "archive_sha256": "cc34a847b954a599b89aed68afdde51da1d94a9fb68287c6df453f2eefda1cbe",
-  "archive_size_bytes": 15152025,
+  "archive": "packing-replication-v5.tar.gz",
+  "archive_sha256": "64857357ce85726c6e7ab1e4fcbcf14ef50998910d47f9b43880c0ab98cf5f91",
+  "archive_size_bytes": 16947089,
   "built_from_branch": "packing-talk",
   "call_date_range_approximate": "2026-08-26 to 2026-09-09",
   "claims_backed": {
@@ -17,16 +17,19 @@
     "METHODS 8.3 and 8.3.2": "runs/sweep",
     "METHODS 8.5, 8.5.1 to 8.5.4": "runs/ladder-k40"
   },
-  "code_commit": "147b3da8e4420c2b0f3129142875688922a0ffd6",
+  "code_commit": "e49d3946dbceda0e3211cc9ba5b70ef47df6b0a2",
   "cost_figures_are_lower_bounds": "Every dollar figure in METHODS is computed from retained token counts. A provider retry is billed in full and never written, so true spend is higher. The gap was observed once, during a stalled pass, and is not recomputable from this archive; see METHODS 5.4.",
   "expected_json_sha256": "eb7739f0865ae89bf2cea783bd6c4bcd06e2deff15ec8b9c0b40e49cd0488cdd",
   "files": {
-    "MANIFEST.json": "394798a152e8722a1c06796ed7b0a963d3be445084bd6731f78047a6cac33a1a",
-    "SHA256SUMS": "0e7e6fd072ea1b587ac393e971b4bc9de60c85eab2fc266070a509dd85d62342",
+    "MANIFEST.json": "b477a003e46947bc728a9bd59454c1871e8bfc78f8f3aa2834793f4c065418f2",
+    "SHA256SUMS": "9e28359f88ffd96f0c997e95a2e142b1edda3cdc73f9c0e2624f949c5d37d79c",
+    "data/helpsteer2-ladder.jsonl": "d7df63ab1e61de5608ff6a5deee92ef9dabb628319cd1665f4988dfda44df9ae",
     "data/helpsteer2.jsonl": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
     "environment/pyproject.toml": "b3e624b55b5fa2e484776c2b03e68014ae8f64e0f322d677d741a634af9144e2",
     "environment/uv.lock": "4737ab77a183092cb6b42fe04532a353a57b27e86dd585a1821edf9556a50fe4",
     "expected.json": "eb7739f0865ae89bf2cea783bd6c4bcd06e2deff15ec8b9c0b40e49cd0488cdd",
+    "plans/ladder-plan-k30.json": "d835cd7aa62266b8c193e33cc29ef269c90d6bbb34e6a51912650e5161e0165c",
+    "plans/ladder-plan.json": "87bd3be9c768a79c43e6f05971f8c2e35675eca5fc85a6fce4e13009a81fb2ec",
     "runs/calib/calls.jsonl": "16c88c402071170fb20dc552cee51f6b3862643c57f82ed2be05490fe7552f79",
     "runs/calib/items.jsonl": "897ca4ea4bac132b197ce6c25248fb6d60dab5af53faf72d54e702fd146c2473",
     "runs/calib/meta.json": "766bae4ea2aad331ed0c7cdcdc87a886927a702934655b7017d71a958cbb40b4",
@@ -35,7 +38,7 @@
     "runs/calib2/meta.json": "34b5629de40a39d344d90eb9cb341c915b8026eaf3b25a7e821f02123c2884be",
     "runs/ladder-k40/calls.jsonl": "554750bb6716c3f220e6f16ec2ff993915bd4727d2489d37cf9accf65d1732ed",
     "runs/ladder-k40/items.jsonl": "1b338ef4a4ca915c1cbd217ffab32d4ce7798494b9252457dcdef964dec33788",
-    "runs/ladder-k40/meta.json": "52b4de408d76e6676a481ebc5c5cd22be882ee040572bf57f8446afdb6d651e9",
+    "runs/ladder-k40/meta.json": "8e0a81628d62c46a68a84261a901d39eac75cd573d4de89d6f547d397cff657e",
     "runs/ladder/calls.jsonl": "87bdb7802a58c35ebf78ee37fd54d8967d583075c1d6812bd19319e55b3c0198",
     "runs/ladder/items.jsonl": "6e672b5372af59b18a3878d2694481bb0e7dfc6873b9cb1ab5b4276482c75e29",
     "runs/ladder/meta.json": "155a0c52de03216a418035aaa7c4d1bbc839ad9aaf67223b94fee10a33ee7e7d",
@@ -46,15 +49,32 @@
     "runs/sweep/items.jsonl": "b44aaf2c1d97dfb0f0eef58e3ec5434c91e99d4c2e9224d0396d95e6e6474a54",
     "runs/sweep/meta.json": "852780ec0cc08856f88d22bbf599b63537091b867ef537c7b7da60aaeb7afa85"
   },
-  "frame": {
-    "dataset_licence": "CC-BY-4.0",
-    "dataset_sha256": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
-    "dataset_source": "nvidia/HelpSteer2",
-    "fetch_command": "packing fetch --limit 200",
-    "n_items": 200,
-    "ordered_item_id_sha256": "756c1d1a432f09266e495dd7c3b125cfc7ec1d242aff514e52ff7addbfa6b563",
-    "path": "data/helpsteer2.jsonl"
-  },
+  "frames": [
+    {
+      "dataset_licence": "CC-BY-4.0",
+      "dataset_sha256": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
+      "dataset_source": "nvidia/HelpSteer2",
+      "fetch_command": "packing fetch --limit 200",
+      "is_primary": true,
+      "n_items": 200,
+      "ordered_item_id_sha256": "756c1d1a432f09266e495dd7c3b125cfc7ec1d242aff514e52ff7addbfa6b563",
+      "path": "data/helpsteer2.jsonl",
+      "used_by": []
+    },
+    {
+      "dataset_licence": "CC-BY-4.0",
+      "dataset_sha256": "d7df63ab1e61de5608ff6a5deee92ef9dabb628319cd1665f4988dfda44df9ae",
+      "dataset_source": "nvidia/HelpSteer2",
+      "fetch_command": "packing fetch --limit 1600",
+      "is_primary": false,
+      "n_items": 1600,
+      "ordered_item_id_sha256": "234f0ecb8363787a8e8a1d6516344ba3de0e5d36c5c1e63e910b2fa80fb46c12",
+      "path": "data/helpsteer2-ladder.jsonl",
+      "used_by": [
+        "ladder-k40"
+      ]
+    }
+  ],
   "model": "gpt-5-mini",
   "model_is_an_alias": true,
   "model_snapshot": null,
@@ -71,7 +91,7 @@
   ],
   "pinned_values": 40,
   "recompute_command": "packing reproduce --sums SHA256SUMS --strict",
-  "release": "packing-replication-v4",
+  "release": "packing-replication-v5",
   "request_settings": {
     "reasoning_effort": "low",
     "structured_outputs": "strict",
