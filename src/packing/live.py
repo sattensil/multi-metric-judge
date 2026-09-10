@@ -49,6 +49,56 @@ def verify_plan(plan: SamplingPlan, items_path: Path) -> None:
         )
 
 
+def verify_run_dir(run_dir: Path, plan: SamplingPlan) -> None:
+    """Refuse to append a different experiment into an existing run directory.
+
+    `items.jsonl` and `meta.json` are rewritten on every pass while
+    `calls.jsonl` is appended and deduplicated by call identity. That
+    combination is deliberate, because it is what lets a later rung extend an
+    earlier pass without repaying for it, and it is also how two different
+    plans could end up sharing one dataset: the surviving records would carry
+    identities the current items file no longer describes, and no downstream
+    step could separate them.
+
+    `levels` is allowed to grow, since extending the ladder is the intended
+    use. Everything that defines the instrument is immutable.
+    """
+    meta_path = run_dir / "meta.json"
+    if not meta_path.exists():
+        return
+    if not (run_dir / "calls.jsonl").exists():
+        return
+
+    import json
+
+    previous = json.loads(meta_path.read_text(encoding="utf-8"))
+    frozen = {
+        "model": plan.model,
+        "seed": plan.seed,
+        "manifest_sha256": plan.manifest_sha256,
+        "dataset_sha256": plan.dataset_sha256,
+    }
+    for field, expected in frozen.items():
+        found = previous.get(field)
+        if found is not None and found != expected:
+            raise IntegrityError(
+                f"{run_dir} already holds calls from a different plan: "
+                f"{field} was {str(found)[:16]}, this plan has "
+                f"{str(expected)[:16]}. Appending would mix two instruments in "
+                "one dataset. Use a new --name."
+            )
+
+    old_levels = previous.get("levels")
+    if old_levels is not None:
+        dropped = sorted(set(old_levels) - set(plan.levels))
+        if dropped:
+            raise IntegrityError(
+                f"{run_dir} holds calls at K = {dropped}, which this plan does "
+                "not include. The retained records would describe rungs the "
+                "items file no longer covers. Use a new --name."
+            )
+
+
 def rebuild_items(
     plan: SamplingPlan, items_path: Path
 ) -> tuple[list[PairedItem], list[CallSpec]]:

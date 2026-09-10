@@ -143,3 +143,53 @@ def test_every_computed_claim_is_either_pinned_or_declared_pending():
     assert not unaccounted, (
         f"computed but neither pinned nor declared pending: {sorted(unaccounted)}"
     )
+
+
+def test_a_computed_value_nobody_pinned_is_reported_as_a_gap():
+    """`compare` is driven by the expected file, so it cannot see this.
+
+    An unpinned claim is not merely unverified, it is invisibly unverified: the
+    run still prints PASS. That happened once here already, when the ladder
+    claims were unpinned during collection and the suite stayed green.
+    """
+    from packing.replication import coverage_gaps
+
+    actual = {
+        "methods_8_5": {"theta": -0.0629, "se": 0.0225, "trend_slope": -0.0096},
+        "methods_9_9": {"whatever": 1.0},
+    }
+    expected = {"methods_8_5": {"theta": -0.0629, "se": 0.0225}}
+
+    gaps = coverage_gaps(actual, expected)
+    assert any("trend_slope" in gap for gap in gaps), gaps
+    assert any("methods_9_9" in gap for gap in gaps), gaps
+    assert not any("theta" in gap for gap in gaps), "pinned values are not gaps"
+
+
+def test_full_coverage_reports_no_gaps():
+    from packing.replication import coverage_gaps
+
+    values = {"theta": -0.0629, "se": 0.0225}
+    assert coverage_gaps({"methods_8_5": values}, {"methods_8_5": values}) == []
+
+
+def test_the_shipped_expected_file_pins_every_computed_claim():
+    """The repository's own coverage, not a fixture's.
+
+    This is the assertion that would have caught the unpinned ladder claims,
+    and it is why `reproduce --strict` exists.
+    """
+    import json
+    from pathlib import Path
+
+    from packing.cli import _load_run
+    from packing.replication import compute_claims, coverage_gaps
+
+    root = Path(__file__).resolve().parents[1]
+    if not (root / "runs" / "ladder-k40" / "calls.jsonl").exists():
+        pytest.skip("run artifacts absent; see REPLICATION.md")
+
+    expected = json.loads(
+        (root / "replication" / "expected.json").read_text(encoding="utf-8")
+    )["claims"]
+    assert coverage_gaps(compute_claims(_load_run), expected) == []

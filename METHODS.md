@@ -951,8 +951,8 @@ first pass and is exploratory with respect to the pre-registered ladder.
 |---|---|
 | Calls planned | 7,776 (648 units x 2 sides x 6 rungs) |
 | Calls succeeded | 7,653 (98.4%) |
-| Never completed, after retry and replacement | 123 |
-| Retained unevaluable outputs, scored | 3 |
+| Returned unevaluable output, retained and scored | 3 |
+| Never returned anything, after retry | 120 |
 | Cached input tokens | 19.7% |
 
 Failure rows total 612, of which 414 are the exhausted-balance condition that
@@ -1012,10 +1012,23 @@ across 464 clusters instead of splitting them into five underpowered contrasts:
 | SE | 0.00284 |
 | p | **0.00072** |
 | 95% CI | [-0.01516, -0.00404] |
-| Factor against linear, LRT | lr 2.905, df 4, **p = 0.574** |
+| Factor against linear, LRT | lr 2.905, df 4, p = 0.574, unclustered |
 
-The slope is significant and there is **no detectable curvature**, so a single
-straight line fits every rung. Fitted against observed recovery:
+The slope is cluster-robust on the base prompt. The LRT is not: a
+likelihood-ratio test compares likelihoods and is unaffected by the robust
+covariance used for the standard errors, which also means it treats the repeated
+observations within a prompt as independent. It is a shape diagnostic, not a
+p-value that stands on its own, and it is reported here only with that label.
+
+The direction of that limitation is what makes it usable. Ignoring clustering
+overstates the information in the sample, so the test is too willing to reject
+linearity, and it did not reject. A properly clustered test would reject less
+readily still. So the honest statement is that **no curvature is detectable
+here**, not that linearity is established: with six rungs and per-rung intervals
+near five points wide, a moderate curve would survive this test comfortably.
+What the data support is a straight line as the most parsimonious description
+that is not contradicted, which is weaker than a demonstration of linearity and
+is the claim §8.5.4 makes. Fitted against observed recovery:
 
 | K | Fitted | Observed |
 |---|---|---|
@@ -1068,8 +1081,9 @@ alone reads as a uniform effect, which this is not.
 
 The judge tie rate rises steeply and monotonically, 0.30 to 0.63, which is the
 §5.2 pattern: the judge commits less as more criteria share the call. Unevaluable
-output is negligible on the completed run, because the retry and replacement path
-absorbed the transport failures that produced it on earlier passes.
+output is negligible on the completed run, because retrying the same identity
+absorbed the transport failures that produced it on earlier passes. Replacement
+from reserves was specified but never executed; see deviation 12.
 
 **Key secondary: the `numbers` correctness sentinel.** Directional recovery
 *improved*: +0.1215, 95% CI [0.0448, 0.1983], p = 0.0021, n = 181. Reported as a
@@ -1251,6 +1265,24 @@ pre-specified are labelled, so nothing post-hoc reads as a priori.
 11. **K = 30 rung added.** Collected after the first complete pass, to fill the
    gap between 20 and 40. It is not part of the pre-registered ladder and enters
    only the exploratory shape analysis, never the primary contrast.
+12. **Same-lane replacement specified but not executed.** The design reserves
+   spare units per lane so a transient transport failure can be replaced by
+   another unit from the same lane rather than left as a hole. The selection
+   rule exists and is tested, but nothing in the run path calls it, so no
+   replacement ever occurred. What absorbed the transport failures was retry of
+   the same call identity, which is a weaker guarantee: it recovers a failure
+   that stops recurring and does nothing for one that persists. The residue is
+   the 120 planned calls in §8.5 that never returned, and the analysis excludes
+   their pairs. Their distribution is the reassuring part, and it is the reason
+   this deviation does not threaten the result: by rung K = 1, 5, 10, 20, 30, 40
+   the counts are 1, 29, 40, 38, 3, 9. The losses sit in the middle of the
+   ladder and are near-absent at the rung carrying the primary contrast, so they
+   cannot be manufacturing the decline; had they clustered at K = 40 the
+   estimate would be suspect.
+   Because a transient failure is exogenous and content-independent by
+   construction, excluding it is missing-at-random with respect to the outcome;
+   the cost is precision, not bias. Wiring replacement is the first correction
+   for any future pass.
 
 ## References
 

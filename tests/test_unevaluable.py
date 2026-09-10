@@ -38,7 +38,6 @@ def test_transient_infrastructure(message):
         "context_length_exceeded: 41000 tokens > 32768",
         "content_filter triggered on the response",
         "model refused to answer",
-        "read timeout while streaming the completion",
         "generation timeout after 120s",
     ],
 )
@@ -120,6 +119,11 @@ def test_unknown_rule_is_rejected():
         "request timed out",
         "APITimeoutError()",
         "unexpected APITimeoutError()",
+        # The transport-level name for the same event, which urllib3 and
+        # requests both use. Classifying by phrasing rather than by event put
+        # these two in different tiers.
+        "Read timed out.",
+        "HTTPSConnectionPool: Read timed out. (read timeout=90)",
     ],
 )
 def test_a_bare_timeout_is_transient_never_fatal(message):
@@ -146,9 +150,51 @@ def test_a_disclosed_connect_timeout_is_still_transient():
 def test_a_phase_disclosed_timeout_outranks_the_bare_form():
     # The transient list carries the bare timeout language and contains these as
     # substrings, so precedence, not membership, is what keeps them class 2.
-    assert classify_failure("read timeout while streaming") == UNEVALUABLE
     assert classify_failure("generation timeout after 120s") == UNEVALUABLE
     assert classify_failure("stream timeout") == UNEVALUABLE
+
+
+def test_a_transport_read_timeout_is_not_a_disclosed_generation_phase():
+    """Only names that unambiguously mean generation may be scored.
+
+    "read timeout" is the transport-level name in urllib3 and requests, so
+    treating it as phase-disclosed made the class depend on which library
+    formatted the message: the same failure classified transient as "Request
+    timed out." and scoreable as "Read timed out. (read timeout=90)".
+    """
+    for message in (
+        "Read timed out.",
+        "requests.exceptions.ReadTimeout: Read timed out. (read timeout=90)",
+        "read timeout while streaming",
+    ):
+        assert classify_failure(message) == TRANSIENT, message
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Connection refused",
+        "[Errno 61] Connection refused",
+        "ECONNREFUSED 127.0.0.1:443",
+        "The server refused the connection",
+    ],
+)
+def test_a_refused_connection_is_transport_not_a_refusal(message):
+    """A connection that never reached the model cannot judge its content.
+
+    "refused" was a bare refusal marker, so substring matching scored a TCP
+    rejection as the judge declining to answer, which is a recovery miss
+    fabricated out of a network condition.
+    """
+    assert classify_failure(message) == TRANSIENT
+    assert classify_failure(message) != UNEVALUABLE
+
+
+def test_a_genuine_model_refusal_is_still_scoreable():
+    # Narrowing the refusal markers must not lose the case they exist for.
+    assert classify_failure("model refused to answer") == UNEVALUABLE
+    assert classify_failure("the model refused to comply") == UNEVALUABLE
+    assert classify_failure("response contained a refusal") == UNEVALUABLE
 
 
 REAL_CREDIT_ERROR = (

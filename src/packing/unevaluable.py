@@ -37,6 +37,13 @@ _TRANSIENT_MARKERS = (
     "connection reset",
     "connection aborted",
     "connection error",
+    # A refused connection never reached the model, so it cannot be a judgement
+    # about the content. Listed here explicitly because "refused" is also a
+    # refusal marker below, and substring matching would otherwise score a TCP
+    # rejection as the judge declining to answer.
+    "connection refused",
+    "econnrefused",
+    "refused the connection",
     "connect timeout",
     "connection timeout",
     "rate limit",
@@ -78,7 +85,11 @@ _UNEVALUABLE_MARKERS = (
     "context length",
     "content_filter",
     "content filter",
-    "refused",
+    # Narrowed from a bare "refused": that matched transport language such as
+    # "Connection refused" and turned a failure to reach the provider into a
+    # scored recovery miss.
+    "model refused",
+    "refused to answer",
     "refusal",
 )
 
@@ -101,8 +112,16 @@ _TERMINAL_BILLING = (
 # Checked before the transient markers. A phase-disclosed timeout names a phase where
 # load plausibly matters, so it must not be swallowed by the bare timeout
 # language in the transient list, which contains it as a substring.
+#
+# "read timeout" is deliberately absent. It is the standard transport-level name
+# in urllib3 and requests, not a statement about generation, and including it
+# made classification depend on incidental phrasing rather than on the event:
+# "Request timed out." classified transient while the same underlying failure
+# rendered as "Read timed out. (read timeout=90)" classified as scoreable. Only
+# names that unambiguously identify generation belong here, and the asymmetry
+# argument above resolves the doubtful cases toward transient: a wrongly
+# transient call costs sample, a wrongly scored one injects a false miss.
 _LOAD_PHASE_TIMEOUTS = (
-    "read timeout",
     "generation timeout",
     "stream timeout",
 )

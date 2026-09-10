@@ -32,7 +32,7 @@ from .criteria import Criterion
 from .dataset import PairedItem
 from .budget import near_cap
 from .score import Outcome, make_outcome, quadratic_weighted_kappa
-from .unevaluable import TRANSIENT, classify_failure, unevaluable_value
+from .unevaluable import FATAL, TRANSIENT, classify_failure, unevaluable_value
 
 SYNTHETIC_POSITIVE_CONTROLS = frozenset(
     {"contradict", "hedge", "lowercase", "offtopic", "slang", "typos"}
@@ -165,6 +165,15 @@ def build_outcomes(
             if rec.get("failure")
         )
         if TRANSIENT in classes:
+            continue
+        # A terminal failure is a harness or billing fault, never a judge
+        # behaviour, so it cannot become a scored miss. The current runner
+        # raises on this class rather than recording it, but records written
+        # under the earlier rule are still in the dataset, and every one of
+        # those happens to be superseded by a successful retry at the same
+        # identity. Skipping the class explicitly means that stays true by
+        # rule rather than by luck.
+        if FATAL in classes:
             continue
 
         if rec_a.get("failure") or rec_b.get("failure"):

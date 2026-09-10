@@ -16,6 +16,7 @@ from packing.live import (
     next_replacement,
     rebuild_items,
     verify_plan,
+    verify_run_dir,
 )
 from packing.sampling_plan import SamplingPlan, Unit, read_plan
 
@@ -283,3 +284,67 @@ def test_ladder_run_refuses_to_archive_under_the_ignored_path():
         )
         assert result.exit_code != 0
         assert "gitignore" in result.output.lower()
+
+
+def _meta(run_dir: Path, plan: SamplingPlan, **overrides) -> None:
+    """Write the metadata a previous pass would have left behind."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "calls.jsonl").write_text('{"identity":"prior"}\n', encoding="utf-8")
+    body = {
+        "model": plan.model,
+        "seed": plan.seed,
+        "manifest_sha256": plan.manifest_sha256,
+        "dataset_sha256": plan.dataset_sha256,
+        "levels": list(plan.levels),
+    }
+    body.update(overrides)
+    (run_dir / "meta.json").write_text(json.dumps(body), encoding="utf-8")
+
+
+def test_a_run_directory_will_not_accept_a_different_instrument(tmp_path: Path):
+    """Reusing --name across plans would mix two experiments in one dataset."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        _items("items.jsonl", 200)
+        runner.invoke(cli, _plan_args())
+        plan = read_plan(Path("plan.json"))
+
+        run_dir = Path("runs/reused")
+        _meta(run_dir, plan, manifest_sha256="a" * 64)
+        with pytest.raises(IntegrityError, match="different plan"):
+            verify_run_dir(run_dir, plan)
+
+        _meta(run_dir, plan, seed=plan.seed + 1)
+        with pytest.raises(IntegrityError, match="different plan"):
+            verify_run_dir(run_dir, plan)
+
+
+def test_a_run_directory_will_not_silently_orphan_a_paid_rung(tmp_path: Path):
+    """Records at a K the new plan omits would describe absent items."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        _items("items.jsonl", 200)
+        runner.invoke(cli, _plan_args())
+        plan = read_plan(Path("plan.json"))
+
+        run_dir = Path("runs/shrunk")
+        _meta(run_dir, plan, levels=list(plan.levels) + [999])
+        with pytest.raises(IntegrityError, match="K = \\[999\\]"):
+            verify_run_dir(run_dir, plan)
+
+
+def test_extending_the_ladder_into_an_existing_run_is_allowed(tmp_path: Path):
+    """The append path exists so a later rung need not repay for earlier ones."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        _items("items.jsonl", 200)
+        runner.invoke(cli, _plan_args())
+        plan = read_plan(Path("plan.json"))
+
+        run_dir = Path("runs/extended")
+        # A prior pass ran a strict subset of this plan's rungs.
+        _meta(run_dir, plan, levels=list(plan.levels)[:1])
+        verify_run_dir(run_dir, plan)
+
+        # And a fresh directory is always fine.
+        verify_run_dir(Path("runs/brand-new"), plan)

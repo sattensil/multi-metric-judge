@@ -476,15 +476,15 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <div class="cols two" style="align-items:center">
       <div>
         <svg class="chart" viewBox="0 0 600 150" role="img"
-             aria-label="Recovery change from K equals 1 to K equals 40: point estimate minus 7.7 points, 95 percent confidence interval from minus 12.4 to minus 2.9 points, entirely below zero.">
+             aria-label="Recovery change from K equals 1 to K equals 40: point estimate minus 6.29 points, 95 percent confidence interval from minus 10.71 to minus 1.86 points, entirely below zero.">
           <line class="grid" x1="60" y1="100" x2="540" y2="100"></line>
-          <line x1="470" y1="30" x2="470" y2="112" stroke="#5d7280" stroke-width="1" stroke-dasharray="4 4"></line>
-          <text class="axis" x="470" y="24" text-anchor="middle">no change</text>
-          <rect x="140" y="60" width="222" height="14" rx="7" fill="#f0a35e33" stroke="#f0a35e" stroke-width="1"></rect>
-          <circle cx="251" cy="67" r="7" fill="#f0a35e" stroke="#080b0f" stroke-width="2"></circle>
-          <text class="val" x="140" y="52" text-anchor="middle" fill="#f0a35e">&minus;12.4</text>
-          <text class="val" x="362" y="52" text-anchor="middle" fill="#f0a35e">&minus;2.9</text>
-          <text class="val" x="251" y="95" text-anchor="middle" fill="#f0a35e">&minus;7.7</text>
+          <line x1="460" y1="30" x2="460" y2="112" stroke="#5d7280" stroke-width="1" stroke-dasharray="4 4"></line>
+          <text class="axis" x="460" y="24" text-anchor="middle">no change</text>
+          <rect x="174.4" y="60" width="236" height="14" rx="7" fill="#f0a35e33" stroke="#f0a35e" stroke-width="1"></rect>
+          <circle cx="292.3" cy="67" r="7" fill="#f0a35e" stroke="#080b0f" stroke-width="2"></circle>
+          <text class="val" x="174.4" y="52" text-anchor="middle" fill="#f0a35e">&minus;10.7</text>
+          <text class="val" x="410.4" y="52" text-anchor="middle" fill="#f0a35e">&minus;1.9</text>
+          <text class="val" x="292.3" y="95" text-anchor="middle" fill="#f0a35e">&minus;6.3</text>
           <text class="axis" x="60"  y="120">&minus;15 pts</text>
           <text class="axis" x="540" y="120" text-anchor="end">+3 pts</text>
         </svg>
@@ -492,14 +492,14 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       </div>
       <div>
         <ul class="points tight">
-          <li><strong>p = 0.0016.</strong> One pre-registered test.</li>
+          <li><strong>p = 0.0054.</strong> One pre-registered test.</li>
           <li>Target pinned at <strong>position 0</strong> at every rung, so this
             is not position.</li>
           <li>Holds under <strong>all four</strong> unevaluable rules.</li>
         </ul>
       </div>
     </div>
-    <p class="note"><b>6,289 calls.</b> Design frozen before the first one.</p>
+    <p class="note"><b>7,653 calls.</b> Design frozen before the first one.</p>
   </div>
 </section>
 
@@ -581,7 +581,8 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <ul class="points tight">
           <li><strong>Slope &minus;0.0096</strong> log-odds per criterion,
             p = <strong>0.0007</strong>.</li>
-          <li>No curvature. A straight line fits every rung
+          <li><strong>No curvature I can detect</strong>, so a line is the
+            simplest description left standing
             (<span class="mono">p = 0.57</span>).</li>
           <li>Only K = 40 clears its own noise. <strong>That is the power curve,
             not a threshold.</strong></li>

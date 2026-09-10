@@ -234,3 +234,68 @@ def test_workers_one_is_valid(tmp_path: Path) -> None:
         _specs(items), SlowProvider(_truth_fn(items)), path, workers=1
     )
     assert stats.written == len(_specs(items))
+
+
+class BillingCliffProvider:
+    """Succeeds slowly, except the first call, which reports a dead balance.
+
+    Models the failure that actually stopped a paid pass: an exhausted balance
+    arrives as a `ProviderError`, and its message classifies as terminal. Every
+    call after it would be billed and then thrown away, so the queue has to stop
+    rather than drain.
+    """
+
+    name = "cliff"
+    price_in_per_m = 0.0
+    price_out_per_m = 0.0
+
+    def __init__(self, truth_fn, delay: float = 0.005):
+        self.model = "cliff"
+        self.truth_fn = truth_fn
+        self.delay = delay
+        self.calls = 0
+        self._lock = threading.Lock()
+
+    def judge(self, prompt, group, budget: Budget) -> JudgeResult:
+        import time
+
+        with self._lock:
+            self.calls += 1
+            n = self.calls
+        if n == 1:
+            raise ProviderError(
+                "Error code: 400 - {'error': {'code': 'credit_balance_exhausted'}}"
+            )
+        time.sleep(self.delay)
+        return JudgeResult(
+            evaluations={
+                c.key: {"score": self.truth_fn(prompt, c), "reasoning": "r", "evidence": "e"}
+                for c in group
+            },
+            input_tokens=100,
+            output_tokens=50 * len(group),
+        )
+
+
+def test_a_terminal_billing_error_stops_the_queue_instead_of_draining_it(
+    tmp_path: Path,
+) -> None:
+    """A dead balance must cancel queued work, not bill for all of it.
+
+    The failure is silent and expensive: the pool is exited by an exception, and
+    `ThreadPoolExecutor.__exit__` waits for every queued future, so without the
+    abort flag a terminal error still pays for the remainder of the run.
+    """
+    items = _items(60, seed=77)
+    specs = _specs(items)
+    assert len(specs) > 40, "need a queue deep enough for draining to be visible"
+    provider = BillingCliffProvider(_truth_fn(items))
+
+    with pytest.raises(FatalProtocolError, match="credit_balance_exhausted"):
+        execute_concurrent(specs, provider, tmp_path / "cliff.jsonl", workers=4)
+
+    # In-flight calls are allowed to land; the rest of the queue must not run.
+    assert provider.calls < len(specs) / 2, (
+        f"queue drained after a terminal billing error: {provider.calls} of "
+        f"{len(specs)} calls were billed"
+    )

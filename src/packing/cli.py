@@ -1462,7 +1462,7 @@ def ladder_run_cmd(
     Consumes the artifact rather than re-screening, so the sample cannot drift
     between planning and execution.
     """
-    from .live import archive_run, rebuild_items
+    from .live import archive_run, rebuild_items, verify_run_dir
     from .runner import execute_concurrent
     from .sampling_plan import read_plan
 
@@ -1480,7 +1480,8 @@ def ladder_run_cmd(
     console.print(f"units {plan.active_count}, calls {len(specs)}, model {plan.model}")
     console.print(
         f"[bold]cost ceiling ${projection['usd_total_ceiling']:.2f}[/bold] "
-        "(actual will be lower)"
+        "for one attempt per call; provider retries bill on top and are not "
+        "counted here, so this is not a bound on the invoice"
     )
 
     if not confirm_spend:
@@ -1496,6 +1497,9 @@ def ladder_run_cmd(
         )
 
     run_dir = _run_dir(name)
+    # Before anything is overwritten: an existing run directory may already hold
+    # paid calls, and only some of this metadata may legitimately change.
+    verify_run_dir(run_dir, plan)
     run_dir.mkdir(parents=True, exist_ok=True)
     write_jsonl(items, run_dir / "items.jsonl")
     (run_dir / "meta.json").write_text(
@@ -1599,8 +1603,16 @@ CLAIM_RUNS: tuple[str, ...] = (
     "--tolerance", type=float, default=None,
     help="Float comparison tolerance. Counts and ids are always exact.",
 )
+@click.option(
+    "--strict", is_flag=True,
+    help="Fail if any recomputed claim value is not pinned in the expected file.",
+)
 def reproduce_cmd(
-    expected_path: str, sums_path: str | None, root: str, tolerance: float | None
+    expected_path: str,
+    sums_path: str | None,
+    root: str,
+    tolerance: float | None,
+    strict: bool,
 ) -> None:
     """Recompute every published claim from retained artifacts. No API key.
 
@@ -1611,6 +1623,7 @@ def reproduce_cmd(
         FLOAT_TOLERANCE,
         compare,
         compute_claims,
+        coverage_gaps,
         verify_checksums,
     )
 
@@ -1656,14 +1669,33 @@ def reproduce_cmd(
             if not result.ok:
                 console.print(f"[red]{result.line}[/red]")
 
+    gaps = coverage_gaps(claims, expected)
+    if gaps:
+        console.print("\n[yellow]unpinned, so recomputed but not verified:[/yellow]")
+        for gap in gaps:
+            console.print(f"[yellow]  {gap}[/yellow]")
+
     console.print()
     if failures:
         raise click.ClickException(
             f"MISMATCH: {len(failures)} of {len(results)} values disagree"
         )
+    if gaps and strict:
+        raise click.ClickException(
+            f"{len(gaps)} computed value(s) are not pinned; --strict treats an "
+            "unverified claim as a failure"
+        )
     console.print(
         f"[bold green]PASS[/bold green]: {len(results)} published values "
         "recomputed from retained artifacts"
+    )
+    # State the boundary in the same breath as the result. A PASS that reads as
+    # "the whole document is verified" is worse than no check at all.
+    console.print(
+        "[dim]covers METHODS 8.1, 8.3, 8.3.2 and 8.5. Not covered here: the "
+        "calibration gate (3.3, 8.2), which needs `packing calibration-report`, "
+        "and the ladder diagnostics (8.5.2, 8.5.3), which need "
+        "`packing ladder-analyze`.[/dim]"
     )
     if missing:
         console.print(

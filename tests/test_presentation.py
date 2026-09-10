@@ -10,6 +10,7 @@ is baked into the markup rather than fetched.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -153,3 +154,87 @@ def test_readme_documents_the_channel_and_both_views() -> None:
     readme = _read("README.md")
     for needle in (CHANNEL, "index.html", "presenter.html"):
         assert needle in readme
+
+
+def _strip_js_comments_and_scan(src: str) -> list[int]:
+    """Offsets where a string literal is immediately followed by another one.
+
+    Two adjacent string literals with no comma between them is a syntax error
+    inside an array literal, and it is the exact failure a hand-edited notes
+    array invites: replace a block of bullets, forget the comma on the last
+    surviving line. `_js_array` cannot see it, because it only splits at depth
+    1 and the notes live nested inside a `say:` array, so the whole presenter
+    script silently fails to parse and the operator gets no notes and no
+    controls. Nothing else in this suite executes the JavaScript.
+    """
+    offenders: list[int] = []
+    i, quote, escaped, comment = 0, "", False, ""
+    end_of_string = -1
+    while i < len(src):
+        char, pair = src[i], src[i:i + 2]
+        if comment == "line":
+            if char == "\n":
+                comment = ""
+        elif comment == "block":
+            if pair == "*/":
+                comment = ""
+                i += 1
+        elif quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+                end_of_string = i
+        elif pair == "//":
+            comment = "line"
+            i += 1
+        elif pair == "/*":
+            comment = "block"
+            i += 1
+        elif char in "\"'`":
+            if end_of_string >= 0 and not src[end_of_string + 1:i].strip():
+                offenders.append(i)
+            quote = char
+        elif not char.isspace():
+            end_of_string = -1
+        i += 1
+    return offenders
+
+
+@pytest.mark.parametrize("view", ["index.html", "presenter.html"])
+def test_inline_script_has_no_adjacent_string_literals(view: str) -> None:
+    src = _read(view)
+    for block in re.findall(r"<script[^>]*>(.*?)</script>", src, re.S):
+        offenders = _strip_js_comments_and_scan(block)
+        assert not offenders, (
+            f"{view}: string literal followed by another with no comma at "
+            f"offsets {offenders}; the script will not parse"
+        )
+
+
+def test_the_deck_reports_the_published_ladder_numbers() -> None:
+    """The claim slide is the one people photograph, so it may not drift.
+
+    Pinned against `replication/expected.json` rather than a literal, so the
+    deck and the published claims cannot disagree: a re-pin that moves theta
+    fails here until the slide and the notes are moved with it.
+    """
+    expected = json.loads(
+        (Path(__file__).resolve().parents[1] / "replication" / "expected.json").read_text()
+    )
+    ladder = expected["claims"]["methods_8_5"]
+    index, presenter = _read("index.html"), _read("presenter.html")
+
+    for value in (ladder["theta"], ladder["ci_low"], ladder["ci_high"]):
+        rendered = f"{abs(value) * 100:.1f}"
+        assert rendered in index, f"{rendered} (from {value}) is not on a slide"
+
+    calls = f"{ladder['successful_calls']:,}"
+    assert calls in index, f"successful call count {calls} is not on a slide"
+    assert calls in presenter, f"successful call count {calls} is not in the notes"
+
+    superseded = ("&minus;7.7", "6,289", "p = 0.0016")
+    for stale in superseded:
+        assert stale not in index, f"superseded value {stale!r} is still on a slide"

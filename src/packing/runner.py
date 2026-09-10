@@ -34,7 +34,13 @@ from .partition import (
 from .prompt import build, token_estimate
 from .providers.base import JudgeProvider, ProviderError
 from .schema import schema_token_estimate
-from .unevaluable import FATAL, TRANSIENT, FatalProtocolError, classify_failure
+from .unevaluable import (
+    FATAL,
+    TRANSIENT,
+    UNEVALUABLE,
+    FatalProtocolError,
+    classify_failure,
+)
 
 
 @dataclass(frozen=True)
@@ -122,7 +128,13 @@ def estimate(specs: list[CallSpec]) -> dict[str, Any]:
             response_text=spec.response_text,
         )
         input_tokens += token_estimate(prompt) + schema_token_estimate(spec.group)
-        output_ceiling += budget_for(len(spec.group)).content_budget
+        # The full completion ceiling, reasoning headroom included. Providers
+        # bill reasoning as output tokens, which is the reason the headroom is
+        # reserved at all, so charging the projection only for `content_budget`
+        # understated the figure the run is authorised against: 512 tokens per
+        # call, which on the 7,776-call ladder is 4.0M tokens, or about $8 at
+        # the gpt-5-mini output price against a projection near $26.
+        output_ceiling += budget_for(len(spec.group)).max_output_tokens
 
     return {
         "calls": len(specs),
@@ -134,10 +146,17 @@ def estimate(specs: list[CallSpec]) -> dict[str, Any]:
 def project_cost(
     estimate_dict: dict[str, Any], price_in_per_m: float, price_out_per_m: float
 ) -> dict[str, float]:
-    """Upper bound: assumes every call fills its output budget, which it will not.
+    """Upper bound per attempt: every call fills its budget, which it will not.
 
     Deliberately pessimistic -- a dry run that under-promises is useless for
     deciding whether to spend.
+
+    One thing it cannot bound. This prices the planned calls once each, and a
+    provider-level retry is a fully billed call that never reaches the record,
+    so a run that retries heavily can exceed this figure. It is a ceiling on the
+    experiment, not on the invoice; the observed gap on a stalled pass was 3.4x
+    on input tokens. Cap the exposure with `--sdk-retries` and treat the
+    provider dashboard as the only authoritative spend.
     """
     cost_in = estimate_dict["est_input_tokens"] / 1e6 * price_in_per_m
     cost_out = estimate_dict["est_output_tokens_ceiling"] / 1e6 * price_out_per_m
@@ -209,7 +228,15 @@ def completed_identities(path: Path) -> set[str]:
             # A transient failure is not complete: resume must retry it. Only a
             # success or a terminal class-2 record closes an identity, or a
             # network blip would silently become a permanent hole in the design.
-            if record.get("failure_class") == TRANSIENT:
+            #
+            # Re-derived from the message rather than read from the record, to
+            # match `analyze.build_outcomes`. The stored field carries whatever
+            # rule was live when the row was written, and this dataset spans a
+            # change to it. Where the two disagreed the pair went missing
+            # permanently: resume saw a stored class it treats as closed and
+            # never retried, while analysis re-derived transient and dropped it.
+            message = record.get("failure")
+            if message and classify_failure(message) != UNEVALUABLE:
                 continue
             identity = record.get("identity")
             if identity:
@@ -315,7 +342,17 @@ def execute_concurrent(
                 except ProviderError as exc:
                     # Persisted, not just logged: a class-2 failure is part of
                     # the treatment and has to reach the scoring rule.
-                    failure_record = _build_failure_record(spec, str(exc))
+                    try:
+                        failure_record = _build_failure_record(spec, str(exc))
+                    except FatalProtocolError:
+                        # A provider error whose message is terminal, such as an
+                        # exhausted balance, is classified here rather than
+                        # thrown by the call. Raising it from inside this handler
+                        # skips the FatalProtocolError clause below, so the flag
+                        # has to be set here or the pool drains the whole queue
+                        # on the way out and bills for every call in it.
+                        abort.set()
+                        raise
                     with write_lock:
                         fh.write(
                             json.dumps(failure_record, separators=(",", ":")) + "\n"
@@ -339,9 +376,12 @@ def execute_concurrent(
                     raise
                 except Exception as exc:  # noqa: BLE001 - unexpected, still must not lose the run
                     # Unrecognised failures classify as fatal, so this raises and
-                    # aborts rather than recording a quiet miss.
+                    # aborts rather than recording a quiet miss. Set the flag
+                    # first: whether the classification raises or this re-raises,
+                    # the queue must not keep issuing paid calls.
+                    abort.set()
                     _build_failure_record(spec, f"unexpected {exc!r}")
-                    raise  # pragma: no cover - _build_failure_record always raises here
+                    raise
 
                 if outcome is None:
                     continue

@@ -237,6 +237,30 @@ def compare(
     return results
 
 
+def coverage_gaps(
+    actual: dict[str, dict[str, Any]], expected: dict[str, dict[str, Any]]
+) -> list[str]:
+    """Claim values that were recomputed but are not pinned to anything.
+
+    `compare` is driven by the expected file, so a value the analysis computes
+    and nobody froze is not verified and, worse, is not visibly unverified: the
+    run still reports PASS. That is the shape of the mistake this whole layer
+    exists to prevent, and it has already happened once in this project, when
+    the ladder claims were unpinned during collection and the suite stayed
+    green. Reported so the gap is loud rather than absent.
+    """
+    gaps: list[str] = []
+    for section, values in sorted(actual.items()):
+        pinned = expected.get(section)
+        if pinned is None:
+            gaps.append(f"{section}: computed but no pinned section ({len(values)} values)")
+            continue
+        for key in sorted(values):
+            if key not in pinned:
+                gaps.append(f"{section}.{key}: computed but not pinned")
+    return gaps
+
+
 def verify_checksums(sums_path: Path, root: Path) -> list[str]:
     """Check every file listed in a SHA256SUMS against `root`.
 

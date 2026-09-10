@@ -326,8 +326,8 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
     {
       say: [
         "So I built the design the last slide demanded. Target criterion pinned at position zero in every condition, companions padding the call up to forty. Position cannot move, because it is nailed down.",
-        "<b>Minus 7.7 points of recovery, confidence interval minus 12.4 to minus 2.9, p of 0.0016.</b> One pre-registered test, so no multiplicity to argue about.",
-        "6,289 calls. The protocol was frozen and committed before the first one went out.",
+        "<b>Minus 6.3 points of recovery, confidence interval minus 10.7 to minus 1.9, p of 0.0054.</b> One pre-registered test, so no multiplicity to argue about.",
+        "7,653 calls. The protocol was frozen and committed before the first one went out.",
         "<b>And it survives the handling decision most able to fake it.</b> Unevaluable output scored four different ways: as a miss, as a hit at the far end, as a hit at the near end, and excluded entirely. All four keep the sign and exclude zero."
       ],
       dir: "<b>This is the new result and the slide they photograph.</b> Give it silence. Lead with the interval, not the point estimate. If someone asks whether it is really load, say no and go to slide 17."
@@ -355,13 +355,13 @@ main{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(28
       say: [
         "So let me answer the question this whole talk sets up. I added criteria until it broke. Where does it break?",
         "<b>It does not break. It bends, and it was bending the whole time.</b>",
-        "Fit recovery against criteria per call and the slope is minus 0.0096 log-odds per criterion, p of 0.0007. Test whether a straight line is enough and you cannot reject it: p of 0.57. <b>One line fits every rung from one to forty.</b>",
+        "Fit recovery against criteria per call and the slope is minus 0.0096 log-odds per criterion, p of 0.0007. That fit is cluster-robust on the source prompt.",
+        "Then test whether a straight line is enough, and you cannot reject it: p of 0.57. <b>Say cannot reject, not proven.</b> That test ignores clustering, which makes it too eager to reject, and it still did not, so a curve is not hiding in here. But six rungs cannot establish linearity and I will not claim they do.",
         "So why did only forty come back significant? Because each individual rung carries an interval about five points wide, and the accumulated decline only clears that at forty. <b>Forty is where my measurement catches up, not where the judge changes behaviour.</b>",
-        "<b>If I had put a threshold on this slide I would have been reading my own power curve.</b> There is no cliff. There is a slope, and you pick where on it you are willing to sit."
-        "<b>I do not know, and I want to be precise about why.</b> Forty breaks. Five does not. The rungs in between all came back null.",
-        "But look at the point estimates: plus 0.03 at five, then minus 0.02, minus 0.04, minus 0.08. Monotone from ten onward. <b>That pattern is exactly what a crossing point looks like, and I cannot claim it.</b>",
-        "Each of those middle rungs carries an interval about five points wide. A true effect of two or four points is invisible to them. <b>Absence of significance there is absence of power, not evidence of no effect.</b>",
-        "<b>The study that answers it:</b> drop five, it is answered twice already. Put roughly two hundred units per operation on ten, twenty and thirty, which is four times the sample to halve the interval. And pre-register the trend test, rather than fitting a shape to a curve I have already seen."
+        "<b>If I had put a threshold on this slide I would have been reading my own power curve.</b> There is no cliff. There is a slope, and you pick where on it you are willing to sit.",
+        "The rungs themselves say the same thing quietly: plus 0.04 at five, then minus 0.01, minus 0.01, minus 0.03, minus 0.06. <b>Monotone from five onward, and only forty clears its own interval.</b>",
+        "Each intermediate rung carries an interval near five points wide, so a true effect of two or three points is invisible to it. <b>Those nulls are absence of power, not evidence of absence.</b>",
+        "<b>The study that answers the shape properly:</b> roughly two hundred units per operation on ten, twenty and thirty, which is four times the sample to halve the interval. And pre-register the trend test, rather than fitting a shape to a curve I have already seen."
       ],
       dir: "<b>This is the payoff slide for the premise.</b> The interesting answer is that the question was wrong: there is no threshold, there is a slope. Say the trend numbers, then say why the individual rungs looked null. The trend test was not pre-registered, so call it exploratory out loud."
     },
