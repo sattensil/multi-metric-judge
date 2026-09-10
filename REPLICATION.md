@@ -99,17 +99,17 @@ inside the bundle rather than being available on request.
 ## The replication bundle
 
 ```bash
-uv run packing bundle --out dist --version v3
+uv run packing bundle --out dist --version v4
 ```
 
-Builds `dist/packing-replication-v3.tar.gz`, 15.2 MB, containing the pinned frame,
+Builds `dist/packing-replication-v4.tar.gz`, 15.2 MB, containing the pinned frame,
 the retained call records for every run that backs a published claim, the frozen
 expected values, `uv.lock`, a `MANIFEST.json` recording the code commit and
 request settings, and `SHA256SUMS` over every file. Building uploads nothing;
 publishing is a separate deliberate step.
 
 `replication/RELEASE.json` is the committed pointer: release identifier, archive
-SHA-256 `ebb2e76cc1582558`, a digest for all 24 files, the code commit, model and
+SHA-256 `cc34a847b954a599`, a digest for all 24 files, the code commit, model and
 request settings, the per-section commands, and the approximate call date range.
 `dist/` itself is gitignored, so 40 MB of append-only call records never enter
 clone history; the archive is a release asset.
@@ -119,9 +119,9 @@ clone history; the archive is a release asset.
 The CLI resolves a run name to `runs/<name>/`, so the archive has to land there:
 
 ```bash
-tar xzf packing-replication-v3.tar.gz
-cp -R packing-replication-v3/runs/. runs/
-cp packing-replication-v3/data/*.jsonl data/
+tar xzf packing-replication-v4.tar.gz
+cp -R packing-replication-v4/runs/. runs/
+cp packing-replication-v4/data/*.jsonl data/
 uv run packing reproduce
 ```
 

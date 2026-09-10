@@ -1,11 +1,14 @@
 {
   "analysis_notes": [
-    "Failure class is re-derived from the message at analysis time, not read from the record, because the run spans a change to the rule (METHODS 10.9).",
-    "The trend test in 8.5.1 was not pre-registered and is exploratory (METHODS 10.10). The K = 30 rung was added after the first pass (METHODS 10.11)."
+    "Failure class is re-derived from the message at analysis time, not read from the record, because the run spans a change to the rule (METHODS 10.9). Resume re-derives it too, so the two agree.",
+    "The trend test in 8.5.1 was not pre-registered and is exploratory (METHODS 10.10). The K = 30 rung was added after the first pass (METHODS 10.11).",
+    "The factor-against-linear likelihood ratio in 8.5.1 is unclustered and is a shape diagnostic, not a standalone p-value. It cannot establish linearity; it failed to detect curvature (METHODS 8.5.1).",
+    "Replacement from lane reserves was specified and tested but never wired into the run path, so 120 planned calls were simply never completed. They sit in the middle rungs, not at K = 40 (METHODS 10.12).",
+    "`packing reproduce` covers METHODS 8.1, 8.3, 8.3.2 and 8.5. The calibration gate needs `packing calibration-report`; the ladder diagnostics in 8.5.2 and 8.5.3 need `packing ladder-analyze`. Use `--strict` to fail on any computed value that is not pinned."
   ],
-  "archive": "packing-replication-v3.tar.gz",
-  "archive_sha256": "ebb2e76cc158255856f05d405d598211b499a028dd6dfb348d6f6a2e9ef73be5",
-  "archive_size_bytes": 15152021,
+  "archive": "packing-replication-v4.tar.gz",
+  "archive_sha256": "cc34a847b954a599b89aed68afdde51da1d94a9fb68287c6df453f2eefda1cbe",
+  "archive_size_bytes": 15152025,
   "built_from_branch": "packing-talk",
   "call_date_range_approximate": "2026-08-26 to 2026-09-09",
   "claims_backed": {
@@ -14,12 +17,12 @@
     "METHODS 8.3 and 8.3.2": "runs/sweep",
     "METHODS 8.5, 8.5.1 to 8.5.4": "runs/ladder-k40"
   },
-  "code_commit": "479e43a8d77ee268952e90fe9c15a3ef64483b6f",
+  "code_commit": "147b3da8e4420c2b0f3129142875688922a0ffd6",
   "cost_figures_are_lower_bounds": "Every dollar figure in METHODS is computed from retained token counts. A provider retry is billed in full and never written, so true spend is higher. The gap was observed once, during a stalled pass, and is not recomputable from this archive; see METHODS 5.4.",
   "expected_json_sha256": "eb7739f0865ae89bf2cea783bd6c4bcd06e2deff15ec8b9c0b40e49cd0488cdd",
   "files": {
-    "MANIFEST.json": "5dc118ba4f65c3a69929143db837def9c20ab59d40688541a90d32f500a61f5c",
-    "SHA256SUMS": "afd9c54477960b911ae8c366d00505e6fc8393cebdcb2207ecfefd449ed530e4",
+    "MANIFEST.json": "394798a152e8722a1c06796ed7b0a963d3be445084bd6731f78047a6cac33a1a",
+    "SHA256SUMS": "0e7e6fd072ea1b587ac393e971b4bc9de60c85eab2fc266070a509dd85d62342",
     "data/helpsteer2.jsonl": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
     "environment/pyproject.toml": "b3e624b55b5fa2e484776c2b03e68014ae8f64e0f322d677d741a634af9144e2",
     "environment/uv.lock": "4737ab77a183092cb6b42fe04532a353a57b27e86dd585a1821edf9556a50fe4",
@@ -67,8 +70,8 @@
     "methods_8_5"
   ],
   "pinned_values": 40,
-  "recompute_command": "packing reproduce --sums SHA256SUMS",
-  "release": "packing-replication-v3",
+  "recompute_command": "packing reproduce --sums SHA256SUMS --strict",
+  "release": "packing-replication-v4",
   "request_settings": {
     "reasoning_effort": "low",
     "structured_outputs": "strict",
@@ -76,11 +79,11 @@
   },
   "run_name_collision": "`ladder` is the severity ladder from calibration. `ladder-k40` is the fixed-position K = 40 experiment, rungs 1/5/10/20/30/40. Different runs, adjacent names.",
   "runs_included": [
-    "pilot",
-    "sweep",
     "calib",
     "calib2",
     "ladder",
-    "ladder-k40"
+    "ladder-k40",
+    "pilot",
+    "sweep"
   ]
 }
