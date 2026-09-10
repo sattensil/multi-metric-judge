@@ -3,7 +3,7 @@
     "Failure class is re-derived from the message at analysis time, not read from the record, because the run spans a change to the rule (METHODS 10.9). Resume re-derives it too, so the two agree.",
     "The trend test in 8.5.1 was not pre-registered and is exploratory (METHODS 10.10). The K = 30 rung was added after the first pass (METHODS 10.11).",
     "The factor-against-linear likelihood ratio in 8.5.1 is unclustered and is a shape diagnostic, not a standalone p-value. It cannot establish linearity; it failed to detect curvature (METHODS 8.5.1).",
-    "Replacement from lane reserves was specified and tested but never wired into the run path, so 120 planned calls were simply never completed. They sit in the middle rungs, not at K = 40 (METHODS 10.12).",
+    "Same-lane replacement is implemented and covers a replaced unit's whole ladder (METHODS 8.4). It had not run when these records were collected, so 120 planned calls were never completed; they sit in the middle rungs, and seven of 464 endpoint clusters were lost to the pairing requirement (METHODS 10.12).",
     "`packing reproduce` covers METHODS 8.1, 8.3, 8.3.2 and 8.5. The calibration gate needs `packing calibration-report`; the ladder diagnostics in 8.5.2 and 8.5.3 need `packing ladder-analyze`. Use `--strict` to fail on any computed value that is not pinned."
   ],
   "archive": "packing-replication-v4.tar.gz",

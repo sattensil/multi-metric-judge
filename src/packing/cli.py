@@ -1442,6 +1442,12 @@ def ladder_cmd(
     help="Where the run is copied after execution. Must not be under runs/.",
 )
 @click.option(
+    "--replacement-rounds", type=int, default=2, show_default=True,
+    help="Rounds of same-lane replacement for units left incomplete by "
+         "transient failures. Each round issues a full ladder per unit, so this "
+         "bounds the extra spend. Zero disables replacement.",
+)
+@click.option(
     "--confirm-spend", is_flag=True, default=False,
     help="Required to send anything. Without it this is a plan check only.",
 )
@@ -1455,6 +1461,7 @@ def ladder_run_cmd(
     sdk_retries: int,
     stall_seconds: float,
     archive_to: str,
+    replacement_rounds: int,
     confirm_spend: bool,
 ) -> None:
     """Execute a frozen ladder sampling plan.
@@ -1462,7 +1469,15 @@ def ladder_run_cmd(
     Consumes the artifact rather than re-screening, so the sample cannot drift
     between planning and execution.
     """
-    from .live import archive_run, rebuild_items, verify_run_dir
+    from .live import (
+        archive_run,
+        plan_replacements,
+        rebuild_items,
+        read_substitutions,
+        rebuild_with_replacements,
+        verify_run_dir,
+        write_substitution,
+    )
     from .runner import execute_concurrent
     from .sampling_plan import read_plan
 
@@ -1566,6 +1581,69 @@ def ladder_run_cmd(
     if stats.errors:
         for line in stats.errors[:10]:
             console.print(f"[yellow]{line}[/yellow]")
+
+    # Replacement, now that the pool has drained. A transient failure that
+    # outlived its retries leaves a unit with an incomplete ladder, and the
+    # primary estimator pairs within a unit across rungs, so an incomplete unit
+    # contributes nothing rather than contributing partially. Drawing a reserve
+    # from the same lane is what the design specified; running it here is what
+    # makes the specification true.
+    substitution_log = run_dir / "replacements.jsonl"
+    for attempt in range(1, replacement_rounds + 1):
+        recorded = read_substitutions(substitution_log)
+        pending = plan_replacements(
+            plan, Path(items_path), calls_path,
+            specs=specs, existing=recorded,
+        )
+        if not pending:
+            if attempt == 1:
+                console.print("no replacement needed: every unit is complete")
+            break
+
+        replacement_specs = [spec for _, _, specs_for in pending for spec in specs_for]
+        console.print(
+            f"[yellow]replacement round {attempt}: {len(pending)} unit(s) "
+            f"incomplete, {len(replacement_specs)} call(s) to issue[/yellow]"
+        )
+        for substitution, _, _ in pending:
+            console.print(
+                f"  {substitution.replaced_base_item_id} -> "
+                f"{substitution.replacement_base_item_id} "
+                f"({substitution.lane}/{substitution.operation}, "
+                f"{len(substitution.unresolved_identities)} open)"
+            )
+
+        # Recorded before the calls go out. A crash mid-round would otherwise
+        # re-draw a different reserve for the same unit on resume and pay twice.
+        for substitution, _, _ in pending:
+            write_substitution(substitution_log, substitution)
+
+        # The watchdog closes over `stop`, which the main pass has already set,
+        # so it has to be reopened for this round or the thread returns at once
+        # and a stalled replacement round would hang unwatched.
+        stop.clear()
+        threading.Thread(target=_watchdog, daemon=True).start()
+        try:
+            round_stats = execute_concurrent(
+                replacement_specs,
+                provider,
+                calls_path,
+                workers=workers,
+                max_failures=max_failures,
+            )
+        finally:
+            stop.set()
+        console.print(
+            f"round {attempt}: attempted {round_stats.attempted}, "
+            f"written {round_stats.written}, failed {round_stats.failed}"
+        )
+
+    # Items must include every replacement, or the calls just paid for cannot be
+    # scored and a resumed run cannot recognise them.
+    final_items, _ = rebuild_with_replacements(
+        plan, Path(items_path), read_substitutions(substitution_log)
+    )
+    write_jsonl(final_items, run_dir / "items.jsonl")
 
     destination = archive_run(run_dir, Path(archive_to))
     console.print(f"[bold]archived to {destination}[/bold]")

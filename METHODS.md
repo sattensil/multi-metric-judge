@@ -936,8 +936,30 @@ recency and distance from the end of context.
 
 The budget is computed by `packing ladder --dry-run` against the 40-criterion
 manifest, hash `721b8ac2a2a7e15f`. The ceiling assumes every call fills its output
-budget; the expected figure applies the 1.954 ceiling-to-actual ratio measured on
-the K = 20 sweep. Full protocol and per-case figures in the spec.
+budget, reasoning headroom included, since providers bill reasoning as output;
+the expected figure applies the 1.954 ceiling-to-actual ratio measured on the
+K = 20 sweep. It bounds one attempt per call and not the invoice, because a
+provider-level retry is billed without being recorded. Full protocol and
+per-case figures in the spec.
+
+**Failure handling and same-lane replacement.** The plan screens more eligible
+prompts than it uses and holds the surplus as reserves, one pool per lane, in a
+seeded order frozen with the plan. A call that fails for a content-independent
+transport reason is class 1 and is retried; if it is still unresolved when the
+pool drains, its unit is replaced by the next unused reserve from its own lane,
+inheriting the replaced unit's operation and response side so the per-operation
+quotas the estimator weights by are preserved. A class-2 failure is never
+replaced: unevaluable output is plausibly caused by the request, so replacing it
+would condition the analysis on surviving high load and bias degradation
+downward.
+
+Replacement is per unit and covers every rung, not only the rung that failed.
+The primary estimator pairs within a unit across the two endpoints and drops any
+unit missing one of them (§6.1), so a substitute supplying a single rung would
+cost a call and contribute nothing. Substitutions are recorded in the run before
+their calls are issued, which is what makes a resumed run continue the draw
+rather than hand the same reserve out twice. Exhausting a lane is an error: the
+alternative is a silently smaller sample and a different estimand.
 
 ### 8.5 Fixed-position load ladder: results
 
@@ -1279,10 +1301,14 @@ pre-specified are labelled, so nothing post-hoc reads as a priori.
    ladder and are near-absent at the rung carrying the primary contrast, so they
    cannot be manufacturing the decline; had they clustered at K = 40 the
    estimate would be suspect.
-   Because a transient failure is exogenous and content-independent by
-   construction, excluding it is missing-at-random with respect to the outcome;
-   the cost is precision, not bias. Wiring replacement is the first correction
-   for any future pass.
+   Seven of the 464 endpoint clusters were lost to the pairing requirement, so
+   the cost to the primary contrast is precision rather than a changed
+   conclusion. Because a transient failure is exogenous and content-independent
+   by construction, excluding it is missing-at-random with respect to the
+   outcome; the cost is precision, not bias. The replacement path described in
+   §8.4 is implemented and exercised end-to-end against a provider that fails
+   one unit persistently, but the §8.5 figures were collected before it ran, so
+   they carry the holes rather than the substitutes.
 
 ## References
 
