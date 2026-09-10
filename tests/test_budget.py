@@ -92,3 +92,19 @@ def test_near_cap_is_monotone_in_content() -> None:
 def test_near_cap_handles_reasoning_exceeding_output() -> None:
     """Defensive: a provider reporting inconsistent counts must not go negative."""
     assert not near_cap(1, 10, 999)
+
+
+def test_the_projected_ceiling_includes_billable_reasoning() -> None:
+    """A ceiling that omits a billed component is not a ceiling.
+
+    Providers bill reasoning tokens as output, which is the reason the headroom
+    is reserved in the first place. Charging the projection only for
+    `content_budget` understated the figure a paid run is authorised against by
+    the headroom on every call.
+    """
+    from packing.budget import REASONING_HEADROOM_TOKENS, budget_for
+
+    for k in (1, 5, 20, 40):
+        budget = budget_for(k)
+        assert budget.max_output_tokens == budget.content_budget + REASONING_HEADROOM_TOKENS
+        assert budget.max_output_tokens > budget.content_budget

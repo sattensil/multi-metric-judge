@@ -117,6 +117,12 @@ def schema_token_estimate(group: tuple[Criterion, ...]) -> int:
     return max(1, len(blob) // 4)
 
 
+def schema_token_upper_bound(group: tuple[Criterion, ...]) -> int:
+    """Conservative authorization bound for the serialized response schema."""
+    blob = json.dumps(group_schema(group), separators=(",", ":"))
+    return max(schema_token_estimate(group), len(blob.encode("utf-8")) + 128)
+
+
 def parse_evaluations(
     payload: dict[str, Any], group: tuple[Criterion, ...]
 ) -> dict[str, dict[str, Any]]:

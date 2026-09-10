@@ -2,10 +2,10 @@
 
 Purpose is twofold and both matter before any packing sweep is paid for:
 
-1. **Assign detection class by measurement, not intuition.** METHODS 3.4
-   hypothesises which operations are detectable without comprehension. That
-   hypothesis is untested. An operation whose detection rate at group_size = 1 is
-   at ceiling cannot exhibit degradation under packing, and pooling it with
+1. **Assign detection class by measurement, not intuition.** The catalogue
+   records which operations are expected to be detectable without
+   comprehension. An operation whose detection rate at group_size = 1 is at
+   ceiling cannot exhibit degradation under packing, and pooling it with
    operations that can would dilute a real effect toward the null.
 2. **Set severity.** An operation at ceiling needs less severity; one at floor
    needs more, or removal.
@@ -161,8 +161,7 @@ def agreement_with_hypothesis(verdicts: list[Verdict]) -> dict[str, Any]:
 
     The prediction is that `surface` operations land at ceiling and `semantic`
     operations land in band. Where measurement contradicts the hypothesis, the
-    measurement governs (METHODS 3.4) and the discrepancy is reported rather than
-    quietly reconciled.
+    measurement governs and the discrepancy is reported.
     """
     rows = [v for v in verdicts if v.role != "insufficient"]
     if not rows:

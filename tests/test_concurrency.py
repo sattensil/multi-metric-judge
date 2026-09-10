@@ -17,6 +17,7 @@ import pytest
 from packing.budget import Budget
 from packing.criteria import get_criteria
 from packing.providers.base import JudgeResult, ProviderError
+from packing.unevaluable import FatalProtocolError
 from packing.runner import (
     completed_identities,
     execute,
@@ -40,11 +41,21 @@ class SlowProvider:
     price_in_per_m = 0.0
     price_out_per_m = 0.0
 
-    def __init__(self, truth_fn, delay: float = 0.002, fail_every: int | None = None):
+    def __init__(
+        self,
+        truth_fn,
+        delay: float = 0.002,
+        fail_every: int | None = None,
+        failure_message: str = "truncated at max_completion_tokens=772",
+    ):
         self.model = "slow"
         self.truth_fn = truth_fn
         self.delay = delay
         self.fail_every = fail_every
+        # The message decides the failure class, so it is realistic rather than
+        # generic: an unrecognised message classifies as fatal and aborts the run
+        # by design, which is a different behaviour from a judge failing.
+        self.failure_message = failure_message
         self.calls = 0
         self._lock = threading.Lock()
 
@@ -56,7 +67,7 @@ class SlowProvider:
             n = self.calls
         time.sleep(self.delay)
         if self.fail_every and n % self.fail_every == 0:
-            raise ProviderError(f"synthetic failure #{n}")
+            raise ProviderError(f"{self.failure_message} (call {n})")
         return JudgeResult(
             evaluations={
                 c.key: {
@@ -134,7 +145,8 @@ def test_concurrent_resume_is_idempotent(tmp_path: Path) -> None:
     assert len(completed_identities(path)) == len(specs)
 
 
-def test_failures_are_counted_not_fatal(tmp_path: Path) -> None:
+def test_treatment_failures_are_counted_not_fatal(tmp_path: Path) -> None:
+    """A judge that truncates is data, not a crash: the run continues."""
     items = _items(10, seed=24)
     path = tmp_path / "calls.jsonl"
     stats = execute_concurrent(
@@ -167,6 +179,54 @@ def test_max_failures_aborts_and_preserves_work(tmp_path: Path) -> None:
         assert "identity" in record
 
 
+def test_an_unrecognised_failure_aborts_rather_than_being_scored(
+    tmp_path: Path,
+) -> None:
+    """Unknown failures are fatal by design.
+
+    A two-class scheme would score a configuration or SDK bug as a judge miss,
+    which is the one error mode no sample size fixes. So an unrecognised message
+    stops the run instead of becoming an observation.
+    """
+    items = _items(10, seed=26)
+    path = tmp_path / "calls.jsonl"
+    with pytest.raises(FatalProtocolError, match="unsupported parameter"):
+        execute_concurrent(
+            _specs(items),
+            SlowProvider(
+                _truth_fn(items),
+                fail_every=7,
+                failure_message="invalid_request_error: unsupported parameter",
+            ),
+            path,
+            workers=4,
+            max_failures=1000,
+        )
+
+
+def test_a_transient_failure_is_not_a_completed_identity(tmp_path: Path) -> None:
+    """Resume must retry a network blip rather than treat it as done."""
+    items = _items(10, seed=27)
+    path = tmp_path / "calls.jsonl"
+    stats = execute_concurrent(
+        _specs(items),
+        SlowProvider(
+            _truth_fn(items),
+            fail_every=5,
+            failure_message="Connection reset by peer",
+        ),
+        path,
+        workers=4,
+        max_failures=1000,
+    )
+    assert stats.failed > 0
+    done = completed_identities(path)
+    failures = [r for r in read_records(path) if r.get("failure")]
+    assert failures, "the failure rows are persisted"
+    for record in failures:
+        assert record["identity"] not in done
+
+
 def test_workers_one_is_valid(tmp_path: Path) -> None:
     items = _items(6, seed=26)
     path = tmp_path / "calls.jsonl"
@@ -174,3 +234,128 @@ def test_workers_one_is_valid(tmp_path: Path) -> None:
         _specs(items), SlowProvider(_truth_fn(items)), path, workers=1
     )
     assert stats.written == len(_specs(items))
+
+
+class BillingCliffProvider:
+    """Succeeds slowly, except the first call, which reports a dead balance.
+
+    Models the failure that actually stopped a paid pass: an exhausted balance
+    arrives as a `ProviderError`, and its message classifies as terminal. Every
+    call after it would be billed and then thrown away, so the queue has to stop
+    rather than drain.
+    """
+
+    name = "cliff"
+    price_in_per_m = 0.0
+    price_out_per_m = 0.0
+
+    def __init__(self, truth_fn, delay: float = 0.005):
+        self.model = "cliff"
+        self.truth_fn = truth_fn
+        self.delay = delay
+        self.calls = 0
+        self._lock = threading.Lock()
+
+    def judge(self, prompt, group, budget: Budget) -> JudgeResult:
+        import time
+
+        with self._lock:
+            self.calls += 1
+            n = self.calls
+        if n == 1:
+            raise ProviderError(
+                "Error code: 400 - {'error': {'code': 'credit_balance_exhausted'}}"
+            )
+        time.sleep(self.delay)
+        return JudgeResult(
+            evaluations={
+                c.key: {"score": self.truth_fn(prompt, c), "reasoning": "r", "evidence": "e"}
+                for c in group
+            },
+            input_tokens=100,
+            output_tokens=50 * len(group),
+        )
+
+
+def test_a_terminal_billing_error_stops_the_queue_instead_of_draining_it(
+    tmp_path: Path,
+) -> None:
+    """A dead balance must cancel queued work, not bill for all of it.
+
+    The failure is silent and expensive: the pool is exited by an exception, and
+    `ThreadPoolExecutor.__exit__` waits for every queued future, so without the
+    abort flag a terminal error still pays for the remainder of the run.
+    """
+    items = _items(60, seed=77)
+    specs = _specs(items)
+    assert len(specs) > 40, "need a queue deep enough for draining to be visible"
+    provider = BillingCliffProvider(_truth_fn(items))
+
+    with pytest.raises(FatalProtocolError, match="credit_balance_exhausted"):
+        execute_concurrent(specs, provider, tmp_path / "cliff.jsonl", workers=4)
+
+    # In-flight calls are allowed to land; the rest of the queue must not run.
+    assert provider.calls < len(specs) / 2, (
+        f"queue drained after a terminal billing error: {provider.calls} of "
+        f"{len(specs)} calls were billed"
+    )
+
+
+class FatalAfterSomeWork:
+    """Succeeds for a while, then reports a configuration fault.
+
+    The fault is the kind that must stop the run, but calls already in flight
+    when it fires still return and are still billed. Dropping their results
+    means buying them again on resume.
+    """
+
+    name = "fatal"
+    price_in_per_m = 0.0
+    price_out_per_m = 0.0
+
+    def __init__(self, truth_fn, fail_on: int = 20, delay: float = 0.01):
+        self.model = "fatal"
+        self.truth_fn = truth_fn
+        self.fail_on = fail_on
+        self.delay = delay
+        self.succeeded = 0
+        self._lock = threading.Lock()
+
+    def judge(self, prompt, group, budget: Budget) -> JudgeResult:
+        import time
+
+        with self._lock:
+            self.calls = getattr(self, "calls", 0) + 1
+            n = self.calls
+        if n == self.fail_on:
+            raise ProviderError("unsupported parameter: reasoning_effort")
+        time.sleep(self.delay)
+        result = JudgeResult(
+            evaluations={
+                c.key: {"score": self.truth_fn(prompt, c), "reasoning": "r", "evidence": "e"}
+                for c in group
+            },
+            input_tokens=100,
+            output_tokens=50 * len(group),
+        )
+        with self._lock:
+            self.succeeded += 1
+        return result
+
+
+def test_a_fatal_error_does_not_discard_billed_successes(tmp_path: Path) -> None:
+    """Every call the provider completed must appear in the resume file."""
+    items = _items(40, seed=91)
+    specs = _specs(items)
+    provider = FatalAfterSomeWork(_truth_fn(items), fail_on=20)
+    path = tmp_path / "fatal.jsonl"
+
+    with pytest.raises(FatalProtocolError, match="unsupported parameter"):
+        execute_concurrent(specs, provider, path, workers=8)
+
+    written = {r["identity"] for r in read_records(path) if not r.get("failure")}
+    assert provider.succeeded > 0, "the test needs some work to have landed"
+    assert len(written) == provider.succeeded, (
+        f"{provider.succeeded} calls were billed and succeeded but "
+        f"{len(written)} were written; the difference is paid work thrown away"
+    )

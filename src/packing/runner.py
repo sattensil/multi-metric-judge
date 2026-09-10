@@ -14,6 +14,7 @@ identical -- so it should be done once and reused for both.
 from __future__ import annotations
 
 import json
+import random
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -23,10 +24,23 @@ from typing import Any, Callable, Iterator
 from .budget import budget_for, near_cap
 from .criteria import Criterion
 from .dataset import PairedItem
-from .partition import Partition, make_partition, nominal_levels, partition_seed
-from .prompt import build, token_estimate
+from .partition import (
+    Partition,
+    Placement,
+    make_partition,
+    nominal_levels,
+    partition_seed,
+)
+from .prompt import build, token_estimate, token_upper_bound
 from .providers.base import JudgeProvider, ProviderError
-from .schema import schema_token_estimate
+from .schema import schema_token_estimate, schema_token_upper_bound
+from .unevaluable import (
+    FATAL,
+    TRANSIENT,
+    UNEVALUABLE,
+    FatalProtocolError,
+    classify_failure,
+)
 
 
 @dataclass(frozen=True)
@@ -106,6 +120,7 @@ def plan(
 def estimate(specs: list[CallSpec]) -> dict[str, Any]:
     """Dry-run token and cost projection. No network access."""
     input_tokens = 0
+    input_ceiling = 0
     output_ceiling = 0
     for spec in specs:
         prompt = build(
@@ -114,11 +129,21 @@ def estimate(specs: list[CallSpec]) -> dict[str, Any]:
             response_text=spec.response_text,
         )
         input_tokens += token_estimate(prompt) + schema_token_estimate(spec.group)
-        output_ceiling += budget_for(len(spec.group)).content_budget
+        input_ceiling += token_upper_bound(prompt) + schema_token_upper_bound(
+            spec.group
+        )
+        # The full completion ceiling, reasoning headroom included. Providers
+        # bill reasoning as output tokens, which is the reason the headroom is
+        # reserved at all, so charging the projection only for `content_budget`
+        # understated the figure the run is authorised against: 512 tokens per
+        # call, which on the 7,776-call ladder is 4.0M tokens, or about $8 at
+        # the gpt-5-mini output price against a projection near $26.
+        output_ceiling += budget_for(len(spec.group)).max_output_tokens
 
     return {
         "calls": len(specs),
         "est_input_tokens": input_tokens,
+        "est_input_tokens_ceiling": input_ceiling,
         "est_output_tokens_ceiling": output_ceiling,
     }
 
@@ -126,12 +151,25 @@ def estimate(specs: list[CallSpec]) -> dict[str, Any]:
 def project_cost(
     estimate_dict: dict[str, Any], price_in_per_m: float, price_out_per_m: float
 ) -> dict[str, float]:
-    """Upper bound: assumes every call fills its output budget, which it will not.
+    """Upper bound per attempt: every call fills its budget, which it will not.
 
     Deliberately pessimistic -- a dry run that under-promises is useless for
     deciding whether to spend.
+
+    One thing it cannot bound. This prices the planned calls once each, and a
+    provider-level retry is a fully billed call that never reaches the record,
+    so a run that retries heavily can exceed this figure. It is a ceiling on the
+    experiment, not on the invoice; the observed gap on a stalled pass was 3.4x
+    on input tokens. Cap the exposure with `--sdk-retries` and treat the
+    provider dashboard as the only authoritative spend.
     """
-    cost_in = estimate_dict["est_input_tokens"] / 1e6 * price_in_per_m
+    cost_in = (
+        estimate_dict.get(
+            "est_input_tokens_ceiling", estimate_dict["est_input_tokens"]
+        )
+        / 1e6
+        * price_in_per_m
+    )
     cost_out = estimate_dict["est_output_tokens_ceiling"] / 1e6 * price_out_per_m
     return {
         "usd_input": round(cost_in, 4),
@@ -141,6 +179,46 @@ def project_cost(
 
 
 # ------------------------------------------------------------------- resume ---
+
+
+def _build_failure_record(spec: CallSpec, message: str) -> dict[str, Any]:
+    """A failed call as a row, or an abort if the harness is at fault.
+
+    Class-2 failures may become more common at high K, which makes them part of
+    the load effect. Recorded only in a log they would be a complete-case
+    exclusion by default, which the protocol forbids as primary handling.
+
+    A fatal failure raises instead. Scoring an unrecognised failure as a miss
+    would turn a configuration or protocol bug into evidence that load degraded
+    judging, and no sample size fixes that.
+    """
+    failure_class = classify_failure(message)
+    if failure_class == FATAL:
+        raise FatalProtocolError(
+            f"{spec.identity}: {message}. This is a protocol or configuration "
+            "error rather than a judge behaviour, so the run stops instead of "
+            "scoring it."
+        )
+    return {
+        "identity": spec.identity,
+        "item_id": spec.item.item_id,
+        "side": spec.side,
+        "model": spec.model,
+        "nominal_n": spec.nominal_n,
+        "replicate": spec.replicate,
+        "partition_hash": spec.partition.hash,
+        "group_index": spec.group_index,
+        "group_size": len(spec.group),
+        "group": [c.key for c in spec.group],
+        "positions": {c.key: i for i, c in enumerate(spec.group)},
+        "failure": message,
+        "failure_class": failure_class,
+        "scores": {},
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cached_input_tokens": 0,
+    }
 
 
 def completed_identities(path: Path) -> set[str]:
@@ -158,6 +236,19 @@ def completed_identities(path: Path) -> set[str]:
                 # A partial final line from a hard kill. Skip it; the call will
                 # simply be redone.
                 continue
+            # A transient failure is not complete: resume must retry it. Only a
+            # success or a terminal class-2 record closes an identity, or a
+            # network blip would silently become a permanent hole in the design.
+            #
+            # Re-derived from the message rather than read from the record, to
+            # match `analyze.build_outcomes`. The stored field carries whatever
+            # rule was live when the row was written, and this dataset spans a
+            # change to it. Where the two disagreed the pair went missing
+            # permanently: resume saw a stored class it treats as closed and
+            # never retried, while analysis re-derived transient and dropped it.
+            message = record.get("failure")
+            if message and classify_failure(message) != UNEVALUABLE:
+                continue
             identity = record.get("identity")
             if identity:
                 done.add(identity)
@@ -170,6 +261,10 @@ class RunStats:
     written: int = 0
     skipped: int = 0
     failed: int = 0
+    # Successes recovered from calls still in flight when a fatal error fired.
+    # Billed either way, so writing them is the difference between resuming and
+    # paying twice.
+    salvaged: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -233,6 +328,7 @@ def execute_concurrent(
     abort = threading.Event()
     total = len(pending)
     completed = 0
+    fatal: BaseException | None = None
 
     def work(spec: CallSpec):
         if abort.is_set():
@@ -244,6 +340,16 @@ def execute_concurrent(
             response_text=spec.response_text,
         )
         return spec, provider.judge(prompt, spec.group, budget)
+
+    def _write_outcome(outcome) -> None:
+        """Persist one success. Used by the main loop and by the drain path."""
+        spec, result = outcome
+        record = _build_record(spec, result)
+        with write_lock:
+            fh.write(json.dumps(record, separators=(",", ":")) + "\n")
+            fh.flush()
+        with state_lock:
+            stats.written += 1
 
     with out_path.open("a") as fh:
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -260,6 +366,26 @@ def execute_concurrent(
                 try:
                     outcome = future.result()
                 except ProviderError as exc:
+                    # Persisted, not just logged: a class-2 failure is part of
+                    # the treatment and has to reach the scoring rule.
+                    try:
+                        failure_record = _build_failure_record(spec, str(exc))
+                    except FatalProtocolError as classified:
+                        # A provider error whose message is terminal, such as an
+                        # exhausted balance, is classified here rather than
+                        # thrown by the call. Keep consuming completed futures:
+                        # abort prevents queued work from starting, while calls
+                        # already in flight are billed and their results must be
+                        # persisted before the fatal error is re-raised.
+                        abort.set()
+                        if fatal is None:
+                            fatal = classified
+                        continue
+                    with write_lock:
+                        fh.write(
+                            json.dumps(failure_record, separators=(",", ":")) + "\n"
+                        )
+                        fh.flush()
                     with state_lock:
                         stats.failed += 1
                         stats.errors.append(f"{spec.identity}: {exc}")
@@ -271,21 +397,40 @@ def execute_concurrent(
                         # their results are not paid for and thrown away.
                         abort.set()
                     continue
+                except FatalProtocolError as exc:
+                    # The harness or its configuration is wrong. Stop rather than
+                    # let the error become a scored observation, but do not
+                    # discard what has already been paid for: calls in flight
+                    # when this fires will still return, and a success that is
+                    # billed and never written has to be re-bought on resume.
+                    abort.set()
+                    if fatal is None:
+                        fatal = exc
+                    continue
                 except Exception as exc:  # noqa: BLE001 - unexpected, still must not lose the run
-                    with state_lock:
-                        stats.failed += 1
-                        stats.errors.append(f"{spec.identity}: unexpected {exc!r}")
+                    # Unrecognised failures classify as fatal, so this aborts
+                    # rather than recording a quiet miss. Set the flag first:
+                    # the queue must not keep issuing paid calls.
+                    abort.set()
+                    try:
+                        _build_failure_record(spec, f"unexpected {exc!r}")
+                    except FatalProtocolError as classified:
+                        if fatal is None:
+                            fatal = classified
+                        continue
+                    if fatal is None:
+                        fatal = exc
                     continue
 
                 if outcome is None:
                     continue
-                spec, result = outcome
-                record = _build_record(spec, result)
-                with write_lock:
-                    fh.write(json.dumps(record, separators=(",", ":")) + "\n")
-                    fh.flush()
-                with state_lock:
-                    stats.written += 1
+                _write_outcome(outcome)
+                if fatal is not None:
+                    with state_lock:
+                        stats.salvaged += 1
+
+    if fatal is not None:
+        raise fatal
 
     if abort.is_set() and max_failures is not None and stats.failed > max_failures:
         raise RuntimeError(
@@ -334,6 +479,11 @@ def execute(
             try:
                 result = provider.judge(prompt, spec.group, budget)
             except ProviderError as exc:
+                failure_record = _build_failure_record(spec, str(exc))
+                fh.write(
+                    json.dumps(failure_record, separators=(",", ":")) + "\n"
+                )
+                fh.flush()
                 stats.failed += 1
                 stats.errors.append(f"{spec.identity}: {exc}")
                 if max_failures is not None and stats.failed > max_failures:
@@ -343,32 +493,7 @@ def execute(
                     ) from exc
                 continue
 
-            record = {
-                "identity": spec.identity,
-                "item_id": spec.item.item_id,
-                "side": spec.side,
-                "model": spec.model,
-                "nominal_n": spec.nominal_n,
-                "replicate": spec.replicate,
-                "partition_hash": spec.partition.hash,
-                "group_index": spec.group_index,
-                "group_size": len(spec.group),
-                "group": [c.key for c in spec.group],
-                "schema_tokens": schema_token_estimate(spec.group),
-                "input_tokens": result.input_tokens,
-                "output_tokens": result.output_tokens,
-                "reasoning_tokens": result.reasoning_tokens,
-                "cached_input_tokens": result.cached_input_tokens,
-                "latency_ms": round(result.latency_ms, 2),
-                "near_cap": near_cap(
-            len(spec.group), result.output_tokens, result.reasoning_tokens
-        ),
-                "scores": {k: v["score"] for k, v in result.evaluations.items()},
-                "reasoning": {k: v.get("reasoning", "") for k, v in result.evaluations.items()},
-                "positions": {
-                    c.key: i for i, c in enumerate(spec.group)
-                },
-            }
+            record = _build_record(spec, result)
             fh.write(json.dumps(record, separators=(",", ":")) + "\n")
             fh.flush()
             stats.written += 1
@@ -473,4 +598,93 @@ def plan_targeted_blocks(
                         continue
                     seen.add(spec.identity)
                     specs.append(spec)
+    return specs
+
+
+def plan_fixed_position(
+    items: list[PairedItem],
+    criteria: tuple[Criterion, ...],
+    *,
+    model: str,
+    levels: tuple[int, ...],
+    base_seed: int = 20260908,
+) -> list[CallSpec]:
+    """Plan a ladder with the targeted criterion pinned at position 0.
+
+    The K = 20 sweep drew a random partition, which coupled load to position:
+    position is nested inside the call, so E[position | K] = (K-1)/2 exactly and
+    support is triangular. Here the target sits first at every rung and companions
+    pad the call, which removes the ordinal-position confound.
+
+    Companions are a nested prefix of one seeded permutation of the non-target
+    criteria, shared by both sides. Without nesting, K would change both the
+    amount of trailing load and which particular criteria are present, putting
+    composition noise into the endpoint contrast.
+
+    This does not make load the only thing that varies. The target stays first, so
+    K also varies the amount of trailing material, the target's recency, and its
+    distance from the end of the context. Those stay coupled by design and the
+    estimand is written to match.
+    """
+    pool_size = len(criteria)
+    for level in levels:
+        if level < 1:
+            raise ValueError(f"level {level} must be >= 1")
+        if level > pool_size:
+            raise ValueError(f"level {level} exceeds pool size {pool_size}")
+
+    specs: list[CallSpec] = []
+    for item in items:
+        if not item.targeted_criterion:
+            raise ValueError(f"{item.item_id} has no targeted_criterion")
+        target = next(
+            (c for c in criteria if c.key == item.targeted_criterion), None
+        )
+        if target is None:
+            raise ValueError(
+                f"{item.targeted_criterion!r} not in the criterion pool"
+            )
+
+        companions = [c for c in criteria if c.key != target.key]
+        random.Random(
+            partition_seed(f"{item.item_id}:companions", 0, 0, base_seed)
+        ).shuffle(companions)
+
+        for nominal_n in levels:
+            group = (target, *companions[: nominal_n - 1])
+            placements = tuple(
+                Placement(
+                    criterion=c,
+                    group_index=0,
+                    position=index,
+                    group_size=len(group),
+                )
+                for index, c in enumerate(group)
+            )
+            partition = Partition(
+                nominal_n=nominal_n,
+                groups=(group,),
+                seed=base_seed,
+                placements=placements,
+            )
+            for side in ("a", "b"):
+                specs.append(
+                    CallSpec(
+                        item=item,
+                        side=side,
+                        group=group,
+                        group_index=0,
+                        partition=partition,
+                        nominal_n=nominal_n,
+                        replicate=0,
+                        model=model,
+                    )
+                )
+
+    # Interleave across rungs so provider drift cannot align with load. Emitted
+    # prompt-major, a prompt's K = 1 and K = 40 calls are adjacent and any
+    # mid-run change in provider behaviour lands disproportionately on whichever
+    # rungs were in flight. Resume keys on identity rather than order, so
+    # reordering is safe, and the seed keeps the run reproducible.
+    random.Random(partition_seed("ladder-order", 0, 0, base_seed)).shuffle(specs)
     return specs

@@ -91,3 +91,14 @@ reasoning, and then the integer score.
 def token_estimate(prompt: JudgePrompt) -> int:
     """~4 chars/token. Used for dry-run cost planning, not for billing."""
     return max(1, (len(prompt.system) + len(prompt.user)) // 4)
+
+
+def token_upper_bound(prompt: JudgePrompt) -> int:
+    """Conservative input authorization bound based on encoded request text.
+
+    Byte length dominates token count for provider text tokenizers. The fixed
+    allowance covers message-role and request framing that is not represented
+    in the two prompt strings.
+    """
+    encoded = len(prompt.system.encode("utf-8")) + len(prompt.user.encode("utf-8"))
+    return max(token_estimate(prompt), encoded + 256)

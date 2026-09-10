@@ -87,9 +87,16 @@ class AnthropicJudge:
         if payload is None:
             raise ProviderError(f"{self.model}: no tool_use block ({message.stop_reason})")
 
+        try:
+            evaluations = parse_evaluations(payload, group)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ProviderError(
+                f"{self.model}: malformed model output: {exc}"
+            ) from exc
+
         usage = message.usage
         return JudgeResult(
-            evaluations=parse_evaluations(payload, group),
+            evaluations=evaluations,
             input_tokens=getattr(usage, "input_tokens", 0) or 0,
             output_tokens=getattr(usage, "output_tokens", 0) or 0,
             cached_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,

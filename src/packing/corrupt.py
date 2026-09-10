@@ -443,8 +443,8 @@ CORRUPTIONS: tuple[Corruption, ...] = (
         key="drop_answer",
         targeted_criterion="helpfulness",
         direction=-1,
-        # Ladder: monotone in severity. s16 gave 0.67 / 0.27 / 0.91; s3 gave
-        # 0.07 / 0.80 -- the original severity was far too low.
+        # Calibration at severity 16 gave recovery 0.67 / tie 0.27 /
+        # discrimination 0.91.
         default_severity=16,
         description="Delete the N sentences most on-topic with the prompt.",
         leakage_prone=True,

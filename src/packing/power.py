@@ -180,3 +180,129 @@ def plan_from_pilot(
             for mde in mde_grid
         },
     )
+
+
+# ------------------------------------------- equal-quota planning variance ---
+
+
+def sigma_eff(
+    frame: pd.DataFrame,
+    reference_size: int,
+    comparison_size: int,
+    *,
+    operations: tuple[str, ...],
+) -> float | None:
+    """Planning variance for the equal-quota estimator.
+
+    Fixed quotas remove random variation in operation composition, so the pooled
+    SD across all per-unit differences is the wrong input: it carries
+    between-operation mean spread that the design has already eliminated. The
+    right quantity is the average of the within-operation variances.
+
+    Variances are averaged, not standard deviations, because the estimator's
+    variance is a sum of s_o^2 / n_o terms.
+
+    The caller is responsible for restricting `frame` to the population the
+    estimand names. For the core contrast that is prompts eligible for all eight
+    core operations, not merely prompts on which those operations happened to run:
+    the target quantity is Var(d | O = o, A_core = 1).
+    """
+    from .analyze import independence_unit, resolved
+
+    res = resolved(frame)
+    cluster = independence_unit(res)
+    if "operation" not in res.columns:
+        raise ValueError("frame has no `operation` column")
+
+    per_unit = (
+        res[res["group_size"].isin([reference_size, comparison_size])]
+        .groupby([cluster, "operation", "group_size"])["correct_num"]
+        .mean()
+        .unstack("group_size")
+    )
+    if reference_size not in per_unit or comparison_size not in per_unit:
+        return None
+    paired = per_unit[[reference_size, comparison_size]].dropna()
+    if paired.empty:
+        return None
+    diffs = (paired[comparison_size] - paired[reference_size]).rename("d")
+
+    variances: list[float] = []
+    for operation in operations:
+        try:
+            values = diffs.xs(operation, level="operation").to_numpy()
+        except KeyError:
+            return None
+        if len(values) < 2:
+            return None
+        variances.append(float(np.var(values, ddof=1)))
+    return float(np.sqrt(np.mean(variances)))
+
+
+def stratified_sample_size(
+    sigma: float,
+    mde: float,
+    *,
+    strata: int,
+    alpha: float = 0.05,
+    power: float = 0.80,
+) -> int:
+    """Total units for the equal-quota estimator to detect ``mde``.
+
+    With equal quotas n_o = n / O, the estimator variance reduces to
+    sigma_eff^2 / n, so the total requirement does not depend on the number of
+    strata. ``strata`` is validated rather than used, because a caller passing it
+    is asserting the design it belongs to.
+
+    Solved against the noncentral t rather than the normal approximation, because
+    the protocol pre-registers the exact figures: at sigma_eff = 0.3345 the normal
+    form gives 352 and the exact form 354, and the pre-registered number is 354.
+
+    This is still a *planning* approximation, not the analysis distribution. The
+    analysis uses Welch-Satterthwaite degrees of freedom, which depend on the
+    individual stratum variances; this function has only their root-mean-square
+    summary and uses df = n - 1. Label it as planning, never as the test.
+    """
+    if mde <= 0:
+        raise ValueError("mde must be > 0")
+    if sigma <= 0:
+        raise ValueError("sigma must be > 0")
+    if strata < 1:
+        raise ValueError("strata must be >= 1")
+
+    crit = stats.norm.ppf(1 - alpha / 2)
+    start = int((crit + stats.norm.ppf(power)) ** 2 * (sigma / mde) ** 2) - 5
+    n = max(2, start)
+    while n < 1_000_000:
+        t_crit = stats.t.ppf(1 - alpha / 2, n - 1)
+        ncp = mde / (sigma / np.sqrt(n))
+        achieved = (
+            1
+            - stats.nct.cdf(t_crit, n - 1, ncp)
+            + stats.nct.cdf(-t_crit, n - 1, ncp)
+        )
+        if achieved >= power:
+            return n
+        n += 1
+    raise ValueError("no sample size reached the requested power")
+
+
+def stratified_mde(
+    sigma: float,
+    n_total: int,
+    *,
+    strata: int,
+    alpha: float = 0.05,
+    power: float = 0.80,
+) -> float:
+    """Detectable effect at ``n_total``, normal approximation.
+
+    The approximation is used here rather than the exact form because this is the
+    reporting direction: it is quoted alongside an interval, not used to fix a
+    pre-registered sample size. ``stratified_sample_size`` is the exact one.
+    """
+    if n_total < 1:
+        raise ValueError("n_total must be >= 1")
+    if strata < 1:
+        raise ValueError("strata must be >= 1")
+    return float(_z(alpha, power) * sigma / np.sqrt(n_total))

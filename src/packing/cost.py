@@ -30,10 +30,8 @@ def usage_frame(records: Iterable[dict[str, Any]]) -> pd.DataFrame:
             "cached_input_tokens": r.get("cached_input_tokens", 0),
             "schema_tokens": r.get("schema_tokens", 0),
             "latency_ms": r.get("latency_ms", 0.0),
-            # Recomputed, not read off the record: the stored flag predates the
-            # reasoning-token correction and over-flags badly (it reported 26% of
-            # group_size=1 calls as near-cap against a true 0.4%). Both inputs are
-            # on the record, so historical runs stay usable.
+            # Derived from retained token counts so one definition is applied to
+            # every record.
             "near_cap": near_cap(
                 r["group_size"], r.get("output_tokens", 0), r.get("reasoning_tokens", 0)
             ),

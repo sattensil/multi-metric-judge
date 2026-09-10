@@ -137,6 +137,10 @@ def test_recovers_planted_degradation(tmp_path: Path) -> None:
     form = functional_form(frame)
     assert form["linear_slope"] < 0
     assert form["linear_p"] < 0.05
+    assert form["prefer"] == "not selected"
+    assert form["lrt_factor_vs_linear"]["interpretation"] == (
+        "descriptive only; ignores item clustering"
+    )
 
 
 # ---------------------------------------------------------- calibration ------

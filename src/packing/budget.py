@@ -72,12 +72,12 @@ def near_cap(
     calls that were near the ceiling, it is a token artifact rather than a
     property of packing. That makes the flag's calibration load-bearing.
 
-    Subtlety that produced a real bug: providers report ``output_tokens`` as
-    *total* completion tokens, reasoning included, while ``content_budget``
+    The subtlety that makes this load-bearing: providers report ``output_tokens``
+    as *total* completion tokens, reasoning included, while ``content_budget``
     deliberately excludes the reasoning headroom. Comparing the two directly
     mixes a reasoning-inclusive numerator with a reasoning-exclusive denominator
-    and over-flags badly -- it marked 25% of group_size=1 calls as near-cap when
-    their true content use was ~44% of budget. Reasoning tokens are therefore
+    and over-flags badly, marking 25% of group_size=1 calls as near-cap when
+    their true content use is ~44% of budget. Reasoning tokens are therefore
     subtracted here.
     """
     budget = budget_for(group_size, reasoning=reasoning)

@@ -1,0 +1,109 @@
+{
+  "analysis_notes": [
+    "Failure classes are derived from the retained message during analysis and resume.",
+    "The linear trend and K = 30 rung are exploratory.",
+    "The unclustered factor-versus-linear likelihood ratio is a descriptive shape diagnostic and cannot establish linearity.",
+    "The retained ladder has 120 missing middle-rung calls; endpoint pairing excludes seven of 464 core units.",
+    "Use `packing reproduce --strict` to verify every pinned claim."
+  ],
+  "archive": "packing-replication-v6.tar.gz",
+  "archive_sha256": "07821b4dfb7adf3c754c56a9fb5c9ea6426c31bdc3ce20e84030dfd66ea54308",
+  "archive_size_bytes": 16947171,
+  "built_from_branch": "public-release",
+  "call_date_range_approximate": "2026-08-26 to 2026-09-09",
+  "claims_backed": {
+    "Calibration": "runs/calib, runs/calib2, runs/ladder",
+    "Fixed-position ladder": "runs/ladder-k40",
+    "Human-label pilot": "runs/pilot",
+    "Synthetic sweep and position analysis": "runs/sweep"
+  },
+  "code_commit": "4a16b7778b433fb271a956d167d92aaf8880770a",
+  "cost_figures_are_lower_bounds": "Dollar figures are computed from retained token counts. Provider retries can be billed without producing retained records.",
+  "expected_json_sha256": "5823cde4921db438bd8dab140553441821dce120ab57e972cc49c3812c5c21c2",
+  "files": {
+    "MANIFEST.json": "251f0d7a88cf13eefb35fcc40bd2d86c6d9ea14276297e98e594fc685e71dada",
+    "SHA256SUMS": "02c2d372696b8a0153f9ae27eb6d6a0110c861af6783f097c736273dc7186a90",
+    "data/helpsteer2-ladder.jsonl": "d7df63ab1e61de5608ff6a5deee92ef9dabb628319cd1665f4988dfda44df9ae",
+    "data/helpsteer2.jsonl": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
+    "environment/pyproject.toml": "b3e624b55b5fa2e484776c2b03e68014ae8f64e0f322d677d741a634af9144e2",
+    "environment/uv.lock": "4737ab77a183092cb6b42fe04532a353a57b27e86dd585a1821edf9556a50fe4",
+    "expected.json": "5823cde4921db438bd8dab140553441821dce120ab57e972cc49c3812c5c21c2",
+    "plans/ladder-plan-k30.json": "d835cd7aa62266b8c193e33cc29ef269c90d6bbb34e6a51912650e5161e0165c",
+    "plans/ladder-plan.json": "87bd3be9c768a79c43e6f05971f8c2e35675eca5fc85a6fce4e13009a81fb2ec",
+    "runs/calib/calls.jsonl": "16c88c402071170fb20dc552cee51f6b3862643c57f82ed2be05490fe7552f79",
+    "runs/calib/items.jsonl": "897ca4ea4bac132b197ce6c25248fb6d60dab5af53faf72d54e702fd146c2473",
+    "runs/calib/meta.json": "766bae4ea2aad331ed0c7cdcdc87a886927a702934655b7017d71a958cbb40b4",
+    "runs/calib2/calls.jsonl": "ff5283d67d9c4fc9fadc4d2503507487c4098451c974206d5515397d19229125",
+    "runs/calib2/items.jsonl": "752b9cbbee9991483ae7b24dd70c82ce89354d8ad5d6a3226d8a34695438377b",
+    "runs/calib2/meta.json": "34b5629de40a39d344d90eb9cb341c915b8026eaf3b25a7e821f02123c2884be",
+    "runs/ladder-k40/calls.jsonl": "554750bb6716c3f220e6f16ec2ff993915bd4727d2489d37cf9accf65d1732ed",
+    "runs/ladder-k40/items.jsonl": "1b338ef4a4ca915c1cbd217ffab32d4ce7798494b9252457dcdef964dec33788",
+    "runs/ladder-k40/meta.json": "8e0a81628d62c46a68a84261a901d39eac75cd573d4de89d6f547d397cff657e",
+    "runs/ladder/calls.jsonl": "87bdb7802a58c35ebf78ee37fd54d8967d583075c1d6812bd19319e55b3c0198",
+    "runs/ladder/items.jsonl": "6e672b5372af59b18a3878d2694481bb0e7dfc6873b9cb1ab5b4276482c75e29",
+    "runs/ladder/meta.json": "155a0c52de03216a418035aaa7c4d1bbc839ad9aaf67223b94fee10a33ee7e7d",
+    "runs/pilot/calls.jsonl": "26284bdd53cce713531a48912775c0c10b0ca7e7dacd6cf02bd02034dd9a9000",
+    "runs/pilot/items.jsonl": "41afc00f0a82cf5fc29199280edc46ac29c9e71fff418b5bd0395559fb94e5cd",
+    "runs/pilot/meta.json": "93ff34975a6338bf7d49c02568a174690077483eb8d553253c99c56182595432",
+    "runs/sweep/calls.jsonl": "a58f94646cc6ca55442d819ebb4eb52cc193797a3b11ff1157e934ebcfb7d6f1",
+    "runs/sweep/items.jsonl": "b44aaf2c1d97dfb0f0eef58e3ec5434c91e99d4c2e9224d0396d95e6e6474a54",
+    "runs/sweep/meta.json": "852780ec0cc08856f88d22bbf599b63537091b867ef537c7b7da60aaeb7afa85"
+  },
+  "frames": [
+    {
+      "dataset_licence": "CC-BY-4.0",
+      "dataset_sha256": "a4b0101e1dbbd06f27e266a8047cbb88871d0b18b2a3ff775b8233889c19f5b6",
+      "dataset_source": "nvidia/HelpSteer2",
+      "fetch_command": "packing fetch --limit 200",
+      "is_primary": true,
+      "n_items": 200,
+      "ordered_item_id_sha256": "756c1d1a432f09266e495dd7c3b125cfc7ec1d242aff514e52ff7addbfa6b563",
+      "path": "data/helpsteer2.jsonl",
+      "used_by": []
+    },
+    {
+      "dataset_licence": "CC-BY-4.0",
+      "dataset_sha256": "d7df63ab1e61de5608ff6a5deee92ef9dabb628319cd1665f4988dfda44df9ae",
+      "dataset_source": "nvidia/HelpSteer2",
+      "fetch_command": "packing fetch --limit 1600",
+      "is_primary": false,
+      "n_items": 1600,
+      "ordered_item_id_sha256": "234f0ecb8363787a8e8a1d6516344ba3de0e5d36c5c1e63e910b2fa80fb46c12",
+      "path": "data/helpsteer2-ladder.jsonl",
+      "used_by": [
+        "ladder-k40"
+      ]
+    }
+  ],
+  "model": "gpt-5-mini",
+  "model_is_an_alias": true,
+  "model_snapshot": null,
+  "not_recorded": [
+    "provider response ids",
+    "per-call wall-clock timestamps",
+    "pinned model snapshot (gpt-5-mini is an alias)"
+  ],
+  "pinned_claims": [
+    "fixed_position_ladder",
+    "human_pilot",
+    "position_analysis",
+    "synthetic_sweep"
+  ],
+  "pinned_values": 40,
+  "recompute_command": "packing reproduce --sums SHA256SUMS --strict",
+  "release": "packing-replication-v6",
+  "request_settings": {
+    "reasoning_effort": "low",
+    "structured_outputs": "strict",
+    "temperature": null
+  },
+  "run_name_collision": "`ladder` is the severity ladder from calibration. `ladder-k40` is the fixed-position K = 40 experiment, rungs 1/5/10/20/30/40. Different runs, adjacent names.",
+  "runs_included": [
+    "calib",
+    "calib2",
+    "ladder",
+    "ladder-k40",
+    "pilot",
+    "sweep"
+  ]
+}

@@ -156,6 +156,47 @@ def test_synthetic_recovery_keeps_hits_ties_and_wrong_directions_separate() -> N
     assert result["discrimination"] == pytest.approx(1 / 2)
 
 
+def test_synthetic_decision_diagnostics_exclude_unevaluable_calls() -> None:
+    frame = pd.DataFrame(
+        [
+            {
+                **_row(
+                    "hit",
+                    "coherence",
+                    group_size=5,
+                    judge_a=4,
+                    judge_b=2,
+                    correct=True,
+                ),
+                "is_target": True,
+                "calibration_role": "test",
+                "unevaluable": False,
+            },
+            {
+                **_row(
+                    "unreadable",
+                    "coherence",
+                    group_size=5,
+                    judge_a=0,
+                    judge_b=0,
+                    correct=False,
+                ),
+                "is_target": True,
+                "calibration_role": "test",
+                "unevaluable": True,
+            },
+        ]
+    )
+
+    result = analyze.synthetic_recovery(frame).iloc[0]
+    assert result["n"] == 2
+    assert result["n_evaluable"] == 1
+    assert result["wrong"] == 0
+    assert result["recovery_rate"] == pytest.approx(1 / 2)
+    assert result["discrimination"] == 1.0
+    assert result["unevaluable_rate"] == pytest.approx(1 / 2)
+
+
 def test_synthetic_recovery_frame_treats_ties_and_wrong_directions_as_misses() -> None:
     frame = pd.DataFrame(
         [

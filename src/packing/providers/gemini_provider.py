@@ -43,6 +43,7 @@ class GeminiJudge:
         price_out_per_m: float,
         *,
         timeout: float = 120.0,
+        max_retries: int = 2,
     ) -> None:
         try:
             from google import genai
@@ -56,7 +57,14 @@ class GeminiJudge:
         self.price_in_per_m = price_in_per_m
         self.price_out_per_m = price_out_per_m
         self._genai = genai
-        self._client = genai.Client()
+        self._client = genai.Client(
+            http_options=genai.types.HttpOptions(
+                timeout=round(timeout * 1000),
+                retry_options=genai.types.HttpRetryOptions(
+                    attempts=max_retries + 1
+                ),
+            )
+        )
 
     def judge(
         self, prompt: JudgePrompt, group: tuple[Criterion, ...], budget: Budget
@@ -85,9 +93,16 @@ class GeminiJudge:
         except json.JSONDecodeError as exc:
             raise ProviderError(f"{self.model}: non-JSON content: {exc}") from exc
 
+        try:
+            evaluations = parse_evaluations(payload, group)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ProviderError(
+                f"{self.model}: malformed model output: {exc}"
+            ) from exc
+
         usage = getattr(response, "usage_metadata", None)
         return JudgeResult(
-            evaluations=parse_evaluations(payload, group),
+            evaluations=evaluations,
             input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
             output_tokens=getattr(usage, "candidates_token_count", 0) or 0,
             reasoning_tokens=getattr(usage, "thoughts_token_count", 0) or 0,

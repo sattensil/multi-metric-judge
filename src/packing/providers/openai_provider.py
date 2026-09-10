@@ -95,12 +95,19 @@ class OpenAIJudge:
         except json.JSONDecodeError as exc:
             raise ProviderError(f"{self.model}: non-JSON content: {exc}") from exc
 
+        try:
+            evaluations = parse_evaluations(payload, group)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ProviderError(
+                f"{self.model}: malformed model output: {exc}"
+            ) from exc
+
         usage = completion.usage
         details = getattr(usage, "completion_tokens_details", None)
         prompt_details = getattr(usage, "prompt_tokens_details", None)
 
         return JudgeResult(
-            evaluations=parse_evaluations(payload, group),
+            evaluations=evaluations,
             input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
             reasoning_tokens=getattr(details, "reasoning_tokens", 0) or 0,

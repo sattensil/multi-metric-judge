@@ -8,3 +8,18 @@ data/cache/
 .pytest_cache/
 data/*.jsonl
 .DS_Store
+dist/
+# Local archival copies of runs. The distributable is the release bundle
+# built by `packing bundle`, which is checksum-pinned in replication/RELEASE.json.
+artifacts*/
+
+# Private detailed methodology reference. The tracked METHODS.md is the
+# canonical, readable protocol.
+METHODS_TECHNICAL.md
+
+# Local presentation support. The published deck is presentation/index.html.
+presentation/presenter.html
+presentation/README.md
+
+# Internal design and implementation notes; retained locally, not published.
+docs/superpowers/

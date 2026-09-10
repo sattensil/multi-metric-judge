@@ -8,6 +8,10 @@ money is spent.
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import threading
+import time
 from pathlib import Path
 
 import click
@@ -17,8 +21,6 @@ from rich.console import Console
 from rich.table import Table
 
 from . import analyze, calibrate as calib, cost, design, power
-from .corrupt import CORRUPTIONS
-from .corrupt_extra import EXTRA_CORRUPTIONS
 from .criteria import HELPSTEER2_CRITERIA, get_criteria
 from .synthetic_criteria import SYNTHETIC_ONLY_CRITERIA
 from .dataset import (
@@ -30,6 +32,7 @@ from .dataset import (
     write_jsonl,
 )
 from .partition import nominal_levels
+from .registry import ALL_CORRUPTIONS
 from .providers.base import CATALOG, get_provider
 from .runner import (
     estimate,
@@ -62,7 +65,14 @@ def _load_run(name: str):
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
     items = read_jsonl(items_path)
     dataset = meta.get("dataset", "helpsteer2")
-    criteria = ALL_CRITERIA if dataset == "synthetic" else get_criteria(dataset)
+    if dataset == "synthetic":
+        criteria = ALL_CRITERIA
+    elif dataset == "ladder":
+        from .ladder_criteria import LADDER_CRITERIA
+
+        criteria = LADDER_CRITERIA
+    else:
+        criteria = get_criteria(dataset)
     records = list(read_records(calls_path))
     return items, criteria, records, meta
 
@@ -300,6 +310,7 @@ def run(
     console.print(f"calls: [bold]{est['calls']}[/bold]  ({est['calls']/len(items):.1f}/item)")
     console.print(
         f"est input tokens {est['est_input_tokens']:,}, "
+        f"input authorization ceiling {est['est_input_tokens_ceiling']:,}, "
         f"output ceiling {est['est_output_tokens_ceiling']:,}"
     )
     console.print(
@@ -558,9 +569,8 @@ def ties(dataset: str, items_path: Path | None) -> None:
         )
 
 
-ALL_CORRUPTIONS = CORRUPTIONS + EXTRA_CORRUPTIONS
 ALL_CRITERIA = HELPSTEER2_CRITERIA + SYNTHETIC_ONLY_CRITERIA
-# METHODS 3.4: a hypothesis, replaced by measurement here.
+# The catalogue records a hypothesis; calibration determines the active class.
 SEMANTIC_KEYS = {
     "shuffle", "numbers", "drop_answer", "contradict", "truncate", "rename",
     "unsupport", "vague",
@@ -722,7 +732,7 @@ def _report_calibration(name: str) -> None:
         console.print(calib.window_report(verdicts))
         return
     summary = calib.agreement_with_hypothesis([v for _s, v in verdicts])
-    console.print("\n[bold]Hypothesis check (METHODS 3.4)[/bold]")
+    console.print("\n[bold]Hypothesis check[/bold]")
     console.print(f"  surface operations at ceiling : {summary.get('surface_at_ceiling')}")
     console.print(f"  semantic operations in band   : {summary.get('semantic_in_test_band')}")
     if summary.get("insensitive_needing_severity"):
@@ -820,7 +830,8 @@ def sweep_cmd(items_path, model, per_corruption, levels, replicates, name,
     console.print(f"observations per actual group size: {dict(sorted(sizes.items()))}")
     console.print(f"calls: [bold]{est['calls']}[/bold]")
     console.print(
-        f"est input {est['est_input_tokens']:,}, output ceiling "
+        f"est input {est['est_input_tokens']:,}, input authorization ceiling "
+        f"{est['est_input_tokens_ceiling']:,}, output ceiling "
         f"{est['est_output_tokens_ceiling']:,}"
     )
     console.print(
@@ -1119,6 +1130,1186 @@ def power_cmd(name: str, reference: int, comparison: int | None) -> None:
         "\n[yellow]Size the confirmatory run from the MDE grid, not from the "
         "observed effect: a pilot that reached significance is more likely to have "
         "overshot the true effect than undershot it.[/yellow]"
+    )
+
+
+@cli.command("ladder")
+@click.option(
+    "--items", "items_path", type=click.Path(),
+    default="data/helpsteer2.jsonl", show_default=True,
+)
+@click.option("--model", default="gpt-5-mini", show_default=True)
+@click.option("--core-n", type=int, default=464, show_default=True)
+@click.option("--numbers-n", type=int, default=184, show_default=True)
+@click.option("--core-candidates", type=int, default=837, show_default=True)
+@click.option("--per-op-max", type=int, default=96, show_default=True)
+@click.option("--levels", default="1,5,10,20,40", show_default=True)
+@click.option("--seed", type=int, default=20260908, show_default=True)
+@click.option(
+    "--plan-out", type=click.Path(),
+    default="runs/ladder-plan.json", show_default=True,
+)
+@click.option(
+    "--allow-short", is_flag=True, default=False,
+    help="Development only. Never use for the pre-registered budget.",
+)
+@click.option("--dry-run/--no-dry-run", default=True, show_default=True)
+def ladder_cmd(
+    items_path: str,
+    model: str,
+    core_n: int,
+    numbers_n: int,
+    core_candidates: int,
+    per_op_max: int,
+    levels: str,
+    seed: int,
+    plan_out: str,
+    allow_short: bool,
+    dry_run: bool,
+) -> None:
+    """The fixed-position load ladder: does trailing load change recovery?"""
+    from collections import Counter
+
+    from .eligibility import CORE_OPERATIONS, NUMBERS_OPERATION, select_response
+    from .ladder_criteria import LADDER_CRITERIA, LADDER_MANIFEST
+    from .ladder_dataset import activate, build_ladder_item, operation_queues
+    from .lanes import fill_lane, split_lanes
+    from .runner import plan_fixed_position
+    from .sampling_plan import SamplingPlan, Unit, file_sha256, write_plan
+
+    LADDER_MANIFEST.validate(expect=len(LADDER_CRITERIA))
+
+    # Pricing must not silently become zero. A missing catalogue entry is a
+    # configuration error, not a free model.
+    if model not in CATALOG:
+        raise click.ClickException(
+            f"no pricing for {model!r}; add it to CATALOG before costing a run"
+        )
+    entry = CATALOG[model]
+
+    swept = tuple(int(x) for x in levels.split(",") if x.strip())
+    if len(set(swept)) != len(swept):
+        raise click.ClickException(f"levels must be unique, got {swept}")
+    if not swept or swept[0] != 1 or swept[-1] != len(LADDER_CRITERIA):
+        raise click.ClickException(
+            f"levels must run from 1 to {len(LADDER_CRITERIA)}; got {swept}"
+        )
+    if core_n % len(CORE_OPERATIONS) != 0:
+        raise click.ClickException(
+            f"core-n {core_n} is not divisible by {len(CORE_OPERATIONS)}; equal "
+            "quotas are part of the primary estimand"
+        )
+    if per_op_max < 1:
+        raise click.ClickException("per-op-max must be at least 1")
+    requested_per_op = core_n // len(CORE_OPERATIONS)
+    if requested_per_op > per_op_max:
+        raise click.ClickException(
+            f"core-n {core_n} requests {requested_per_op} units per operation, "
+            f"above --per-op-max {per_op_max}. Refusing to silently cap the "
+            "planned sample."
+        )
+
+    path = Path(items_path)
+    if not path.exists():
+        raise click.ClickException(f"{path} not found; run `packing fetch` first")
+    bases = read_jsonl(path)
+    ids = [b.item_id for b in bases]
+    if len(set(ids)) != len(ids):
+        raise click.ClickException("duplicate base-prompt ids in the input file")
+    by_id = {b.item_id: b for b in bases}
+
+    try:
+        core_stream, numbers_stream = split_lanes(
+            ids, seed=seed, core_candidates=core_candidates
+        )
+    except ValueError as exc:
+        # A frame too small for the requested lane split is a user error with an
+        # obvious remedy, so it reads as a message rather than a traceback.
+        raise click.ClickException(
+            f"{exc}. Fetch a larger frame with `packing fetch --limit N`, or "
+            "lower --core-candidates."
+        ) from exc
+
+    # Screen once, and KEEP the side. The side that satisfied all eight core
+    # operations is the one that put this prompt in A_core = 1. Re-deriving it
+    # later from the assigned operation alone can pick the other response, which
+    # is eligible for that operation but not for all eight.
+    core_sides = {
+        item_id: select_response(by_id[item_id], CORE_OPERATIONS, seed=seed)
+        for item_id in core_stream
+    }
+    numbers_sides = {
+        item_id: select_response(by_id[item_id], (NUMBERS_OPERATION,), seed=seed)
+        for item_id in numbers_stream
+    }
+
+    eligible_core_ids = [item_id for item_id in core_stream if core_sides[item_id]]
+    core_ids = eligible_core_ids[:core_n]
+    numbers_ids, numbers_rest = fill_lane(
+        numbers_stream, lambda i: numbers_sides[i] is not None, numbers_n
+    )
+
+    console.print(
+        f"K={len(LADDER_CRITERIA)} pool, manifest {LADDER_MANIFEST.hash}, "
+        f"lengths {LADDER_MANIFEST.length_stats}"
+    )
+    console.print(
+        f"core lane: {len(core_stream)} candidates, "
+        f"{len(core_ids)}/{core_n} filled"
+    )
+    console.print(
+        f"numbers lane: {len(numbers_stream)} candidates, "
+        f"{len(numbers_ids)}/{numbers_n} filled"
+    )
+    short = len(core_ids) < core_n or len(numbers_ids) < numbers_n
+    if short and not allow_short:
+        raise click.ClickException(
+            "lane short of quota. A partial sample costs and plans a different "
+            "experiment, so this is an error rather than a warning. Fetch a "
+            "larger frame, or pass --allow-short for development only."
+        )
+    if short:
+        console.print(
+            "[yellow]SHORT SAMPLE: development only, not the budget[/yellow]"
+        )
+
+    per_op = core_n // len(CORE_OPERATIONS)
+    queue_depth = min(
+        per_op_max, len(eligible_core_ids) // len(CORE_OPERATIONS)
+    )
+    if queue_depth < 1:
+        raise click.ClickException(
+            f"only {len(core_ids)} core units for {len(CORE_OPERATIONS)} "
+            "operations; cannot form queues"
+        )
+    queues = operation_queues(
+        eligible_core_ids, CORE_OPERATIONS, seed=seed, per_op_max=queue_depth
+    )
+    assigned = activate(queues, per_op=min(per_op, queue_depth))
+    queued_core_ids = {
+        item_id for queue in queues.values() for item_id in queue
+    }
+    core_rest = [
+        item_id for item_id in core_stream
+        if core_sides[item_id] is not None and item_id not in queued_core_ids
+    ]
+
+    items: list = []
+    units: list = []
+    for item_id, op in assigned.items():
+        side = core_sides[item_id]
+        if side is None:
+            raise click.ClickException(
+                f"{item_id} passed screening with no side; invariant violated"
+            )
+        built = build_ladder_item(
+            by_id[item_id], op, side, LADDER_CRITERIA, seed=seed
+        )
+        if built is None:
+            # Screening already proved the operation applies to this side, so a
+            # None here means the two paths disagree. That is a bug, not a
+            # droppable item: skipping it would break equal quotas.
+            raise click.ClickException(
+                f"{item_id}/{op}/{side} screened eligible but did not build"
+            )
+        items.append(built)
+        units.append(
+            Unit(
+                base_item_id=item_id,
+                lane="core",
+                side=side,
+                eligible=True,
+                operation=op,
+                realisation_seed=built.meta["realisation_seed"],
+                companion_seed=seed,
+                status="active",
+            )
+        )
+    for item_id in numbers_ids:
+        side = numbers_sides[item_id]
+        if side is None:
+            raise click.ClickException(
+                f"{item_id} passed screening with no side; invariant violated"
+            )
+        built = build_ladder_item(
+            by_id[item_id], NUMBERS_OPERATION, side, LADDER_CRITERIA, seed=seed
+        )
+        if built is None:
+            raise click.ClickException(
+                f"{item_id}/numbers/{side} screened eligible but did not build"
+            )
+        items.append(built)
+        units.append(
+            Unit(
+                base_item_id=item_id,
+                lane="numbers",
+                side=side,
+                eligible=True,
+                operation=NUMBERS_OPERATION,
+                realisation_seed=built.meta["realisation_seed"],
+                companion_seed=seed,
+                status="active",
+            )
+        )
+
+    # Reserves: the screened, eligible remainder of each lane, in frozen order.
+    # A persistent transient failure is replaced from here, so the replacement is
+    # drawn from the same population and the draw order was fixed before any
+    # outcome existed. Without them there is nothing legitimate to replace with.
+    for lane, rest, sides in (
+        ("core", core_rest, core_sides),
+        ("numbers", numbers_rest, numbers_sides),
+    ):
+        for item_id in rest:
+            side = sides.get(item_id)
+            if side is None:
+                continue
+            units.append(
+                Unit(
+                    base_item_id=item_id,
+                    lane=lane,
+                    side=side,
+                    eligible=True,
+                    operation="",
+                    realisation_seed=0,
+                    companion_seed=seed,
+                    status="reserve",
+                )
+            )
+
+    # A silent shortfall would destroy the equal weighting the primary estimand
+    # assumes, so the post-build check is mandatory rather than advisory.
+    built_counts = Counter(
+        u.operation
+        for u in units
+        if u.lane == "core" and u.status == "active"
+    )
+    if not allow_short and len(set(built_counts.values())) > 1:
+        raise click.ClickException(
+            f"unequal core quotas after build: {dict(built_counts)}"
+        )
+
+    specs = plan_fixed_position(
+        items, LADDER_CRITERIA, model=model, levels=swept, base_seed=seed
+    )
+    est = estimate(specs)
+    projection = project_cost(est, entry["in"], entry["out"])
+    console.print(f"items: {len(items)}  levels={swept}")
+    console.print(f"calls: {len(specs)}")
+    console.print(
+        f"est input {est['est_input_tokens']:,}, "
+        f"input authorization ceiling {est['est_input_tokens_ceiling']:,}, "
+        f"output ceiling {est['est_output_tokens_ceiling']:,}"
+    )
+    console.print(
+        f"[bold]cost ceiling ${projection['usd_total_ceiling']:.2f}[/bold] "
+        "(actual output will be lower)"
+    )
+
+    plan = SamplingPlan(
+        dataset_id=path.stem,
+        dataset_sha256=file_sha256(path),
+        manifest_sha256=LADDER_MANIFEST.full_hash,
+        seed=seed,
+        model=model,
+        model_settings={
+            "reasoning_effort": "low",
+            "temperature": None,
+            "core_candidates": core_candidates,
+            "per_op_max": per_op_max,
+        },
+        levels=swept,
+        units=tuple(units),
+        call_identities=tuple(s.identity for s in specs),
+    )
+    Path(plan_out).parent.mkdir(parents=True, exist_ok=True)
+    write_plan(Path(plan_out), plan)
+    console.print(
+        f"sampling plan written to {plan_out} "
+        f"({plan.active_count} active units)"
+    )
+
+    if dry_run:
+        console.print("dry run: nothing sent")
+        return
+    raise click.ClickException(
+        "live execution consumes the frozen sampling plan and is not implemented "
+        "here; see the live-execution prerequisites in the plan"
+    )
+
+
+@cli.command("ladder-run")
+@click.option("--plan", "plan_path", type=click.Path(), required=True)
+@click.option("--items", "items_path", type=click.Path(), required=True)
+@click.option("--name", default="ladder", show_default=True)
+@click.option("--workers", type=int, default=16, show_default=True)
+@click.option("--max-failures", type=int, default=40, show_default=True)
+@click.option(
+    "--timeout", type=float, default=90.0, show_default=True,
+    help="Per-request timeout in seconds, passed to the provider client.",
+)
+@click.option(
+    "--sdk-retries", type=int, default=1, show_default=True,
+    help="Provider-level retries. Each retry is a fully billed call whose "
+         "tokens are never recorded, so this bounds invisible spend.",
+)
+@click.option(
+    "--stall-seconds", type=float, default=300.0, show_default=True,
+    help="Abort if no call completes for this long. Written work is resumable, "
+         "so aborting a hung run loses nothing.",
+)
+@click.option(
+    "--archive-to", type=click.Path(), default="artifacts", show_default=True,
+    help="Where the run is copied after execution. Must not be under runs/.",
+)
+@click.option(
+    "--replacement-rounds", type=int, default=2, show_default=True,
+    help="Rounds of same-lane replacement for units left incomplete by "
+         "transient failures. Each round issues a full ladder per unit, so this "
+         "bounds the extra spend. Zero disables replacement.",
+)
+@click.option(
+    "--confirm-spend", is_flag=True, default=False,
+    help="Required to send anything. Without it this is a plan check only.",
+)
+def ladder_run_cmd(
+    plan_path: str,
+    items_path: str,
+    name: str,
+    workers: int,
+    max_failures: int,
+    timeout: float,
+    sdk_retries: int,
+    stall_seconds: float,
+    archive_to: str,
+    replacement_rounds: int,
+    confirm_spend: bool,
+) -> None:
+    """Execute a frozen ladder sampling plan.
+
+    Consumes the artifact rather than re-screening, so the sample cannot drift
+    between planning and execution.
+    """
+    from .live import (
+        active_unit_manifest,
+        archive_run,
+        estimate_replacement_round,
+        plan_replacements,
+        read_substitutions,
+        rebuild_with_replacements,
+        sample_fingerprint,
+        verify_run_dir,
+        write_substitution,
+    )
+    from .runner import execute_concurrent
+    from .sampling_plan import read_plan
+
+    plan = read_plan(Path(plan_path))
+    run_dir = _run_dir(name)
+    substitution_log = run_dir / "replacements.jsonl"
+    recorded_substitutions = read_substitutions(substitution_log)
+    items, specs = rebuild_with_replacements(
+        plan, Path(items_path), recorded_substitutions
+    )
+    if timeout <= 0:
+        raise click.ClickException("timeout must be greater than zero")
+    if sdk_retries < 0:
+        raise click.ClickException("sdk-retries must be non-negative")
+    minimum_stall = timeout * (sdk_retries + 1) + 60
+    if stall_seconds <= minimum_stall:
+        raise click.ClickException(
+            "stall-seconds must exceed the longest configured request/retry "
+            f"window ({minimum_stall:.0f}s for timeout={timeout:g}, "
+            f"sdk-retries={sdk_retries}) or the watchdog can kill healthy "
+            "in-flight calls"
+        )
+
+    if plan.model not in CATALOG:
+        raise click.ClickException(f"no pricing for {plan.model!r}")
+    entry = CATALOG[plan.model]
+    est = estimate(specs)
+    projection = project_cost(est, entry["in"], entry["out"])
+    max_attempts = sdk_retries + 1
+    main_authorized = projection["usd_total_ceiling"] * max_attempts
+
+    console.print(f"plan {plan_path}: manifest {plan.manifest_sha256[:16]}, seed {plan.seed}")
+    console.print(f"integrity verified: dataset and manifest digests match")
+    console.print(f"units {plan.active_count}, calls {len(specs)}, model {plan.model}")
+    console.print(
+        f"estimated input {est['est_input_tokens']:,}, authorization ceiling "
+        f"{est['est_input_tokens_ceiling']:,}; output ceiling "
+        f"{est['est_output_tokens_ceiling']:,}"
+    )
+    console.print(
+        f"[bold]authorized ceiling ${main_authorized:.2f}[/bold] "
+        f"for {max_attempts} maximum attempts per call"
+    )
+
+    # Replacement is automatic and issues a full ladder per incomplete unit, so
+    # the figure the spend is authorised against has to include it. The bound is
+    # the whole sample failing in every round, which will not happen, but a
+    # ceiling that excludes a path the command takes by default is not a
+    # ceiling. Priced per round because each round can replace every unit again.
+    if replacement_rounds > 0:
+        replacement_est = estimate_replacement_round(
+            plan, Path(items_path), recorded_substitutions
+        )
+        replacement_projection = project_cost(
+            replacement_est, entry["in"], entry["out"]
+        )
+        per_unit = replacement_est["calls"] / max(plan.active_count, 1)
+        worst_extra = (
+            replacement_projection["usd_total_ceiling"]
+            * replacement_rounds
+            * max_attempts
+        )
+        console.print(
+            f"[bold]+ up to ${worst_extra:.2f}[/bold] for "
+            f"{replacement_rounds} replacement round(s), the bound being every "
+            f"unit incomplete in every round at {per_unit:.0f} reserve-priced "
+            "calls each. "
+            "Pass --replacement-rounds 0 to remove it."
+        )
+        console.print(
+            f"[bold]worst case ${main_authorized + worst_extra:.2f}"
+            "[/bold]"
+        )
+
+    if not confirm_spend:
+        console.print(
+            "[yellow]no --confirm-spend: plan verified, nothing sent[/yellow]"
+        )
+        return
+
+    if Path(archive_to).resolve().is_relative_to(Path("runs").resolve()):
+        raise click.ClickException(
+            f"--archive-to {archive_to} is under runs/, which .gitignore covers. "
+            "The point of archival is to escape that rule."
+        )
+
+    # Before anything is overwritten: an existing run directory may already hold
+    # paid calls, and only some of this metadata may legitimately change.
+    verify_run_dir(run_dir, plan)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    write_jsonl(items, run_dir / "items.jsonl")
+    previous_meta_path = run_dir / "meta.json"
+    previous_meta = (
+        json.loads(previous_meta_path.read_text(encoding="utf-8"))
+        if previous_meta_path.exists()
+        else {}
+    )
+    plan_paths = list(previous_meta.get("plan_paths") or [])
+    if not plan_paths and previous_meta.get("plan_path"):
+        plan_paths.append(previous_meta["plan_path"])
+    if plan_path not in plan_paths:
+        plan_paths.append(plan_path)
+    plan_fingerprints = dict(previous_meta.get("plan_fingerprints") or {})
+    plan_fingerprints[str(plan_path)] = sample_fingerprint(plan)
+    (run_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "dataset": "ladder",
+                "model": plan.model,
+                "model_settings": plan.model_settings,
+                "levels": list(plan.levels),
+                "seed": plan.seed,
+                "manifest_sha256": plan.manifest_sha256,
+                "dataset_sha256": plan.dataset_sha256,
+                "sample_sha256": sample_fingerprint(plan),
+                "plan_path": str(plan_path),
+                "plan_paths": plan_paths,
+                "plan_fingerprints": plan_fingerprints,
+                "active_units": active_unit_manifest(plan),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    # Bound each request and its provider retries, then use a process watchdog
+    # for transport reads that do not return an error. Provider retries can be
+    # billed without producing retained token records.
+    provider = get_provider(plan.model, timeout=timeout, max_retries=sdk_retries)
+    calls_path = run_dir / "calls.jsonl"
+    stop = threading.Event()
+
+    def _watchdog() -> None:
+        last_size = -1
+        last_change = time.monotonic()
+        while not stop.wait(15.0):
+            size = calls_path.stat().st_size if calls_path.exists() else 0
+            if size != last_size:
+                last_size, last_change = size, time.monotonic()
+                continue
+            idle = time.monotonic() - last_change
+            if idle > stall_seconds:
+                console.print(
+                    f"[red]stalled: no call completed for {idle:.0f}s. Aborting. "
+                    "Rerun the same command to resume from what landed.[/red]"
+                )
+                # os._exit, not sys.exit: the worker threads are blocked in a
+                # socket read that will not return, so a clean shutdown would
+                # itself hang and keep billing.
+                os._exit(75)
+
+    threading.Thread(target=_watchdog, daemon=True).start()
+    try:
+        stats = execute_concurrent(
+            specs,
+            provider,
+            calls_path,
+            workers=workers,
+            max_failures=max_failures,
+        )
+    finally:
+        stop.set()
+    console.print(
+        f"attempted {stats.attempted}, written {stats.written}, "
+        f"skipped {stats.skipped}, failed {stats.failed}"
+    )
+    if stats.errors:
+        for line in stats.errors[:10]:
+            console.print(f"[yellow]{line}[/yellow]")
+
+    # Replacement, now that the pool has drained. A transient failure that
+    # outlived its retries leaves a unit with an incomplete ladder, and the
+    # primary estimator pairs within a unit across rungs, so an incomplete unit
+    # contributes nothing rather than contributing partially. Drawing a reserve
+    # from the same lane is what the design specified; running it here is what
+    # makes the specification true.
+    for attempt in range(1, replacement_rounds + 1):
+        recorded = read_substitutions(substitution_log)
+        # The sample as it currently stands, not as it was planned. A substitute
+        # is a unit like any other, so a round has to be able to see that the
+        # previous round's substitute is the thing now incomplete.
+        _, live_specs = rebuild_with_replacements(
+            plan, Path(items_path), recorded
+        )
+        pending = plan_replacements(
+            plan, Path(items_path), calls_path,
+            specs=live_specs, existing=recorded,
+        )
+        if not pending:
+            if attempt == 1:
+                console.print("no replacement needed: every unit is complete")
+            break
+
+        replacement_specs = [spec for _, _, specs_for in pending for spec in specs_for]
+        console.print(
+            f"[yellow]replacement round {attempt}: {len(pending)} unit(s) "
+            f"incomplete, {len(replacement_specs)} call(s) to issue[/yellow]"
+        )
+        for substitution, _, _ in pending:
+            console.print(
+                f"  {substitution.replaced_base_item_id} -> "
+                f"{substitution.replacement_base_item_id} "
+                f"({substitution.lane}/{substitution.operation}, "
+                f"{len(substitution.unresolved_identities)} open)"
+            )
+
+        # Recorded before the calls go out. A crash mid-round would otherwise
+        # re-draw a different reserve for the same unit on resume and pay twice.
+        for substitution, _, _ in pending:
+            write_substitution(substitution_log, substitution)
+
+        # The watchdog closes over `stop`, which the main pass has already set,
+        # so it has to be reopened for this round or the thread returns at once
+        # and a stalled replacement round would hang unwatched.
+        stop.clear()
+        threading.Thread(target=_watchdog, daemon=True).start()
+        try:
+            round_stats = execute_concurrent(
+                replacement_specs,
+                provider,
+                calls_path,
+                workers=workers,
+                max_failures=max_failures,
+            )
+        finally:
+            stop.set()
+        console.print(
+            f"round {attempt}: attempted {round_stats.attempted}, "
+            f"written {round_stats.written}, failed {round_stats.failed}"
+        )
+
+    # Items must include every replacement, or the calls just paid for cannot be
+    # scored and a resumed run cannot recognise them.
+    final_items, _ = rebuild_with_replacements(
+        plan, Path(items_path), read_substitutions(substitution_log)
+    )
+    write_jsonl(final_items, run_dir / "items.jsonl")
+
+    destination = archive_run(run_dir, Path(archive_to))
+    console.print(f"[bold]archived to {destination}[/bold]")
+
+
+# Every run that backs a published claim. `ladder` is the severity ladder from
+# calibration; `ladder-k40` is the fixed-position K = 40 experiment. The names are
+# confusingly close and mean different things.
+CLAIM_RUNS: tuple[str, ...] = (
+    "pilot",
+    "sweep",
+    "calib",
+    "calib2",
+    "ladder",
+    "ladder-k40",
+)
+
+
+@cli.command("reproduce")
+@click.option(
+    "--expected", "expected_path", type=click.Path(),
+    default="replication/expected.json", show_default=True,
+)
+@click.option(
+    "--sums", "sums_path", type=click.Path(), default=None,
+    help="Optional SHA256SUMS to verify artifacts against before recomputing.",
+)
+@click.option("--root", type=click.Path(), default=".", show_default=True)
+@click.option(
+    "--tolerance", type=float, default=None,
+    help="Float comparison tolerance. Counts and ids are always exact.",
+)
+@click.option(
+    "--strict", is_flag=True,
+    help="Fail if any recomputed claim value is not pinned in the expected file.",
+)
+def reproduce_cmd(
+    expected_path: str,
+    sums_path: str | None,
+    root: str,
+    tolerance: float | None,
+    strict: bool,
+) -> None:
+    """Recompute every published claim from retained artifacts. No API key.
+
+    Audits the analysis path. It does not audit construction: call records that
+    are internally consistent with a wrong experiment still recompute cleanly.
+    """
+    from .replication import (
+        FLOAT_TOLERANCE,
+        compare,
+        compute_claims,
+        coverage_gaps,
+        verify_checksums,
+    )
+
+    if sums_path:
+        problems = verify_checksums(Path(sums_path), Path(root))
+        if problems:
+            console.print("[red]artifact verification failed[/red]")
+            for problem in problems[:20]:
+                console.print(f"  {problem}")
+            raise click.ClickException(
+                f"{len(problems)} artifact problem(s); recomputation not attempted"
+            )
+        console.print("[green]artifact checksums verified[/green]")
+
+    missing = [name for name in CLAIM_RUNS if not (_run_dir(name) / "calls.jsonl").exists()]
+    payload = json.loads(Path(expected_path).read_text(encoding="utf-8"))
+    expected = payload["claims"]
+
+    try:
+        claims = compute_claims(_load_run)
+    except Exception as exc:  # noqa: BLE001 - report which artifact is absent
+        console.print(f"[yellow]UNAVAILABLE: {exc}[/yellow]")
+        if missing:
+            console.print(
+                f"missing run artifacts: {', '.join(missing)}. Download the "
+                "release bundle listed in replication/RELEASE.json."
+            )
+        raise click.ClickException("recomputation could not run") from exc
+
+    results = compare(
+        claims, expected,
+        tolerance=FLOAT_TOLERANCE if tolerance is None else tolerance,
+    )
+    failures = [r for r in results if not r.ok]
+    by_section: dict[str, list] = {}
+    for result in results:
+        by_section.setdefault(result.section, []).append(result)
+    for section, rows in by_section.items():
+        bad = sum(1 for r in rows if not r.ok)
+        state = "[green]PASS[/green]" if not bad else "[red]MISMATCH[/red]"
+        console.print(f"\n{section}: {state} ({len(rows) - bad}/{len(rows)})")
+        for result in rows:
+            if not result.ok:
+                console.print(f"[red]{result.line}[/red]")
+
+    gaps = coverage_gaps(claims, expected)
+    if gaps:
+        console.print("\n[yellow]unpinned, so recomputed but not verified:[/yellow]")
+        for gap in gaps:
+            console.print(f"[yellow]  {gap}[/yellow]")
+
+    console.print()
+    if failures:
+        raise click.ClickException(
+            f"MISMATCH: {len(failures)} of {len(results)} values disagree"
+        )
+    if gaps and strict:
+        raise click.ClickException(
+            f"{len(gaps)} computed value(s) are not pinned; --strict treats an "
+            "unverified claim as a failure"
+        )
+    console.print(
+        f"[bold green]PASS[/bold green]: {len(results)} published values "
+        "recomputed from retained artifacts"
+    )
+    # State the boundary in the same breath as the result. A PASS that reads as
+    # "the whole document is verified" is worse than no check at all.
+    console.print(
+        "[dim]covers the pinned pilot, sweep, position-decomposition, and "
+        "fixed-position endpoint claims. The calibration gate needs "
+        "`packing calibration-report`; additional ladder diagnostics need "
+        "`packing ladder-analyze`.[/dim]"
+    )
+    if missing:
+        console.print(
+            f"[yellow]note: {', '.join(missing)} absent, so claims backed only "
+            "by those runs were not checked[/yellow]"
+        )
+
+
+@cli.command("verify-release")
+@click.argument("archive", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--release",
+    "release_path",
+    type=click.Path(exists=True, dir_okay=False),
+    default="replication/RELEASE.json",
+    show_default=True,
+)
+def verify_release_cmd(archive: str, release_path: str) -> None:
+    """Verify an archive before extracting or trusting its internal checksums."""
+    from .replication import verify_release_archive
+
+    problems = verify_release_archive(Path(archive), Path(release_path))
+    if problems:
+        for problem in problems:
+            console.print(f"[red]FAIL[/red] {problem}")
+        raise click.ClickException("release archive does not match RELEASE.json")
+    console.print("[green]PASS[/green] archive matches RELEASE.json")
+
+
+@cli.command("bundle")
+@click.option("--out", "out_dir", type=click.Path(), default="dist", show_default=True)
+@click.option("--version", default="v1", show_default=True)
+@click.option(
+    "--items", "items_path", type=click.Path(),
+    default="data/helpsteer2.jsonl", show_default=True,
+)
+def bundle_cmd(out_dir: str, version: str, items_path: str) -> None:
+    """Build the checksum-pinned replication bundle. No API key, no upload.
+
+    Publishing the archive is a separate, deliberate step.
+    """
+    import tarfile
+
+    from .replication import (
+        ReplicationError,
+        clean_git_commit,
+        file_sha256,
+        ordered_item_id_sha256,
+        verify_run_artifacts,
+    )
+
+    try:
+        commit = clean_git_commit(Path.cwd())
+    except (ReplicationError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    frame = Path(items_path)
+    if not frame.exists():
+        raise click.ClickException(f"{frame} not found")
+
+    # Every frame a bundled run was actually built against, not just the one
+    # named on the command line. The K = 40 ladder was drawn from a different,
+    # larger frame than the pilot and the sweep, and a bundle carrying only the
+    # primary one cannot rebuild the ladder's sample: the digest gate in
+    # `verify_plan` rejects it. Resolved by digest so the file is identified by
+    # content rather than by a path someone has to remember to pass.
+    available = {file_sha256(path): path for path in sorted(Path("data").glob("*.jsonl"))}
+    frames: dict[str, Path] = {file_sha256(frame): frame}
+    used_by: dict[str, list[str]] = {file_sha256(frame): []}
+    for run in CLAIM_RUNS:
+        meta_path = _run_dir(run) / "meta.json"
+        if not meta_path.exists():
+            continue
+        digest = json.loads(meta_path.read_text(encoding="utf-8")).get("dataset_sha256")
+        if not digest:
+            continue
+        source = available.get(digest)
+        if source is None:
+            raise click.ClickException(
+                f"run {run!r} was built against frame {digest[:16]}, which is "
+                "not in data/. The bundle would omit the frame its own sample "
+                "was drawn from."
+            )
+        frames.setdefault(digest, source)
+        used_by.setdefault(digest, []).append(run)
+
+    name = f"packing-replication-{version}"
+    staging = Path(out_dir) / name
+    if staging.exists():
+        raise click.ClickException(
+            f"{staging} already exists; bundles are never overwritten"
+        )
+    (staging / "data").mkdir(parents=True)
+    for source in frames.values():
+        shutil.copy2(source, staging / "data" / source.name)
+
+    present, absent = [], []
+    for run in CLAIM_RUNS:
+        source = _run_dir(run)
+        required = verify_run_artifacts(source)
+        if len(required) == 3:
+            absent.append(run)
+            continue
+        if required:
+            shutil.rmtree(staging)
+            raise click.ClickException(
+                f"run {run!r} is incomplete: {', '.join(required)}"
+            )
+        destination = staging / "runs" / run
+        destination.mkdir(parents=True)
+        for filename in (
+            "calls.jsonl",
+            "items.jsonl",
+            "meta.json",
+            "replacements.jsonl",
+        ):
+            candidate = source / filename
+            if candidate.exists():
+                shutil.copy2(candidate, destination / filename)
+        present.append(run)
+
+    if absent:
+        shutil.rmtree(staging)
+        raise click.ClickException(
+            "cannot build a release bundle without every claim run: "
+            + ", ".join(absent)
+        )
+
+    # The sampling plan, where a run has one. The frame says which prompts were
+    # available and the items say what was built; only the plan says which units
+    # were drawn, with what operation, side and seed. Without it a replicator can
+    # recompute the published numbers but cannot check the sample against the
+    # design, which is the claim the plan exists to make falsifiable.
+    from .live import (
+        active_unit_manifest,
+        read_substitutions,
+        rebuild_with_replacements,
+        sample_fingerprint,
+        verify_plan,
+    )
+    from .sampling_plan import read_plan
+
+    plans: list[str] = []
+    copied_plans: dict[str, str] = {}
+    for run in present:
+        meta_path = _run_dir(run) / "meta.json"
+        if not meta_path.exists():
+            continue
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        # `plan_paths` where a run spans more than one pass, falling back to the
+        # single `plan_path`. The K = 40 ladder was collected in two passes and
+        # recorded only the second, so bundling one plan would have documented
+        # three of its six rungs.
+        recorded = meta.get("plan_paths") or (
+            [meta["plan_path"]] if meta.get("plan_path") else []
+        )
+        run_plans = []
+        for entry in recorded:
+            source = Path(entry)
+            if not source.exists():
+                raise click.ClickException(
+                    f"run {run!r} names plan {entry}, which is missing. The "
+                    "bundle would omit the record of how its sample was drawn."
+                )
+            plan = read_plan(source)
+            plan_frame = frames.get(plan.dataset_sha256)
+            if plan_frame is None:
+                raise click.ClickException(
+                    f"run {run!r} names plan {entry}, but its source frame "
+                    f"{plan.dataset_sha256[:16]} is not available for verification"
+                )
+            try:
+                verify_plan(plan, plan_frame)
+            except Exception as exc:
+                raise click.ClickException(
+                    f"run {run!r} names invalid plan {entry}: {exc}"
+                ) from exc
+            run_plans.append(plan)
+            recorded_sample = (meta.get("plan_fingerprints") or {}).get(entry)
+            if recorded_sample is None and entry == meta.get("plan_path"):
+                recorded_sample = meta.get("sample_sha256")
+            if (
+                recorded_sample is not None
+                and recorded_sample != sample_fingerprint(plan)
+            ):
+                raise click.ClickException(
+                    f"run {run!r} names plan {entry}, but that plan describes "
+                    "a different sample"
+                )
+            (staging / "plans").mkdir(exist_ok=True)
+            digest = file_sha256(source)
+            previous_digest = copied_plans.get(source.name)
+            if previous_digest is not None and previous_digest != digest:
+                raise click.ClickException(
+                    f"two different plans are both named {source.name!r}; "
+                    "the bundle cannot represent both without ambiguity"
+                )
+            if previous_digest is None:
+                shutil.copy2(source, staging / "plans" / source.name)
+                copied_plans[source.name] = digest
+                plans.append(f"plans/{source.name}")
+
+        if run_plans:
+            final_plan = max(run_plans, key=lambda candidate: candidate.active_count)
+            final_units = {
+                row["base_item_id"]: row
+                for row in active_unit_manifest(final_plan)
+            }
+            for historical in run_plans:
+                fixed = (
+                    historical.dataset_id,
+                    historical.dataset_sha256,
+                    historical.manifest_sha256,
+                    historical.seed,
+                    historical.model,
+                    historical.model_settings,
+                )
+                final_fixed = (
+                    final_plan.dataset_id,
+                    final_plan.dataset_sha256,
+                    final_plan.manifest_sha256,
+                    final_plan.seed,
+                    final_plan.model,
+                    final_plan.model_settings,
+                )
+                if fixed != final_fixed:
+                    raise click.ClickException(
+                        f"run {run!r} combines incompatible sampling plans"
+                    )
+                for row in active_unit_manifest(historical):
+                    if final_units.get(row["base_item_id"]) != row:
+                        raise click.ClickException(
+                            f"run {run!r} has a plan that removes or reassigns "
+                            f"active unit {row['base_item_id']!r}"
+                        )
+
+            substitutions = read_substitutions(
+                _run_dir(run) / "replacements.jsonl"
+            )
+            expected_items: set[str] = set()
+            expected_calls: set[str] = set()
+            for candidate in run_plans:
+                candidate_frame = frames[candidate.dataset_sha256]
+                rebuilt_items, rebuilt_specs = rebuild_with_replacements(
+                    candidate, candidate_frame, substitutions
+                )
+                expected_items.update(item.item_id for item in rebuilt_items)
+                expected_calls.update(spec.identity for spec in rebuilt_specs)
+
+            retained_items = {
+                item.item_id
+                for item in read_jsonl(_run_dir(run) / "items.jsonl")
+            }
+            unexpected_items = sorted(retained_items - expected_items)
+            if unexpected_items:
+                raise click.ClickException(
+                    f"run {run!r} contains items outside its plans: "
+                    + ", ".join(unexpected_items[:5])
+                )
+            retained_calls = {
+                json.loads(line)["identity"]
+                for line in (_run_dir(run) / "calls.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            }
+            unexpected_calls = sorted(retained_calls - expected_calls)
+            if unexpected_calls:
+                raise click.ClickException(
+                    f"run {run!r} contains calls outside its plans: "
+                    + ", ".join(unexpected_calls[:5])
+                )
+
+    (staging / "environment").mkdir()
+    for filename in ("uv.lock", "pyproject.toml"):
+        if Path(filename).exists():
+            shutil.copy2(filename, staging / "environment" / filename)
+    shutil.copy2("replication/expected.json", staging / "expected.json")
+
+    manifest = {
+        "bundle": name,
+        "code_commit": commit,
+        "runs_included": present,
+        "runs_absent": absent,
+        "plans_included": plans,
+        "model": "gpt-5-mini",
+        "model_is_an_alias": True,
+        "request_settings": {
+            "temperature": None,
+            "reasoning_effort": "low",
+            "structured_outputs": "strict",
+        },
+        "frames": [
+            {
+                "path": f"data/{source.name}",
+                "dataset_sha256": digest,
+                "ordered_item_id_sha256": ordered_item_id_sha256(source),
+                "dataset_source": "nvidia/HelpSteer2",
+                "dataset_licence": "CC-BY-4.0",
+                "fetch_command": (
+                    f"packing fetch --limit {sum(1 for _ in source.open())}"
+                ),
+                "n_items": sum(1 for _ in source.open()),
+                # Empty means the frame is the primary one, used by every run
+                # that does not record a digest of its own.
+                "used_by": sorted(used_by.get(digest, [])),
+                "is_primary": source == frame,
+            }
+            for digest, source in frames.items()
+        ],
+        "not_recorded": [
+            "provider response ids",
+            "per-call wall-clock timestamps",
+            "pinned model snapshot (gpt-5-mini is an alias)",
+        ],
+        "recompute_command": "packing reproduce --sums SHA256SUMS",
+    }
+    (staging / "MANIFEST.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    lines = []
+    for path in sorted(staging.rglob("*")):
+        if path.is_file() and path.name != "SHA256SUMS":
+            lines.append(f"{file_sha256(path)}  {path.relative_to(staging)}")
+    (staging / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    archive = Path(out_dir) / f"{name}.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(staging, arcname=name)
+
+    size_mb = archive.stat().st_size / 1e6
+    console.print(f"runs included: {', '.join(present)}")
+    if absent:
+        console.print(f"[yellow]runs absent: {', '.join(absent)}[/yellow]")
+    console.print(f"files: {len(lines)}")
+    console.print(f"[bold]{archive}[/bold]  {size_mb:.1f} MB")
+    console.print(f"archive sha256: {file_sha256(archive)}")
+    console.print("\nNothing was uploaded. Publishing the archive is a separate step.")
+
+
+@cli.command("ladder-analyze")
+@click.option("--run", "name", default="ladder-k40", show_default=True)
+@click.option("--reference", type=int, default=1, show_default=True)
+@click.option("--comparison", type=int, default=40, show_default=True)
+def ladder_analyze_cmd(name: str, reference: int, comparison: int) -> None:
+    """The ladder's pre-registered estimand, plus its diagnostics.
+
+    The generic `analyze` command reports the sweep's stratified recovery tables,
+    which is not this design's primary quantity. The primary here is one
+    equal-weighted contrast across the eight core operations.
+    """
+    from .eligibility import CORE_OPERATIONS, NUMBERS_OPERATION
+    from .ladder_criteria import LADDER_CRITERIA
+
+    items, criteria, records, meta = _load_run(name)
+    frame = analyze.to_frame(analyze.build_outcomes(records, items, LADDER_CRITERIA))
+    if frame.empty:
+        raise click.ClickException("no outcomes to analyse")
+    frame = analyze.annotate_synthetic(frame, items)
+
+    # Recovery is defined on the targeted criterion only. Companions are neutral
+    # by construction and contribute ties, not outcomes.
+    targeted = analyze.synthetic_recovery_frame(frame[frame["is_target"]])
+    core = targeted[targeted["operation"].isin(CORE_OPERATIONS)]
+    numbers = targeted[targeted["operation"] == NUMBERS_OPERATION]
+
+    console.print(
+        f"[bold]run {name}[/bold]  manifest {str(meta.get('manifest_sha256'))[:16]}  "
+        f"seed {meta.get('seed')}  levels {meta.get('levels')}"
+    )
+    console.print(
+        f"outcomes: {len(targeted)} targeted "
+        f"({len(core)} core, {len(numbers)} numbers)"
+    )
+
+    _show(
+        targeted.groupby(["operation", "group_size"])["correct_num"]
+        .agg(["size", "mean"])
+        .round(4),
+        "Directional recovery by operation and rung (descriptive)",
+    )
+
+    console.print("\n[bold]PRIMARY: equal-weighted core contrast[/bold]")
+    primary = analyze.stratified_endpoint(
+        core, reference, comparison, operations=tuple(CORE_OPERATIONS)
+    )
+    if primary is None:
+        console.print(
+            "[yellow]not estimable yet: an operation is missing or thin. "
+            "The estimand is an average over all eight, so a subset is a "
+            "different quantity.[/yellow]"
+        )
+    else:
+        console.print(json.dumps(primary.as_row(), indent=2))
+        console.print(f"per operation: {json.dumps(primary.per_operation)}")
+
+    console.print("\n[bold]Sensitivity to the unevaluable rule[/bold]")
+    for rule in ("primary", "lower_bound", "upper_bound", "complete_case"):
+        alt = analyze.to_frame(
+            analyze.build_outcomes(
+                records,
+                items,
+                LADDER_CRITERIA,
+                unevaluable_rule=rule,
+                reference_size=reference,
+            )
+        )
+        if alt.empty:
+            console.print(f"  {rule:<14} no outcomes")
+            continue
+        alt = analyze.annotate_synthetic(alt, items)
+        alt_core = analyze.synthetic_recovery_frame(alt[alt["is_target"]])
+        alt_core = alt_core[alt_core["operation"].isin(CORE_OPERATIONS)]
+        result = analyze.stratified_endpoint(
+            alt_core, reference, comparison, operations=tuple(CORE_OPERATIONS)
+        )
+        if result is None:
+            console.print(f"  {rule:<14} not estimable")
+        else:
+            console.print(
+                f"  {rule:<14} theta {result.theta:+.4f}  "
+                f"CI [{result.ci_low:+.4f}, {result.ci_high:+.4f}]  "
+                f"p {result.p_value:.4g}"
+            )
+
+    console.print("\n[bold]KEY SECONDARY: numbers correctness sentinel[/bold]")
+    paired = analyze.paired_contrast(numbers, reference, comparison)
+    if paired is None:
+        console.print("[yellow]not estimable yet[/yellow]")
+    else:
+        console.print(json.dumps(paired.as_row(), indent=2))
+
+    _show(
+        analyze.synthetic_recovery_frame(frame[frame["is_target"]])
+        .groupby("group_size")
+        .agg(
+            n=("correct_num", "size"),
+            recovery=("correct_num", "mean"),
+            unevaluable=("unevaluable", "mean"),
+        )
+        .round(4),
+        "Diagnostics by rung: recovery and unevaluable frequency",
+    )
+    _show(
+        analyze.judge_tie_diagnostics(frame[frame["is_target"]]),
+        "Target-criterion judge tie rate by rung (diagnostic secondary)",
     )
 
 

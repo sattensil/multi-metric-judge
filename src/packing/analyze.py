@@ -32,6 +32,7 @@ from .criteria import Criterion
 from .dataset import PairedItem
 from .budget import near_cap
 from .score import Outcome, make_outcome, quadratic_weighted_kappa
+from .unevaluable import FATAL, TRANSIENT, classify_failure, unevaluable_value
 
 SYNTHETIC_POSITIVE_CONTROLS = frozenset(
     {"contradict", "hedge", "lowercase", "offtopic", "slang", "typos"}
@@ -66,16 +67,67 @@ def _near_cap_of(record: dict[str, Any]) -> bool:
     )
 
 
+def _unevaluable_outcome(
+    *,
+    item_id: str,
+    criterion: str,
+    group_size: int,
+    position: int,
+    nominal_n: int,
+    replicate: int,
+    model: str,
+    partition_hash: str,
+    value: float,
+) -> Outcome:
+    """One outcome for a paired unit the judge did not return readable output for.
+
+    Marked resolved: the composite outcome is defined for this unit, and leaving
+    it unresolved would have `resolved()` drop exactly the observations the
+    definition exists to retain.
+    """
+    return Outcome(
+        item_id=item_id,
+        criterion=criterion,
+        group_size=group_size,
+        position=position,
+        nominal_n=nominal_n,
+        replicate=replicate,
+        model=model,
+        partition_hash=partition_hash,
+        human_a=0,
+        human_b=0,
+        judge_a=0,
+        judge_b=0,
+        human_tie=False,
+        judge_tie=False,
+        correct=bool(value),
+        credit=value,
+        abs_error=float("nan"),
+        unevaluable=True,
+    )
+
+
 def build_outcomes(
     records: Iterable[dict[str, Any]],
     items: list[PairedItem],
     criteria: tuple[Criterion, ...],
+    *,
+    unevaluable_rule: str = "primary",
+    reference_size: int = 1,
 ) -> list[Outcome]:
     """Join per-side judge records into per-(item, criterion) outcomes.
 
     A criterion contributes an outcome only when *both* sides were judged in the
     same partition -- a pairwise comparison needs both halves. Half-complete
     pairs are dropped and counted rather than imputed.
+
+    Unevaluable output is scored here rather than at the call, because recovery
+    is a comparison between the two sides. A call-level rule would emit two
+    observations for a prompt whose sides both failed. Exactly one outcome is
+    emitted per (item, criterion, rung) regardless of how many sides failed.
+
+    Transient failures are dropped: they are replaced upstream and carry no
+    information about the judge.
     """
     by_key: dict[tuple[str, str, int, str, int], dict[str, Any]] = {}
     for record in records:
@@ -99,6 +151,49 @@ def build_outcomes(
         if item is None:
             continue
         rec_a, rec_b = sides["a"], sides["b"]
+
+        # Classification is derived from the retained message so analysis and
+        # resume apply one definition to every record.
+        classes = tuple(
+            classify_failure(rec.get("failure") or "")
+            for rec in (rec_a, rec_b)
+            if rec.get("failure")
+        )
+        if TRANSIENT in classes:
+            continue
+        # A terminal failure is a harness or billing fault, never a judge
+        # behaviour, so it cannot become a scored miss.
+        if FATAL in classes:
+            continue
+
+        if rec_a.get("failure") or rec_b.get("failure"):
+            value = unevaluable_value(
+                unevaluable_rule, rec_a["group_size"], reference_size
+            )
+            if value is None:
+                continue
+            for criterion_key, position in rec_a["positions"].items():
+                if criterion_key not in criteria_by_key:
+                    continue
+                if criterion_key != item.targeted_criterion:
+                    # Companions carry no gold, so an unevaluable call says
+                    # nothing about them.
+                    continue
+                outcomes.append(
+                    _unevaluable_outcome(
+                        item_id=item_id,
+                        criterion=criterion_key,
+                        group_size=rec_a["group_size"],
+                        position=position,
+                        nominal_n=rec_a["nominal_n"],
+                        replicate=replicate,
+                        model=model,
+                        partition_hash=partition_hash,
+                        value=value,
+                    )
+                )
+            continue
+
         for criterion_key, position in rec_a["positions"].items():
             if criterion_key not in criteria_by_key:
                 continue
@@ -121,9 +216,9 @@ def build_outcomes(
                     output_tokens=rec_a.get("output_tokens", 0)
                     + rec_b.get("output_tokens", 0),
                     schema_tokens=rec_a.get("schema_tokens", 0),
-                    # Recomputed rather than trusted: the stored flag was
-                    # miscalibrated before the reasoning-token correction, and
-                    # both inputs are on the record, so old runs stay usable.
+                    # Recomputed rather than trusted: a stored flag can carry a
+                    # different near-cap definition, and both inputs are on the
+                    # record, so every run is analysable on one definition.
                     near_cap=_near_cap_of(rec_a) or _near_cap_of(rec_b),
                 )
             )
@@ -151,7 +246,8 @@ def annotate_synthetic(
     for item in items:
         if item.source != "synthetic" and item.dataset != "synthetic":
             continue
-        operation = item.meta.get("corruption")
+        # `corruption` is the sweep builder's key, `operation` the ladder's.
+        operation = item.meta.get("corruption") or item.meta.get("operation")
         direction = item.meta.get("direction")
         corrupted_side = item.meta.get("corrupted_side")
         if not operation or direction not in (-1, 1) or corrupted_side not in ("a", "b"):
@@ -221,18 +317,28 @@ def synthetic_recovery(frame: pd.DataFrame) -> pd.DataFrame:
         keys = keys if isinstance(keys, tuple) else (keys,)
         row = dict(zip(group_columns, keys))
         n = len(chunk)
-        hits = int((chunk["correct"] == True).sum())  # noqa: E712
-        wrong = int((chunk["correct"] == False).sum())  # noqa: E712
-        ties = int(chunk["judge_tie"].sum())
+        evaluable = (
+            chunk[~chunk["unevaluable"]]
+            if "unevaluable" in chunk
+            else chunk
+        )
+        n_evaluable = len(evaluable)
+        hits = int((evaluable["correct"] == True).sum())  # noqa: E712
+        wrong = int((evaluable["correct"] == False).sum())  # noqa: E712
+        ties = int(evaluable["judge_tie"].sum())
         decided = hits + wrong
         row.update(
             {
                 "n": n,
+                "n_evaluable": n_evaluable,
                 "hits": hits,
                 "wrong": wrong,
                 "ties": ties,
                 "recovery_rate": hits / n if n else np.nan,
-                "tie_rate": ties / n if n else np.nan,
+                "tie_rate": ties / n_evaluable if n_evaluable else np.nan,
+                "unevaluable_rate": (
+                    (n - n_evaluable) / n if n else np.nan
+                ),
                 "discrimination": hits / decided if decided else np.nan,
             }
         )
@@ -240,8 +346,22 @@ def synthetic_recovery(frame: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index(group_columns).sort_index()
 
 
-# Backward-compatible alias during the naming transition.
-synthetic_detection = synthetic_recovery
+def judge_tie_diagnostics(frame: pd.DataFrame) -> pd.DataFrame:
+    """Judge tie rate by rung among outcomes the judge actually evaluated."""
+    evaluable = frame[~frame["unevaluable"]] if "unevaluable" in frame else frame
+    if evaluable.empty:
+        return pd.DataFrame(columns=["n_evaluable", "judge_tie_rate"])
+    return (
+        evaluable.groupby("group_size")["judge_tie"]
+        .agg(["size", "mean"])
+        .rename(
+            columns={
+                "size": "n_evaluable",
+                "mean": "judge_tie_rate",
+            }
+        )
+        .round(4)
+    )
 
 
 def synthetic_recovery_frame(frame: pd.DataFrame) -> pd.DataFrame:
@@ -256,9 +376,6 @@ def synthetic_recovery_frame(frame: pd.DataFrame) -> pd.DataFrame:
     target["correct_num"] = target["recovered"].astype(float)
     target["resolved"] = True
     return target
-
-
-synthetic_detection_frame = synthetic_recovery_frame
 
 
 def synthetic_specificity(frame: pd.DataFrame) -> pd.DataFrame:
@@ -419,6 +536,11 @@ def independence_unit(frame: pd.DataFrame) -> str:
 def descriptives(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Marginal means. Description only -- never inference; the SEs here ignore clustering."""
     res = resolved(frame)
+    evaluable = (
+        ~frame["unevaluable"]
+        if "unevaluable" in frame
+        else pd.Series(True, index=frame.index)
+    )
     out = {
         "by_group_size": res.groupby("group_size")["correct_num"]
         .agg(["mean", "count"])
@@ -432,7 +554,7 @@ def descriptives(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
         # Co-primary: judge indecision may itself rise with group size, and
         # excluding it from the accuracy model is only defensible if it is
         # reported separately.
-        "judge_tie_by_group_size": frame[~frame["human_tie"]]
+        "judge_tie_by_group_size": frame[~frame["human_tie"] & evaluable]
         .groupby("group_size")["judge_tie"]
         .agg(["mean", "count"])
         .rename(columns={"mean": "judge_tie_rate", "count": "n"}),
@@ -588,19 +710,29 @@ def fit_logit(
         )
 
 
-def lrt(restricted: Any, full: Any) -> dict[str, float]:
-    """Likelihood-ratio test, for the factor-vs-linear functional-form decision.
+def lrt(restricted: Any, full: Any) -> dict[str, Any]:
+    """Unclustered likelihood comparison for descriptive shape diagnostics.
 
-    Uses uncorrected likelihoods -- an LRT is a likelihood comparison and is not
-    affected by the robust covariance used for the SEs, but that also means it
-    ignores clustering. Treat it as a shape diagnostic, not as a p-value to
-    report on its own.
+    The statistic uses ordinary likelihoods and therefore ignores repeated
+    observations within item. It must not select the inferential model or be
+    presented as a cluster-valid hypothesis test.
     """
     stat = float(2 * (full.llf - restricted.llf))
     df = int(full.df_model - restricted.df_model)
+    interpretation = "descriptive only; ignores item clustering"
     if df <= 0:
-        return {"lr_stat": stat, "df": df, "p": float("nan")}
-    return {"lr_stat": stat, "df": df, "p": float(stats.chi2.sf(stat, df))}
+        return {
+            "lr_stat": stat,
+            "df": df,
+            "p": float("nan"),
+            "interpretation": interpretation,
+        }
+    return {
+        "lr_stat": stat,
+        "df": df,
+        "p": float(stats.chi2.sf(stat, df)),
+        "interpretation": interpretation,
+    }
 
 
 def functional_form(frame: pd.DataFrame) -> dict[str, Any]:
@@ -618,7 +750,7 @@ def functional_form(frame: pd.DataFrame) -> dict[str, Any]:
         "linear_slope_se": float(linear.bse.get("group_size", float("nan"))),
         "linear_p": float(linear.pvalues.get("group_size", float("nan"))),
         "lrt_factor_vs_linear": test,
-        "prefer": "factor" if test["p"] < 0.05 else "linear",
+        "prefer": "not selected",
         "linear_aic": float(linear.aic),
         "factor_aic": float(factor.aic),
     }
@@ -743,3 +875,118 @@ def fit_mixed(frame: pd.DataFrame) -> Any:
             "correct_num ~ group_size + position", vc, res
         )
         return model.fit_vb(verbose=False)
+
+
+# ------------------------------------------- stratified endpoint estimator ---
+
+
+@dataclass(frozen=True)
+class StratifiedResult:
+    """Equal-weight average across operation-specific endpoint differences."""
+
+    theta: float
+    se: float
+    df: float
+    t_stat: float
+    p_value: float
+    ci_low: float
+    ci_high: float
+    per_operation: dict[str, tuple[float, int]]
+
+    def as_row(self) -> dict[str, Any]:
+        return {
+            "theta": round(self.theta, 4),
+            "se": round(self.se, 4),
+            "df": round(self.df, 1),
+            "t": round(self.t_stat, 3),
+            "p": self.p_value,
+            "ci_low": round(self.ci_low, 4),
+            "ci_high": round(self.ci_high, 4),
+        }
+
+
+def stratified_endpoint(
+    frame: pd.DataFrame,
+    reference_size: int,
+    comparison_size: int,
+    *,
+    operations: tuple[str, ...],
+    min_units: int = 3,
+) -> StratifiedResult | None:
+    """Equal weight per operation, not per observation.
+
+    Equal quotas define the weights, so the estimator must apply them. An
+    unqualified mean over all per-unit differences would re-weight operations by
+    however many units each happened to contribute, which is exactly what quotas
+    exist to prevent.
+
+        theta = (1/O) * sum_o mean(d_o)
+        Var   = (1/O^2) * sum_o s_o^2 / n_o
+        df    = Welch-Satterthwaite over the same strata
+
+    Returns None rather than a partial answer when any operation is missing or
+    thin: the estimand is an average over all of them, so a subset is a different
+    quantity and should not be reported under the same name.
+    """
+    res = resolved(frame)
+    cluster = independence_unit(res)
+    if "operation" not in res.columns:
+        raise ValueError("frame has no `operation` column")
+
+    per_unit = (
+        res[res["group_size"].isin([reference_size, comparison_size])]
+        .groupby([cluster, "operation", "group_size"])["correct_num"]
+        .mean()
+        .unstack("group_size")
+    )
+    if reference_size not in per_unit or comparison_size not in per_unit:
+        return None
+    paired = per_unit[[reference_size, comparison_size]].dropna()
+    if paired.empty:
+        return None
+    diffs = (paired[comparison_size] - paired[reference_size]).rename("d")
+
+    means: list[float] = []
+    variance_terms: list[float] = []
+    df_terms: list[float] = []
+    per_operation: dict[str, tuple[float, int]] = {}
+    for operation in operations:
+        try:
+            values = diffs.xs(operation, level="operation").to_numpy()
+        except KeyError:
+            return None
+        n = len(values)
+        if n < min_units:
+            return None
+        mean = float(values.mean())
+        per_operation[operation] = (round(mean, 4), n)
+        means.append(mean)
+        term = float(values.var(ddof=1)) / n if n > 1 else 0.0
+        variance_terms.append(term)
+        df_terms.append(term**2 / (n - 1) if n > 1 else 0.0)
+
+    count = len(operations)
+    theta = float(np.mean(means))
+    variance = sum(variance_terms) / count**2
+    se = float(np.sqrt(variance))
+    if not se or np.isnan(se):
+        return None
+    denominator = sum(df_terms)
+    df = (
+        float(sum(variance_terms) ** 2 / denominator)
+        if denominator > 0
+        else float(count - 1)
+    )
+    t_stat = theta / se
+    p_value = float(2 * stats.t.sf(abs(t_stat), df=df))
+    crit = float(stats.t.ppf(0.975, df=df))
+    return StratifiedResult(
+        theta=theta,
+        se=se,
+        df=df,
+        t_stat=t_stat,
+        p_value=p_value,
+        ci_low=theta - crit * se,
+        ci_high=theta + crit * se,
+        per_operation=per_operation,
+    )
