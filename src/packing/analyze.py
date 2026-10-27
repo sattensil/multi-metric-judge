@@ -138,7 +138,12 @@ def build_outcomes(
             record["partition_hash"],
             record["group_index"],
         )
-        by_key.setdefault(key, {})[record["side"]] = record
+        sides_for_key = by_key.setdefault(key, {})
+        side = record["side"]
+        existing = sides_for_key.get(side)
+        if existing is not None and not existing.get("failure") and record.get("failure"):
+            continue
+        sides_for_key[side] = record
 
     items_by_id = {item.item_id: item for item in items}
     criteria_by_key = {c.key: c for c in criteria}
@@ -175,9 +180,13 @@ def build_outcomes(
             for criterion_key, position in rec_a["positions"].items():
                 if criterion_key not in criteria_by_key:
                     continue
-                if criterion_key != item.targeted_criterion:
-                    # Companions carry no gold, so an unevaluable call says
-                    # nothing about them.
+                if item.targeted_criterion is not None:
+                    if criterion_key != item.targeted_criterion:
+                        # Companions carry no gold, so an unevaluable call says
+                        # nothing about them.
+                        continue
+                elif item.human_a.get(criterion_key) == item.human_b.get(criterion_key):
+                    # Human ties have no directional ground truth to score.
                     continue
                 outcomes.append(
                     _unevaluable_outcome(
@@ -289,13 +298,19 @@ def annotate_synthetic(
         }
     out["calibration_role"] = out["operation"].map(operation_roles).fillna("unclassified")
     out["detection_class"] = out["operation"].map(detection_classes).fillna("unclassified")
-    out["corrupted_delta"] = np.where(
+    uneval = (
+        out["unevaluable"].astype(bool)
+        if "unevaluable" in out.columns
+        else pd.Series(False, index=out.index)
+    )
+    raw_delta = np.where(
         out["corrupted_side"] == "a",
         out["judge_a"] - out["judge_b"],
         out["judge_b"] - out["judge_a"],
-    )
+    ).astype(float)
+    out["corrupted_delta"] = np.where(uneval, np.nan, raw_delta)
     out["aligned_delta"] = out["corrupted_delta"] * out["corruption_direction"]
-    out["absolute_delta"] = out["corrupted_delta"].abs()
+    out["absolute_delta"] = np.abs(out["corrupted_delta"])
     return out
 
 
@@ -380,7 +395,8 @@ def synthetic_recovery_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 def synthetic_specificity(frame: pd.DataFrame) -> pd.DataFrame:
     """Rate at which untouched companion criteria remain unchanged."""
-    companions = frame[~frame["is_target"]].copy()
+    evaluable = frame[~frame["unevaluable"]] if "unevaluable" in frame else frame
+    companions = evaluable[~evaluable["is_target"]].copy()
     group_columns = ["group_size"]
     columns = [
         "n",
@@ -569,9 +585,10 @@ def qwk_by_group_size(
 
     Pools both sides of each pair, since QWK is a pointwise agreement statistic.
     """
+    evaluable = frame[~frame["unevaluable"]] if "unevaluable" in frame else frame
     by_key = {c.key: c for c in criteria}
     rows = []
-    for (criterion_key, group_size), chunk in frame.groupby(["criterion", "group_size"]):
+    for (criterion_key, group_size), chunk in evaluable.groupby(["criterion", "group_size"]):
         criterion = by_key.get(criterion_key)
         if criterion is None:
             continue
@@ -624,22 +641,29 @@ class PairedResult:
 
 
 def paired_contrast(
-    frame: pd.DataFrame, reference_size: int, comparison_size: int
+    frame: pd.DataFrame,
+    reference_size: int,
+    comparison_size: int,
+    *,
+    column: str = "correct_num",
+    resolved_only: bool = True,
 ) -> PairedResult | None:
-    """Within-item accuracy difference between two group sizes.
+    """Within-item difference between two group sizes.
 
-    The item is the cluster and the unit of analysis: per-item accuracy is
+    The item is the cluster and the unit of analysis: per-item values are
     averaged across that item's criteria and replicates *first*, then differences
     are taken across items. Pooling raw observations would violate independence
     (Miller: multiple answers to the same question are not independent draws), and
     it is also the step that buys the variance reduction, since item difficulty
     cancels within the difference.
     """
-    res = resolved(frame)
+    res = resolved(frame) if resolved_only else frame[~frame["human_tie"]].copy()
+    if res.empty or column not in res.columns:
+        return None
     cluster = independence_unit(res)
     per_item = (
         res[res["group_size"].isin([reference_size, comparison_size])]
-        .groupby([cluster, "group_size"])["correct_num"]
+        .groupby([cluster, "group_size"])[column]
         .mean()
         .unstack("group_size")
     )
@@ -674,13 +698,27 @@ def paired_contrast(
     )
 
 
-def paired_ladder(frame: pd.DataFrame, reference_size: int = 1) -> pd.DataFrame:
+def paired_ladder(
+    frame: pd.DataFrame,
+    reference_size: int = 1,
+    *,
+    column: str = "correct_num",
+    resolved_only: bool = True,
+) -> pd.DataFrame:
     """Every group size contrasted against the reference."""
-    res = resolved(frame)
+    res = resolved(frame) if resolved_only else frame[~frame["human_tie"]].copy()
+    if res.empty:
+        return pd.DataFrame()
     sizes = sorted(int(s) for s in res["group_size"].unique() if s != reference_size)
     rows = []
     for size in sizes:
-        result = paired_contrast(frame, reference_size, size)
+        result = paired_contrast(
+            frame,
+            reference_size,
+            size,
+            column=column,
+            resolved_only=resolved_only,
+        )
         if result is not None:
             rows.append(result.as_row())
     frame_out = pd.DataFrame(rows)
@@ -732,6 +770,38 @@ def lrt(restricted: Any, full: Any) -> dict[str, Any]:
         "df": df,
         "p": float(stats.chi2.sf(stat, df)),
         "interpretation": interpretation,
+    }
+
+
+def cluster_wald_nonlinearity(frame: pd.DataFrame) -> dict[str, Any]:
+    """Cluster-robust Wald test for departures from a linear group-size trend.
+
+    Unlike `lrt`, this test uses the cluster-robust covariance matrix of the
+    factor model (`correct_num ~ C(group_size)`) to test the linear constraints
+    `beta_k = ((k - k_0) / (k_max - k_0)) * beta_{k_max}` across intermediate
+    rungs.
+    """
+    res = resolved(frame)
+    levels = sorted(int(k) for k in res["group_size"].unique())
+    if len(levels) < 3:
+        return {
+            "wald_chi2": float("nan"),
+            "df": 0,
+            "p": float("nan"),
+        }
+    factor = fit_logit(res, formula="correct_num ~ C(group_size)")
+    k0, k_max = levels[0], levels[-1]
+    span = float(k_max - k0)
+    middle = levels[1:-1]
+    constraints = np.zeros((len(middle), len(levels)))
+    for row_idx, k in enumerate(middle):
+        constraints[row_idx, row_idx + 1] = 1.0
+        constraints[row_idx, len(levels) - 1] = -(k - k0) / span
+    wald = factor.wald_test(constraints, scalar=True)
+    return {
+        "wald_chi2": float(wald.statistic),
+        "df": len(middle),
+        "p": float(wald.pvalue),
     }
 
 
@@ -990,3 +1060,59 @@ def stratified_endpoint(
         ci_high=theta + crit * se,
         per_operation=per_operation,
     )
+
+
+def operation_heterogeneity(
+    frame: pd.DataFrame,
+    reference_size: int,
+    comparison_size: int,
+    *,
+    operations: tuple[str, ...],
+) -> dict[str, Any]:
+    """Per-operation paired contrasts with Holm adjustment and omnibus heterogeneity tests."""
+    res = resolved(frame)
+    cluster = independence_unit(res)
+    if "operation" not in res.columns:
+        raise ValueError("frame has no `operation` column")
+
+    per_unit = (
+        res[res["group_size"].isin([reference_size, comparison_size])]
+        .groupby([cluster, "operation", "group_size"])["correct_num"]
+        .mean()
+        .unstack("group_size")
+    )
+    if reference_size not in per_unit or comparison_size not in per_unit:
+        return {"table": pd.DataFrame(), "anova_f": float("nan"), "anova_p": float("nan"), "kruskal_h": float("nan"), "kruskal_p": float("nan")}
+    paired = per_unit[[reference_size, comparison_size]].dropna()
+    diffs = (paired[comparison_size] - paired[reference_size]).rename("d")
+
+    rows: list[dict[str, Any]] = []
+    groups: list[np.ndarray] = []
+    for op in operations:
+        sub = res[res["operation"] == op]
+        contrast = paired_contrast(sub, reference_size, comparison_size)
+        if contrast is None:
+            continue
+        rows.append({"operation": op, **contrast.as_row()})
+        if op in diffs.index.get_level_values("operation"):
+            groups.append(diffs.xs(op, level="operation").to_numpy())
+
+    table = pd.DataFrame(rows)
+    if not table.empty:
+        table["p_holm"] = holm(list(table["p"]))
+        table = table.set_index("operation")
+
+    if len(groups) >= 2 and all(len(g) >= 2 for g in groups):
+        f_stat, f_p = stats.f_oneway(*groups)
+        kw_stat, kw_p = stats.kruskal(*groups)
+    else:
+        f_stat = f_p = kw_stat = kw_p = float("nan")
+
+    return {
+        "table": table,
+        "anova_f": float(f_stat),
+        "anova_p": float(f_p),
+        "kruskal_h": float(kw_stat),
+        "kruskal_p": float(kw_p),
+    }
+

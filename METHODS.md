@@ -301,11 +301,14 @@ they are treated as parallel tests.
 ### 7.3 Functional form
 
 Group size is represented both as a categorical factor and as a linear trend.
-The linear trend and the added K = 30 rung are exploratory.
+The linear trend and the added K = 30 rung are exploratory, and the linear
+slope remains virtually identical when restricted to the five pre-registered
+rungs alone.
 
 The factor-versus-linear likelihood-ratio statistic ignores item clustering. It
-is retained only as a descriptive diagnostic and **does not select the
-inferential model or establish a threshold, monotonicity, or curvature**.
+is retained only as a descriptive diagnostic alongside a cluster-robust Wald
+test of nonlinearity, and **does not select the inferential model or establish
+a threshold, monotonicity, or curvature**.
 
 ## 8. Reproducibility
 

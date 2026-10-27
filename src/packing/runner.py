@@ -492,6 +492,11 @@ def execute(
                         f"{max_failures}. Last: {exc}"
                     ) from exc
                 continue
+            except FatalProtocolError:
+                raise
+            except Exception as exc:
+                _build_failure_record(spec, f"unexpected {exc!r}")
+                raise
 
             record = _build_record(spec, result)
             fh.write(json.dumps(record, separators=(",", ":")) + "\n")

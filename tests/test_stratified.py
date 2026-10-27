@@ -7,7 +7,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from packing.analyze import stratified_endpoint
+from packing.analyze import (
+    cluster_wald_nonlinearity,
+    operation_heterogeneity,
+    paired_contrast,
+    stratified_endpoint,
+)
 
 OPS = ("op1", "op2")
 
@@ -142,3 +147,55 @@ def test_a_frame_without_an_operation_column_raises():
     )
     with pytest.raises(ValueError, match="no `operation` column"):
         stratified_endpoint(frame, 1, 40, operations=OPS)
+
+
+def test_operation_heterogeneity_reports_holm_and_omnibus_tests():
+    rng = np.random.default_rng(7)
+    rows = []
+    for i in range(40):
+        rows += [
+            (f"a{i}", "op1", 1, 1.0),
+            (f"a{i}", "op1", 40, float(rng.random() < 0.3)),
+            (f"b{i}", "op2", 1, float(rng.random() < 0.7)),
+            (f"b{i}", "op2", 40, float(rng.random() < 0.7)),
+        ]
+    het = operation_heterogeneity(_frame(rows), 1, 40, operations=OPS)
+    assert "p_holm" in het["table"].columns
+    assert list(het["table"].index) == ["op1", "op2"]
+    assert het["table"].loc["op1", "p_holm"] < 0.01
+    assert het["anova_p"] < 0.01
+    assert het["kruskal_p"] < 0.01
+
+
+def test_cluster_wald_nonlinearity_runs_across_multiple_rungs():
+    rng = np.random.default_rng(11)
+    rows = []
+    for i in range(80):
+        for k in (1, 10, 20, 40):
+            prob = 0.80 - 0.003 * (k - 1)
+            rows.append((f"u{i}", "op1", k, float(rng.random() < prob)))
+    res = cluster_wald_nonlinearity(_frame(rows))
+    assert res["df"] == 2
+    assert 0.0 <= res["p"] <= 1.0
+
+
+def test_paired_contrast_supports_tie_tolerant_credit_and_tie_rate():
+    frame = pd.DataFrame(
+        [
+            {"item_id": "i1", "group_size": 1, "correct_num": np.nan, "credit": 0.5, "judge_tie": True, "human_tie": False, "resolved": False},
+            {"item_id": "i1", "group_size": 5, "correct_num": np.nan, "credit": 0.5, "judge_tie": True, "human_tie": False, "resolved": False},
+            {"item_id": "i2", "group_size": 1, "correct_num": 1.0, "credit": 1.0, "judge_tie": False, "human_tie": False, "resolved": True},
+            {"item_id": "i2", "group_size": 5, "correct_num": 0.0, "credit": 0.0, "judge_tie": False, "human_tie": False, "resolved": True},
+            {"item_id": "i3", "group_size": 1, "correct_num": 1.0, "credit": 1.0, "judge_tie": False, "human_tie": False, "resolved": True},
+            {"item_id": "i3", "group_size": 5, "correct_num": 1.0, "credit": 1.0, "judge_tie": False, "human_tie": False, "resolved": True},
+            {"item_id": "i4", "group_size": 1, "correct_num": 0.0, "credit": 0.0, "judge_tie": False, "human_tie": False, "resolved": True},
+            {"item_id": "i4", "group_size": 5, "correct_num": np.nan, "credit": 0.5, "judge_tie": True, "human_tie": False, "resolved": False},
+        ]
+    )
+    credit_res = paired_contrast(frame, 1, 5, column="credit", resolved_only=False)
+    assert credit_res is not None
+    assert credit_res.n_items == 4
+    tie_res = paired_contrast(frame, 1, 5, column="judge_tie", resolved_only=False)
+    assert tie_res is not None
+    assert tie_res.n_items == 4
+

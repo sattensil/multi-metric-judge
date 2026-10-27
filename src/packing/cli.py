@@ -760,6 +760,8 @@ def _report_calibration(name: str) -> None:
 def _group_by_item(records):
     grouped: dict[tuple, dict] = {}
     for r in records:
+        if r.get("failure"):
+            continue
         grouped.setdefault(
             (r["item_id"], r["partition_hash"], r["group_index"]), {}
         )[r["side"]] = r
@@ -1028,6 +1030,24 @@ def analyze_cmd(name: str, reference: int, mixed: bool) -> None:
     _show(
         analyze.paired_ladder(frame, reference_size=reference),
         f"PRIMARY: within-item paired contrast vs group_size={reference} (Holm-corrected)",
+    )
+    _show(
+        analyze.paired_ladder(
+            frame,
+            reference_size=reference,
+            column="credit",
+            resolved_only=False,
+        ),
+        f"ROBUSTNESS: tie-tolerant credit paired contrast vs group_size={reference} (0.5 for judge ties)",
+    )
+    _show(
+        analyze.paired_ladder(
+            frame,
+            reference_size=reference,
+            column="judge_tie",
+            resolved_only=False,
+        ),
+        f"CO-PRIMARY: judge tie rate paired contrast vs group_size={reference}",
     )
 
     try:
@@ -2311,6 +2331,32 @@ def ladder_analyze_cmd(name: str, reference: int, comparison: int) -> None:
         analyze.judge_tie_diagnostics(frame[frame["is_target"]]),
         "Target-criterion judge tie rate by rung (diagnostic secondary)",
     )
+
+    het = analyze.operation_heterogeneity(
+        core, reference, comparison, operations=tuple(CORE_OPERATIONS)
+    )
+    if not het["table"].empty:
+        _show(
+            het["table"].round(5),
+            f"Per-operation paired contrasts ({reference} vs {comparison}; Holm-adjusted)",
+        )
+        console.print(
+            f"Omnibus heterogeneity: ANOVA F={het['anova_f']:.3f} "
+            f"(p={het['anova_p']:.4g}), Kruskal-Wallis H={het['kruskal_h']:.3f} "
+            f"(p={het['kruskal_p']:.4g})"
+        )
+
+    try:
+        wald_nonlin = analyze.cluster_wald_nonlinearity(core)
+        console.print(
+            f"\n[bold]Cluster-robust Wald nonlinearity check[/bold]: "
+            f"chi2({wald_nonlin['df']})={wald_nonlin['wald_chi2']:.4f}, "
+            f"p={wald_nonlin['p']:.4f}"
+        )
+    except Exception as exc:
+        console.print(
+            f"[yellow]cluster-robust nonlinearity check unavailable: {exc}[/yellow]"
+        )
 
 
 if __name__ == "__main__":

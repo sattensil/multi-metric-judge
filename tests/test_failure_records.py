@@ -210,3 +210,51 @@ def test_resume_does_not_count_a_transient_failure_as_complete(tmp_path):
     assert transient["identity"] not in done, "a transient error must be retried"
     assert unevaluable["identity"] in done, "a class-2 result is terminal"
     assert "third" in done
+
+
+def test_later_failure_does_not_overwrite_earlier_success():
+    failure = _build_failure_record(
+        _Spec(_item(), "a", ONE), "503 Service Unavailable"
+    )
+    outcomes = build_outcomes([_good("a", 4), failure, _good("b", 1)], [_item()], ONE)
+    assert len(outcomes) == 1
+    assert to_frame(outcomes)["correct_num"].iloc[0] == 1.0
+
+
+def test_human_stratum_unevaluable_scores_non_tied_criteria():
+    c1, c2 = HELPSTEER2_CRITERIA[:2]
+    human_item = PairedItem(
+        item_id="hs2-000001",
+        prompt="p",
+        response_a="x",
+        response_b="y",
+        human_a={c1.key: 4, c2.key: 2},
+        human_b={c1.key: 1, c2.key: 2},  # c1 scoreable, c2 human tie
+        dataset="helpsteer2",
+        meta={},
+        source="human",
+        targeted_criterion=None,
+    )
+    failure = _build_failure_record(
+        _Spec(human_item, "a", (c1, c2), nominal_n=2), "truncated"
+    )
+    good_b = _good("b", 3, nominal_n=2) | {
+        "item_id": "hs2-000001",
+        "positions": {c1.key: 0, c2.key: 1},
+        "scores": {c1.key: 3, c2.key: 3},
+    }
+    outcomes = build_outcomes([failure, good_b], [human_item], (c1, c2))
+    assert len(outcomes) == 1
+    assert outcomes[0].criterion == c1.key
+    assert outcomes[0].unevaluable is True
+
+
+def test_usage_frame_excludes_failed_call_records():
+    from packing.cost import usage_frame
+
+    failure = _build_failure_record(
+        _Spec(_item(), "a", ONE), "Connection reset by peer"
+    )
+    frame = usage_frame([_good("a", 4), failure, _good("b", 1)])
+    assert len(frame) == 2
+

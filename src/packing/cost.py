@@ -38,6 +38,7 @@ def usage_frame(records: Iterable[dict[str, Any]]) -> pd.DataFrame:
             "model": r.get("model", ""),
         }
         for r in records
+        if not r.get("failure")
     ]
     return pd.DataFrame(rows)
 

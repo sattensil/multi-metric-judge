@@ -20,6 +20,7 @@ METHODS_TECHNICAL.md
 # Local presentation support. The published deck is presentation/index.html.
 presentation/presenter.html
 presentation/README.md
+presentation/*.pdf
 
 # Internal design and implementation notes; retained locally, not published.
 docs/superpowers/

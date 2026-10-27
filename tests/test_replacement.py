@@ -63,18 +63,18 @@ def _write_calls(path: Path, specs, *, skip=(), failure=None) -> None:
 
 
 @pytest.fixture()
-def ladder(tmp_path):
+def ladder(tmp_path, monkeypatch):
     """A planned ladder with its items and full call list, in a temp tree."""
+    monkeypatch.chdir(tmp_path)
     runner = CliRunner()
-    with runner.isolated_filesystem() as workspace:
-        _items("items.jsonl", 200)
-        result = runner.invoke(cli, _plan_args())
-        assert result.exit_code == 0, result.output
-        plan = read_plan(Path("plan.json"))
-        from packing.live import rebuild_items
+    _items("items.jsonl", 200)
+    result = runner.invoke(cli, _plan_args())
+    assert result.exit_code == 0, result.output
+    plan = read_plan(Path("plan.json"))
+    from packing.live import rebuild_items
 
-        items, specs = rebuild_items(plan, Path("items.jsonl"))
-        yield plan, items, specs, Path(workspace)
+    items, specs = rebuild_items(plan, Path("items.jsonl"))
+    yield plan, items, specs, tmp_path
 
 
 def test_a_complete_run_needs_no_replacement(ladder):
@@ -320,115 +320,115 @@ class _FlakyForOneUnit:
 
 def test_ladder_run_replaces_a_persistently_failing_unit(monkeypatch, tmp_path):
     """The end-to-end path: detect, draw, issue, record, and rebuild items."""
+    monkeypatch.chdir(tmp_path)
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        _items("items.jsonl", 200)
-        plan_args = [
-            "ladder", "--items", "items.jsonl", "--model", "mock",
-            "--core-n", "16", "--numbers-n", "8", "--per-op-max", "2",
-            "--core-candidates", "60", "--plan-out", "plan.json", "--dry-run",
-        ]
-        assert runner.invoke(cli, plan_args).exit_code == 0
+    _items("items.jsonl", 200)
+    plan_args = [
+        "ladder", "--items", "items.jsonl", "--model", "mock",
+        "--core-n", "16", "--numbers-n", "8", "--per-op-max", "2",
+        "--core-candidates", "60", "--plan-out", "plan.json", "--dry-run",
+    ]
+    assert runner.invoke(cli, plan_args).exit_code == 0
 
-        plan = read_plan(Path("plan.json"))
-        active = [u for u in plan.units if u.status == "active"]
-        doomed = active[0].base_item_id
+    plan = read_plan(Path("plan.json"))
+    active = [u for u in plan.units if u.status == "active"]
+    doomed = active[0].base_item_id
 
-        # The prompt text is what the provider sees, and every synthetic item
-        # here shares one prompt, so target the doomed unit by its own prompt.
-        # Distinguish it by writing a unique prompt for that base item.
-        rows = [json.loads(line) for line in Path("items.jsonl").read_text().splitlines()]
-        for row in rows:
-            if row["item_id"] == doomed:
-                row["prompt"] = "DOOMED PROMPT explain the thing."
-        Path("items.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    # The prompt text is what the provider sees, and every synthetic item
+    # here shares one prompt, so target the doomed unit by its own prompt.
+    # Distinguish it by writing a unique prompt for that base item.
+    rows = [json.loads(line) for line in Path("items.jsonl").read_text().splitlines()]
+    for row in rows:
+        if row["item_id"] == doomed:
+            row["prompt"] = "DOOMED PROMPT explain the thing."
+    Path("items.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
 
-        # The plan pins the frame digest, so re-plan against the edited file.
-        assert runner.invoke(cli, plan_args).exit_code == 0
-        plan = read_plan(Path("plan.json"))
-        doomed = next(
-            u.base_item_id for u in plan.units
-            if u.status == "active" and u.base_item_id == doomed
-        )
+    # The plan pins the frame digest, so re-plan against the edited file.
+    assert runner.invoke(cli, plan_args).exit_code == 0
+    plan = read_plan(Path("plan.json"))
+    doomed = next(
+        u.base_item_id for u in plan.units
+        if u.status == "active" and u.base_item_id == doomed
+    )
 
-        provider = _FlakyForOneUnit("DOOMED PROMPT")
-        monkeypatch.setattr(
-            "packing.cli.get_provider", lambda model, **kwargs: provider
-        )
+    provider = _FlakyForOneUnit("DOOMED PROMPT")
+    monkeypatch.setattr(
+        "packing.cli.get_provider", lambda model, **kwargs: provider
+    )
 
-        result = runner.invoke(
-            cli,
-            [
-                "ladder-run", "--plan", "plan.json", "--items", "items.jsonl",
-                "--name", "rep", "--workers", "4", "--archive-to", "artifacts",
-                "--max-failures", "10000", "--replacement-rounds", "1",
-                "--confirm-spend",
-            ],
-        )
-        assert result.exit_code == 0, result.output
-        assert "replacement round 1" in result.output, result.output
-        assert doomed in result.output
-
-        log = Path("runs/rep/replacements.jsonl")
-        assert log.exists(), "the substitution was not recorded"
-        substitutions = read_substitutions(log)
-        assert len(substitutions) == 1
-        assert substitutions[0].replaced_base_item_id == doomed
-        assert substitutions[0].operation == next(
-            u.operation for u in plan.units if u.base_item_id == doomed
-        )
-
-        # The replacement's item is on disk, or its calls cannot be scored.
-        item_ids = {
-            json.loads(line)["item_id"]
-            for line in Path("runs/rep/items.jsonl").read_text().splitlines()
-        }
-        assert any(
-            substitutions[0].replacement_base_item_id in item_id
-            for item_id in item_ids
-        ), "the replacement item was not written"
-
-        # And the replacement's own calls landed and succeeded.
-        rows = [
-            json.loads(line)
-            for line in Path("runs/rep/calls.jsonl").read_text().splitlines()
-        ]
-        replacement_rows = [
-            r for r in rows
-            if substitutions[0].replacement_base_item_id in r["item_id"]
-        ]
-        assert len(replacement_rows) == len(plan.levels) * 2
-        assert not any(r.get("failure") for r in replacement_rows)
-
-
-def test_replacement_can_be_switched_off(monkeypatch):
-    """Zero rounds must issue nothing, so the extra spend is opt-out."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        _items("items.jsonl", 200)
-        rows = [json.loads(line) for line in Path("items.jsonl").read_text().splitlines()]
-        rows[0]["prompt"] = "DOOMED PROMPT explain the thing."
-        Path("items.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-
-        assert runner.invoke(cli, [
-            "ladder", "--items", "items.jsonl", "--model", "mock",
-            "--core-n", "16", "--numbers-n", "8", "--per-op-max", "2",
-            "--core-candidates", "60", "--plan-out", "plan.json", "--dry-run",
-        ]).exit_code == 0
-
-        provider = _FlakyForOneUnit("DOOMED PROMPT")
-        monkeypatch.setattr(
-            "packing.cli.get_provider", lambda model, **kwargs: provider
-        )
-        result = runner.invoke(cli, [
+    result = runner.invoke(
+        cli,
+        [
             "ladder-run", "--plan", "plan.json", "--items", "items.jsonl",
-            "--name", "off", "--workers", "4", "--archive-to", "artifacts",
-            "--max-failures", "10000", "--replacement-rounds", "0",
+            "--name", "rep", "--workers", "4", "--archive-to", "artifacts",
+            "--max-failures", "10000", "--replacement-rounds", "1",
             "--confirm-spend",
-        ])
-        assert result.exit_code == 0, result.output
-        assert "replacement round" not in result.output
-        assert not Path("runs/off/replacements.jsonl").exists()
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "replacement round 1" in result.output, result.output
+    assert doomed in result.output
+
+    log = Path("runs/rep/replacements.jsonl")
+    assert log.exists(), "the substitution was not recorded"
+    substitutions = read_substitutions(log)
+    assert len(substitutions) == 1
+    assert substitutions[0].replaced_base_item_id == doomed
+    assert substitutions[0].operation == next(
+        u.operation for u in plan.units if u.base_item_id == doomed
+    )
+
+    # The replacement's item is on disk, or its calls cannot be scored.
+    item_ids = {
+        json.loads(line)["item_id"]
+        for line in Path("runs/rep/items.jsonl").read_text().splitlines()
+    }
+    assert any(
+        substitutions[0].replacement_base_item_id in item_id
+        for item_id in item_ids
+    ), "the replacement item was not written"
+
+    # And the replacement's own calls landed and succeeded.
+    rows = [
+        json.loads(line)
+        for line in Path("runs/rep/calls.jsonl").read_text().splitlines()
+    ]
+    replacement_rows = [
+        r for r in rows
+        if substitutions[0].replacement_base_item_id in r["item_id"]
+    ]
+    assert len(replacement_rows) == len(plan.levels) * 2
+    assert not any(r.get("failure") for r in replacement_rows)
+
+
+def test_replacement_can_be_switched_off(monkeypatch, tmp_path):
+    """Zero rounds must issue nothing, so the extra spend is opt-out."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    _items("items.jsonl", 200)
+    rows = [json.loads(line) for line in Path("items.jsonl").read_text().splitlines()]
+    rows[0]["prompt"] = "DOOMED PROMPT explain the thing."
+    Path("items.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+    assert runner.invoke(cli, [
+        "ladder", "--items", "items.jsonl", "--model", "mock",
+        "--core-n", "16", "--numbers-n", "8", "--per-op-max", "2",
+        "--core-candidates", "60", "--plan-out", "plan.json", "--dry-run",
+    ]).exit_code == 0
+
+    provider = _FlakyForOneUnit("DOOMED PROMPT")
+    monkeypatch.setattr(
+        "packing.cli.get_provider", lambda model, **kwargs: provider
+    )
+    result = runner.invoke(cli, [
+        "ladder-run", "--plan", "plan.json", "--items", "items.jsonl",
+        "--name", "off", "--workers", "4", "--archive-to", "artifacts",
+        "--max-failures", "10000", "--replacement-rounds", "0",
+        "--confirm-spend",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "replacement round" not in result.output
+    assert not Path("runs/off/replacements.jsonl").exists()
 
 
 def test_a_replacement_substitutes_rather_than_adds(ladder):
