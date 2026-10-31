@@ -13,7 +13,7 @@
   --font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-mono:"Roboto Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --bg:#080b0f; --panel:#0e151b; --panel2:#121b23;
-  --ink:#e9eff3; --dim:#8ea3b1; --faint:#5d7280;
+  --ink:#e9eff3; --dim:#a5b7c2; --faint:#8195a3;
   --lime:#c8f751; --cyan:#5ad2ea; --warn:#f0a35e;
   --line:#1d2b35;
   color-scheme:dark;
@@ -32,7 +32,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-body);
        padding:7vh 7vw 9vh;position:relative}
 .wrap{width:min(1180px,100%);margin:0 auto}
 
-.kicker{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.2em;
+.kicker{font-family:var(--font-mono);font-size:.86rem;letter-spacing:.17em;
         text-transform:uppercase;color:var(--cyan);margin:0 0 1.1rem}
 h1{font-family:var(--font-display);font-weight:700;line-height:1.02;margin:0;
    font-size:clamp(2.3rem,5.6vw,4.6rem);letter-spacing:-.02em}
@@ -99,13 +99,64 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
            text-align:center;margin-top:.6rem}
 .chart{width:100%;max-width:660px;height:auto}
 .chart .grid{stroke:var(--line);stroke-width:1}
-.chart .axis{fill:var(--faint);font-family:var(--font-mono);font-size:11px}
+.chart .axis{fill:var(--faint);font-family:var(--font-mono);font-size:14px}
 .chart .band{fill:#c8f75110}
 .chart .lineA{stroke:var(--cyan);stroke-width:3;fill:none}
 .chart .lineB{stroke:var(--warn);stroke-width:3;fill:none}
 .chart .dot{r:6;stroke:var(--bg);stroke-width:2}
 .chart .val{font-family:var(--font-mono);font-size:13px;fill:var(--ink)}
-.chart .series{font-family:var(--font-mono);font-size:12px;letter-spacing:.08em}
+.chart .series{font-family:var(--font-mono);font-size:14px;letter-spacing:.06em}
+
+.guess{display:flex;align-items:center;gap:1rem;margin-top:1.5rem;
+       font-family:var(--font-mono);color:var(--dim);font-size:clamp(1rem,1.8vw,1.35rem)}
+.guess strong{color:var(--lime);font-size:1.2em;letter-spacing:.08em}
+.cost-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);
+             gap:clamp(1.2rem,3vw,2.4rem);align-items:end}
+.cost-chart{display:flex;align-items:flex-end;justify-content:center;gap:clamp(2rem,7vw,5rem);
+            min-height:300px;padding:1rem 2rem 0;border-bottom:1px solid var(--line)}
+.cost-column{width:min(30%,170px);display:flex;flex-direction:column;justify-content:flex-end;
+             align-items:center;height:290px}
+.cost-column .amount{font-family:var(--font-mono);font-size:clamp(1.5rem,3vw,2.4rem);
+                     color:var(--ink);margin-bottom:.55rem}
+.cost-column .cost-fill{width:100%;height:var(--h);border-radius:10px 10px 0 0;
+                        background:linear-gradient(180deg,var(--warn),#814a22)}
+.cost-column.packed .cost-fill{background:linear-gradient(180deg,var(--lime),#5f8c1c)}
+.cost-column .label{font-family:var(--font-mono);font-size:.86rem;color:var(--dim);
+                    margin-top:.7rem;text-align:center}
+.json-payload{margin:0;background:#091116;border:1px solid var(--line);border-radius:14px;
+              padding:1.15rem 1.3rem;font-family:var(--font-mono);
+              font-size:clamp(.78rem,1vw,.95rem);line-height:1.65;color:var(--dim);
+              white-space:pre-wrap}
+.json-payload .key{color:var(--cyan)} .json-payload .value{color:var(--lime)}
+.histogram{display:flex;align-items:flex-end;gap:clamp(.7rem,2vw,1.4rem);
+           height:230px;border-bottom:1px solid var(--line);padding:0 1rem}
+.histbar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.histbar .used{width:100%;height:var(--h);max-width:120px;border-radius:8px 8px 0 0;
+               background:linear-gradient(180deg,var(--cyan),#1c5c6c)}
+.histbar.empty .used{height:3px;background:var(--warn)}
+.histbar .score{font-family:var(--font-mono);font-size:1rem;color:var(--ink);margin:.55rem 0}
+.histbar .status{font-family:var(--font-mono);font-size:.72rem;color:var(--dim);
+                 text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
+.histbar.empty .status{color:var(--warn)}
+.corruption-example{display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:stretch}
+.example-text{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+              padding:1.2rem 1.35rem;color:var(--dim);font-size:1.04rem;line-height:1.5}
+.example-text strong{display:block;font-family:var(--font-mono);font-size:.75rem;
+                     letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);
+                     margin-bottom:.7rem}
+.example-text mark{background:#f0a35e26;color:var(--warn);padding:.08em .2em}
+.arrow{display:grid;place-items:center;color:var(--lime);font-size:2rem}
+.movement{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.move{border-radius:14px;padding:1.2rem 1.4rem;border:1px solid var(--line);background:var(--panel)}
+.move.down{border-color:#5c3329}.move.up{border-color:#2e4a1f}
+.move .count{font-family:var(--font-mono);font-size:clamp(2rem,4vw,3.4rem);line-height:1}
+.move.down .count{color:var(--warn)}.move.up .count{color:var(--lime)}
+.move .path{font-family:var(--font-mono);font-size:.84rem;color:var(--dim);margin-top:.6rem}
+.mini-results{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:1rem}
+.mini-results span{font-family:var(--font-mono);font-size:.8rem;color:var(--dim);
+                   border:1px solid var(--line);border-radius:999px;padding:.45rem .7rem}
+.source{font-family:var(--font-mono);font-size:.84rem;line-height:1.4;color:var(--faint);
+        margin:.7rem 0 0}
 
 #titleslide .rule{width:70px;height:4px;background:var(--lime);margin:2rem 0 1.9rem}
 .meta{display:flex;flex-wrap:wrap;gap:1.6rem;font-family:var(--font-mono);
@@ -128,6 +179,88 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 .notclaim{margin-top:1.4rem}
 .notclaim li::before{background:var(--warn)}
 
+.code{margin:0;background:#091116;border:1px solid var(--line);border-radius:14px;
+      padding:1rem 1.2rem 1.05rem;font-family:var(--font-mono);font-size:clamp(.74rem,.95vw,.9rem);
+      line-height:1.6;color:var(--ink);white-space:pre;overflow-x:auto}
+.code .file{display:block;color:var(--faint);font-size:.82em;letter-spacing:.06em;margin-bottom:.45rem}
+.code .k{color:#c792ea} .code .s{color:var(--lime)} .code .c{color:var(--faint)}
+.code .n{color:var(--warn)} .code .hl{background:#c8f7511f;border-radius:3px;
+      box-shadow:0 0 0 2px #c8f7511f}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+       gap:clamp(1rem,2.4vw,2rem);align-items:start}
+
+.brand{display:block;height:clamp(22px,3vh,30px);width:auto;margin:0 0 2rem;opacity:.92}
+.signoff{display:flex;align-items:center;gap:.6rem;font-family:var(--font-mono);
+         font-size:.82rem;color:var(--faint);margin:1rem 0 0}
+.signoff img{height:20px;width:auto}
+.title-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(220px,.7fr);
+              gap:clamp(1.5rem,4vw,4rem);align-items:center}
+.stack{display:flex;flex-direction:column-reverse;gap:6px}
+.stack i{display:block;height:14px;border-radius:4px;background:#1f2e38;width:var(--w,100%)}
+.stack i.t{background:var(--lime)}
+.stack .cap{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.14em;
+            text-transform:uppercase;color:var(--faint);margin-top:.6rem}
+
+.scale-rows{display:grid;gap:.45rem;margin-top:.9rem}
+.scale-rows div{display:flex;justify-content:space-between;align-items:center;
+                font-family:var(--font-mono);font-size:.82rem;color:var(--dim)}
+.scale-rows b{display:flex;gap:5px;font-weight:400}
+.scale-rows b i{width:12px;height:12px;border-radius:50%;border:1px solid #3a4e5a}
+.scale-rows b i.on{background:var(--cyan);border-color:var(--cyan)}
+.card.accent .scale-rows b i.on{background:var(--lime);border-color:var(--lime)}
+
+.ci{width:100%;max-width:640px;height:auto;margin-top:1.2rem}
+.ci .zero{stroke:var(--dim);stroke-width:2;stroke-dasharray:4 4}
+.ci .range{stroke-width:10;stroke-linecap:round}
+.ci text{font-family:var(--font-mono);font-size:14px;fill:var(--faint)}
+.ci .lab{fill:var(--ink)}
+
+.ladder{display:grid;gap:.5rem;margin:.4rem 0 1rem}
+.rung{display:grid;grid-template-columns:3.6rem 1fr;align-items:center;gap:.7rem}
+.rung span{font-family:var(--font-mono);font-size:.78rem;color:var(--faint);text-align:right}
+.chips{display:flex;gap:2px;flex-wrap:nowrap}
+.chips i{width:7px;height:16px;border-radius:3px;background:#2a3b46;flex:0 0 auto}
+.chips i.t{background:var(--lime)}
+
+/* Motion only plays on the slide being shown. At rest, and in print, every
+   element sits in its final state, so the PDF never captures a half-drawn slide. */
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes growx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes pop{from{opacity:0;transform:scale(.2)}to{opacity:1;transform:scale(1)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes chip{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 2px #c8f7511f}50%{box-shadow:0 0 0 4px #c8f75155}}
+.slide.is-active .wrap>*{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+.slide.is-active .wrap>*:nth-child(2){animation-delay:.08s}
+.slide.is-active .wrap>*:nth-child(3){animation-delay:.18s}
+.slide.is-active .wrap>*:nth-child(4){animation-delay:.3s}
+.slide.is-active .wrap>*:nth-child(5){animation-delay:.45s}
+.slide.is-active .wrap>*:nth-child(n+6){animation-delay:.6s}
+.slide.is-active .cols>*:nth-child(2),
+.slide.is-active .movement>*:nth-child(2){animation:rise .7s .5s both}
+.slide.is-active .cost-fill{transform-origin:bottom;animation:grow 1s .35s cubic-bezier(.2,.7,.2,1) both}
+.slide.is-active .cost-column.packed .cost-fill{animation-delay:.75s}
+.slide.is-active .histbar:not(.empty) .used{transform-origin:bottom;animation:grow .8s .3s both}
+.slide.is-active .histbar.empty .used,
+.slide.is-active .histbar.empty .status{animation:blink .9s 1.2s 3}
+.slide.is-active .example-text mark{animation:blink .8s 1s 2}
+.slide.is-active .chart .lineB{stroke-dasharray:1;animation:draw 2s .4s ease-in-out both}
+.slide.is-active .chart .lineA{animation:rise .6s 2.4s both}
+.slide.is-active .chart .dot{transform-box:fill-box;transform-origin:center;animation:pop .4s both}
+.slide.is-active .chart .dot:nth-of-type(1){animation-delay:.4s}
+.slide.is-active .chart .dot:nth-of-type(2){animation-delay:.75s}
+.slide.is-active .chart .dot:nth-of-type(3){animation-delay:1.1s}
+.slide.is-active .chart .dot:nth-of-type(4){animation-delay:1.5s}
+.slide.is-active .chart .dot:nth-of-type(5){animation-delay:1.9s}
+.slide.is-active .chart .dot:nth-of-type(6){animation-delay:2.3s}
+.slide.is-active .ci .range{transform-box:fill-box;transform-origin:center;animation:growx .9s .5s both}
+.slide.is-active .ci .pt{transform-box:fill-box;transform-origin:center;animation:pop .4s 1.3s both}
+.slide.is-active .stack i{animation:chip .35s both;animation-delay:calc(var(--d) * 90ms + .3s)}
+.slide.is-active .chips i{animation:chip .25s both;animation-delay:calc(var(--r) * 260ms + .4s)}
+.slide.is-active .code .hl{animation:glow 1.6s 1s 2}
+
 #dots{position:fixed;right:max(1.1rem,2.2vw);top:50%;transform:translateY(-50%);
       display:flex;flex-direction:column;gap:.55rem;z-index:5}
 #dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;cursor:pointer;
@@ -135,14 +268,12 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 #dots button[aria-current="true"]{background:var(--lime);transform:scale(1.5)}
 #progress{position:fixed;top:0;left:0;height:2px;background:var(--lime);width:0;z-index:6;
           transition:width .25s ease}
-#counter{position:fixed;left:max(1.1rem,2.2vw);bottom:max(1rem,2vh);font-family:var(--font-mono);
-         font-size:.75rem;color:var(--faint);letter-spacing:.1em;z-index:5}
-#counter b{color:var(--ink);font-weight:400}
-
 @media (max-width:720px){
   #dots{display:none}
   .slide{padding:8vh 6vw 10vh}
   .bars{height:32vh}
+  .cost-layout,.corruption-example,.split,.title-layout{grid-template-columns:1fr}
+  .arrow{transform:rotate(90deg)}
 }
 /* 1280x720 is a common projector, and at that height the denser slides ran
    past the viewport. Tighten the vertical rhythm rather than let content fall
@@ -167,7 +298,8 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 @media print{
   html,body{height:auto;background:var(--bg);-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #deck{height:auto;overflow:visible;scroll-snap-type:none}
-  #dots,#progress,#counter{display:none!important}
+  #dots,#progress{display:none!important}
+  *{animation:none!important}
   .slide{height:9in;min-height:9in;max-height:9in;page-break-after:always;break-after:page;overflow:hidden;background:var(--bg)}
   .slide:last-child{page-break-after:auto;break-after:auto}
 }
@@ -177,56 +309,90 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 <div id="progress"></div>
 <main id="deck">
 <section class="slide" id="titleslide" data-title="More Signal Per Call: How Many Metrics Can One LLM Judge Score Before It Lies?">
-  <div class="wrap">
-    <p class="kicker">More signal per call</p>
-    <h1>How many metrics can one<br>LLM judge score<br>before it lies?</h1>
-    <div class="rule"></div>
-    <div class="meta">
-      <span><b>Scarlett Attensil</b> &middot; LaunchDarkly</span>
-      <span>Conf42 Platform Engineering 2026</span>
+  <div class="wrap title-layout">
+    <div>
+      <img class="brand" src="assets/launchdarkly-logo-white.svg" alt="LaunchDarkly">
+      <p class="kicker">More signal per call</p>
+      <h1>How many metrics can one<br>LLM judge score<br>before it lies?</h1>
+      <div class="rule"></div>
+      <div class="guess"><span>Pick a number:</span> <strong>10? 20? 40?</strong></div>
+      <div class="meta">
+        <span><b>Scarlett Attensil</b> &middot; LaunchDarkly</span>
+        <span>Conf42 Platform Engineering 2026</span>
+      </div>
+    </div>
+    <div class="stack" role="img" aria-label="A judge call growing from one metric into a tall stack of metrics">
+      <p class="cap">one call &middot; more and more metrics</p>
+      <i class="t" style="--d:0"></i><i style="--d:1;--w:96%"></i><i style="--d:2;--w:88%"></i>
+      <i style="--d:3;--w:93%"></i><i style="--d:4;--w:82%"></i><i style="--d:5;--w:90%"></i>
+      <i style="--d:6;--w:78%"></i><i style="--d:7;--w:86%"></i><i style="--d:8;--w:72%"></i>
+      <i style="--d:9;--w:84%"></i><i style="--d:10;--w:76%"></i><i style="--d:11;--w:68%"></i>
+      <i style="--d:12;--w:80%"></i><i style="--d:13;--w:62%"></i>
     </div>
   </div>
 </section>
 
-<section class="slide" id="s2" data-title="The judge reasons five times to answer five questions">
+<section class="slide" id="s2" data-title="A thousand metrics cost 59 cents separately and 32 cents packed">
   <div class="wrap">
     <p class="kicker">01 &middot; the cost structure</p>
-    <h2>The judge reasons five times<br>to answer five questions</h2>
-    <div class="cols">
-      <div class="card">
-        <p class="stat">82<small> tokens</small></p>
-        <p class="slab">reasoning / criterion &middot; K = 1</p>
+    <h2>A thousand metrics cost 59&cent; separately.<br>Packed together, they cost 32&cent;.</h2>
+    <div class="cost-layout">
+      <div class="cost-chart" role="img" aria-label="Observed cost per thousand metrics: 59 cents with one metric per call and 32 cents with five metrics per call">
+        <div class="cost-column">
+          <div class="amount">59&cent;</div>
+          <div class="cost-fill" style="--h:100%"></div>
+          <div class="label">K = 1</div>
+        </div>
+        <div class="cost-column packed">
+          <div class="amount">32&cent;</div>
+          <div class="cost-fill" style="--h:54%"></div>
+          <div class="label">K = 5</div>
+        </div>
       </div>
-      <div class="card accent">
-        <p class="stat">29<small> tokens</small></p>
-        <p class="slab">reasoning / criterion &middot; K = 5</p>
-      </div>
-      <div class="card">
-        <p class="stat cy">8&times;</p>
-        <p class="slab">output price vs input</p>
+      <div>
+        <p class="lede"><strong>K means metrics per call.</strong> Packing cut
+          observed cost by 46% across 3,599 completed pilot calls.</p>
+        <p class="note" style="margin-top:1rem"><b>Jev is the useful alternative.</b>
+          If you need typed decisions rather than generated evidence, evaluate a
+          decision model before optimizing an LLM judge.</p>
+        <p class="source">Deu&szlig;er, Sparrenberg &amp; Sifa (2026) &middot;
+          arXiv:2609.37647</p>
       </div>
     </div>
-    <p class="note"><b>Caching cannot touch output.</b> Re-reading the input is the
-      half you can cache away. Reasoning is not.</p>
   </div>
 </section>
 
 <section class="slide" id="s-data" data-title="The data: HelpSteer2">
   <div class="wrap">
     <p class="kicker">02 &middot; the data</p>
-    <h2>Each prompt comes with<br>two scored responses</h2>
+    <h2>Humans already scored<br>10,681 prompts</h2>
     <div class="cols two">
       <div class="card">
         <h3>Response A</h3>
         <p>Five scores from 0 to 4</p>
+        <div class="scale-rows" aria-hidden="true">
+          <div>helpfulness <b><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></b></div>
+          <div>correctness <b><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></b></div>
+          <div>coherence <b><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></b></div>
+          <div>complexity <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
+          <div>verbosity <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
+        </div>
       </div>
       <div class="card accent">
         <h3>Response B</h3>
         <p>The same five scores</p>
+        <div class="scale-rows" aria-hidden="true">
+          <div>helpfulness <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
+          <div>correctness <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
+          <div>coherence <b><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></b></div>
+          <div>complexity <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
+          <div>verbosity <b><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></b></div>
+        </div>
       </div>
     </div>
     <p class="note"><b>HelpSteer2:</b> 10,681 prompts &middot; two responses &middot;
-      five human-scored metrics &middot; at least three annotators</p>
+      five human-scored metrics &middot; at least three annotators &middot;
+      dots are illustrative</p>
   </div>
 </section>
 
@@ -234,18 +400,28 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">03 &middot; the first experiment</p>
     <h2>Change the packing.<br>Keep the evidence fixed.</h2>
-    <div class="cols two">
-      <div class="card">
-        <p class="stat">5 calls</p>
-        <p class="slab">one metric in each</p>
+    <div class="cols two" style="align-items:center">
+      <div>
+        <div class="cols two">
+          <div class="card">
+            <p class="stat">5 calls</p>
+            <p class="slab">one metric in each</p>
+          </div>
+          <div class="card accent">
+            <p class="stat">1 call</p>
+            <p class="slab">all five metrics together</p>
+          </div>
+        </div>
+        <p class="note">Same prompt, responses, rubric and output budget per metric.</p>
       </div>
-      <div class="card accent">
-        <p class="stat">1 call</p>
-        <p class="slab">all five metrics together</p>
-      </div>
+      <pre class="json-payload" aria-label="Example structured judge output"><span class="key">"verbosity"</span>: {
+  <span class="key">"quote"</span>: <span class="value">"verbatim evidence"</span>,
+  <span class="key">"explanation"</span>: <span class="value">"one or two sentences"</span>,
+  <span class="key">"score"</span>: <span class="value">3</span>
+}</pre>
     </div>
-    <p class="note">Same prompt, same two responses, same five human labels.
-      Did the judge rank A and B the same way as the annotators?</p>
+    <pre class="code" style="margin-top:1.2rem" aria-label="Output budget code from budget.py"><span class="file">src/packing/budget.py</span>    headroom = REASONING_HEADROOM_TOKENS <span class="k">if</span> reasoning <span class="k">else</span> <span class="n">0</span>
+    <span class="hl">content = ENVELOPE_OVERHEAD_TOKENS + PER_CRITERION_OUTPUT_TOKENS * group_size</span></pre>
   </div>
 </section>
 
@@ -269,10 +445,10 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   </div>
 </section>
 
-<section class="slide" id="s5" data-title="The answer: at five criteria, packing is free">
+<section class="slide" id="s5" data-title="At five metrics, no measurable loss">
   <div class="wrap">
     <p class="kicker">05 &middot; the result</p>
-    <h2>At five criteria, packing is free</h2>
+    <h2>At five metrics,<br>no measurable loss</h2>
     <div class="cols two">
       <div class="card">
         <p class="stat">+0.5<small> pts</small></p>
@@ -283,8 +459,17 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <p class="slab">cost per metric</p>
       </div>
     </div>
+    <svg class="ci" viewBox="0 0 600 90" role="img" aria-label="Accuracy change at five metrics: point estimate plus 0.5, interval from minus 3.4 to plus 4.3, crossing zero">
+      <line x1="40" y1="44" x2="560" y2="44" stroke="#1d2b35" stroke-width="2"></line>
+      <line class="zero" x1="386.7" y1="14" x2="386.7" y2="70"></line>
+      <line class="range" x1="288.4" y1="44" x2="510.9" y2="44" stroke="#c8f751" stroke-opacity=".55"></line>
+      <circle class="pt" cx="401.1" cy="44" r="9" fill="#c8f751" stroke="#080b0f" stroke-width="3"></circle>
+      <text class="lab" x="386.7" y="10" text-anchor="middle">0 = no change</text>
+      <text x="288.4" y="76" text-anchor="middle">&minus;3.4</text>
+      <text x="510.9" y="76" text-anchor="middle">+4.3</text>
+    </svg>
     <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">
-      No measurable loss.</b> 95% CI &minus;3.4 to +4.3 points.</p>
+      No measurable loss.</b> 95% CI &minus;3.4 to +4.3 points. The range crosses zero.</p>
   </div>
 </section>
 
@@ -310,40 +495,53 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <div class="wrap">
     <p class="kicker">07 &middot; what it took to measure this</p>
     <h2>Anchor every scale point,<br>or the judge invents a shorter one</h2>
-    <p class="lede">Anchored at <span class="mono">0</span>, <span class="mono">2</span>,
-      <span class="mono">4</span>, it used only 0, 2 and 4. <strong>Never 1. Never 3.</strong></p>
-    <div class="cols">
-      <div class="card rival">
-        <p class="stat" style="color:var(--warn)">66%</p>
-        <p class="slab">tie rate &middot; anchored 0 / 2 / 4</p>
+    <div class="cols two" style="align-items:end">
+      <div class="histogram" role="img" aria-label="Score histogram with no scores at one or three">
+        <div class="histbar"><div class="status">used</div><div class="used" style="--h:58%"></div><div class="score">0</div></div>
+        <div class="histbar empty"><div class="status">never</div><div class="used"></div><div class="score">1</div></div>
+        <div class="histbar"><div class="status">used</div><div class="used" style="--h:92%"></div><div class="score">2</div></div>
+        <div class="histbar empty"><div class="status">never</div><div class="used"></div><div class="score">3</div></div>
+        <div class="histbar"><div class="status">used</div><div class="used" style="--h:68%"></div><div class="score">4</div></div>
       </div>
-      <div class="card accent">
-        <p class="stat">43%</p>
-        <p class="slab">tie rate &middot; all five anchored</p>
-      </div>
-      <div class="card">
-        <p class="stat cy">29 &rarr; 49</p>
-        <p class="slab">usable observations per 100</p>
+      <div>
+        <p class="lede">The first rubric described 0, 2 and 4. The judge used
+          those values and skipped the rest. <strong>Never 1. Never 3.</strong></p>
+        <div class="mini-results">
+          <span>ties: 66% &rarr; 43%</span>
+          <span>usable / 100: 29 &rarr; 49</span>
+        </div>
       </div>
     </div>
-    <p class="note"><b>A formatting decision cost most of the data.</b></p>
+    <pre class="code" style="margin-top:1.3rem" aria-label="Anchor check from criteria.py"><span class="file">src/packing/criteria.py</span>        missing = points - set(self.anchors)
+        <span class="k">if</span> missing:
+            <span class="k">raise</span> ValueError(
+                <span class="hl"><span class="s">f"{self.key}: every scale point needs an anchor; missing {sorted(missing)}. "</span></span>
+                <span class="s">f"A partially anchored scale becomes the scale -- see module docstring."</span>
+            )</pre>
+    <p class="source">Bars show which values appeared, not their relative frequency.</p>
   </div>
 </section>
 
-<section class="slide" id="s12" data-title="We built a synthetic corruption dataset">
+<section class="slide" id="s12" data-title="I built a synthetic corruption dataset">
   <div class="wrap">
     <p class="kicker">08 &middot; beyond the human labels</p>
-    <h2>We generated a second dataset</h2>
-    <div class="cols two">
-      <div class="card">
-        <h3>HelpSteer2 response</h3>
-        <p>Keep the original clean text.</p>
+    <h2>To test past five metrics,<br>I broke answers on purpose</h2>
+    <div class="corruption-example">
+      <div class="example-text">
+        <strong>Clean HelpSteer2 response</strong>
+        Redeem rewards or points.
       </div>
-      <div class="card accent">
-        <h3>Synthetic pair</h3>
-        <p>Apply one reproducible corruption.</p>
+      <div class="arrow">&rarr;</div>
+      <div class="example-text">
+        <strong>Recorded duplicate corruption</strong>
+        Redeem rewards or points. <mark>Redeem rewards or points.</mark>
       </div>
     </div>
+    <pre class="code" style="margin-top:1.3rem" aria-label="Duplicate corruption code from corrupt.py"><span class="file">src/packing/corrupt.py</span>    rng = random.Random(seed)
+    picks = [rng.choice(idx) <span class="k">for</span> _ <span class="k">in</span> range(max(<span class="n">1</span>, severity))]
+    rearranged = parts[:]
+    <span class="k">for</span> pick <span class="k">in</span> picks:
+        <span class="hl">rearranged[pick] = rearranged[pick].rstrip() + <span class="s">" "</span> + parts[pick].strip()</span></pre>
     <p class="note"><b>Every generated pair records:</b>
       operation + target + direction + seed.</p>
   </div>
@@ -352,22 +550,35 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 <section class="slide" id="s-synthetic-design" data-title="How synthetic corruption supports forty metrics">
   <div class="wrap">
     <p class="kicker">09 &middot; the synthetic experiment</p>
-    <h2>No new human labels</h2>
-    <ul class="points">
-      <li><strong>1 measured target</strong> has a known direction.</li>
-      <li><strong>39 load-only metrics</strong> make the call larger.</li>
-      <li>Clean and corrupted responses are <strong>randomized</strong>.</li>
-      <li>The target stays <strong>first</strong> at every rung.</li>
-    </ul>
-    <p class="note">Eight operations contribute 58 prompts each.
+    <h2>One metric is measured.<br>The other 39 add load.</h2>
+    <div class="split">
+      <div class="ladder" role="img" aria-label="Six rungs from 1 to 40 metrics per call. The measured target is the first chip in every row.">
+      <div class="rung" style="--r:0"><span>K = 1</span><div class="chips"><i class="t"></i></div></div>
+      <div class="rung" style="--r:1"><span>K = 5</span><div class="chips"><i class="t"></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="rung" style="--r:2"><span>K = 10</span><div class="chips"><i class="t"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="rung" style="--r:3"><span>K = 20</span><div class="chips"><i class="t"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="rung" style="--r:4"><span>K = 30</span><div class="chips"><i class="t"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="rung" style="--r:5"><span>K = 40</span><div class="chips"><i class="t"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      </div>
+      <div>
+        <pre class="code" aria-label="Ladder group construction from runner.py"><span class="file">src/packing/runner.py</span>        <span class="k">for</span> nominal_n <span class="k">in</span> levels:
+            <span class="hl">group = (target, *companions[: nominal_n - <span class="n">1</span>])</span></pre>
+        <ul class="points tight" style="margin-top:1rem">
+          <li><strong>1 measured target</strong> has a known direction.</li>
+          <li><strong>39 load-only metrics</strong> make the call larger.</li>
+          <li>The <strong>target stays first</strong> at every rung.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><b>No new human labels.</b> Eight operations contribute 58 prompts each.
       The outcome is recovery of the known edit.</p>
   </div>
 </section>
 
-<section class="slide" id="s15" data-title="At forty, it does break">
+<section class="slide" id="s15" data-title="At forty metrics, recovery falls">
   <div class="wrap">
     <p class="kicker">10 &middot; the extension</p>
-    <h2>At forty, it does break</h2>
+    <h2>At forty metrics,<br>recovery falls</h2>
     <div class="cols two">
       <div class="card rival">
         <p class="stat">&minus;6.3<small> pts</small></p>
@@ -378,47 +589,24 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <p class="slab">95% confidence interval</p>
       </div>
     </div>
-    <p class="note"><b>Position stayed fixed.</b> 7,653 calls &middot; p = 0.0054.</p>
+    <svg class="ci" viewBox="0 0 600 90" role="img" aria-label="Recovery change at forty metrics: point estimate minus 6.3, interval from minus 10.7 to minus 1.9, entirely below zero">
+      <line x1="40" y1="44" x2="560" y2="44" stroke="#1d2b35" stroke-width="2"></line>
+      <line class="zero" x1="386.7" y1="14" x2="386.7" y2="70"></line>
+      <line class="range" x1="77.6" y1="44" x2="331.8" y2="44" stroke="#f0a35e" stroke-opacity=".6"></line>
+      <circle class="pt" cx="204.7" cy="44" r="9" fill="#f0a35e" stroke="#080b0f" stroke-width="3"></circle>
+      <text class="lab" x="386.7" y="10" text-anchor="middle">0 = no change</text>
+      <text x="77.6" y="76" text-anchor="middle">&minus;10.7</text>
+      <text x="331.8" y="76" text-anchor="middle">&minus;1.9</text>
+    </svg>
+    <p class="note"><b>Position stayed fixed.</b> 7,653 calls &middot; p = 0.0054.
+      Same scale as the five-metric result. This range never reaches zero.</p>
   </div>
 </section>
 
-<section class="slide" id="s16" data-title="The average hides different behavior">
+<section class="slide" id="s18" data-title="I could not find a cliff">
   <div class="wrap">
-    <p class="kicker">11 &middot; read the average carefully</p>
-    <h2>The average hides<br>different behavior</h2>
-    <div class="cols two">
-      <div class="card rival">
-        <p class="stat">3 of 8</p>
-        <p class="slab">core operations drove the decline</p>
-      </div>
-      <div class="card accent">
-        <p class="stat">+12.2<small> pts</small></p>
-        <p class="slab">separate numbers sentinel</p>
-      </div>
-    </div>
-    <p class="note">Five core operations were flat or slightly positive.
-      Operation-level results remain exploratory.</p>
-  </div>
-</section>
-
-<section class="slide" id="s17" data-title="What this result measures">
-  <div class="wrap">
-    <p class="kicker">12 &middot; the scope</p>
-    <h2>What this result measures</h2>
-    <ul class="points">
-      <li><strong>One targeted metric</strong> fixed at the front.</li>
-      <li><strong>Up to 39 additional metrics</strong> appended behind it.</li>
-      <li><strong>Eight known edits</strong> applied to HelpSteer2 responses.</li>
-      <li><strong>gpt-5-mini</strong> using one fixed prompt and rubric.</li>
-    </ul>
-    <p class="note">A precise measurement of this setup, not a universal model limit.</p>
-  </div>
-</section>
-
-<section class="slide" id="s18" data-title="It does not break, it bends">
-  <div class="wrap">
-    <p class="kicker">13 &middot; where does it break</p>
-    <h2>It does not break. It bends.</h2>
+    <p class="kicker">11 &middot; where does it break</p>
+    <h2>It bends.<br>I couldn&rsquo;t find a cliff.</h2>
     <div class="cols two" style="align-items:center">
       <div>
         <svg class="chart" viewBox="0 0 600 260" role="img"
@@ -433,7 +621,7 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
           <text class="axis" x="62" y="214" text-anchor="end">0.69</text>
           <line class="lineA" x1="82" y1="73.5" x2="551" y2="180"
                 stroke="#c8f751" stroke-width="3" stroke-dasharray="7 5"></line>
-          <polyline class="lineB" points="82,104.6 130,47.7 190,104.6 310,114.9 430,144.3 551,190.4"></polyline>
+          <polyline class="lineB" pathLength="1" points="82,104.6 130,47.7 190,104.6 310,114.9 430,144.3 551,190.4"></polyline>
           <circle class="dot" cx="82"  cy="104.6" fill="#f0a35e"></circle>
           <circle class="dot" cx="130" cy="47.7"  fill="#f0a35e"></circle>
           <circle class="dot" cx="190" cy="104.6" fill="#f0a35e"></circle>
@@ -446,18 +634,59 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
           <text class="axis" x="310" y="238" text-anchor="middle">20</text>
           <text class="axis" x="430" y="238" text-anchor="middle">30</text>
           <text class="axis" x="551" y="238" text-anchor="middle">40</text>
-          <text class="series" x="315" y="255" text-anchor="middle" fill="#5d7280">criteria per call</text>
+          <text class="series" x="315" y="255" text-anchor="middle" fill="#8195a3">metrics per call</text>
           <text class="series" x="500" y="170" fill="#c8f751">fitted</text>
           <text class="series" x="150" y="126" fill="#f0a35e">observed</text>
+          <text class="series" x="72" y="18" fill="#8195a3">recovery</text>
         </svg>
       </div>
       <div class="card accent">
-        <p class="stat">gradual</p>
-        <p class="slab">no detectable cliff</p>
+        <p class="stat">exploratory</p>
+        <p class="slab">roughly 1% lower odds per added metric</p>
       </div>
     </div>
-    <p class="note"><b>I added until it broke. It was bending the whole time.</b>
-      1% of log-odds per criterion, from the first one.</p>
+    <p class="note"><b>Zoomed y-axis: 69% to 81% recovery.</b>
+      The bump at K = 5 is sampling variation. A straight trend fits the
+      observed rungs without detectable nonlinearity. Dots are descriptive;
+      the endpoint interval is on the previous slide.</p>
+  </div>
+</section>
+
+<section class="slide" id="s16" data-title="The average hides prompts moving both ways">
+  <div class="wrap">
+    <p class="kicker">12 &middot; under the average</p>
+    <h2>The average hides<br>prompts moving both ways</h2>
+    <div class="movement" role="img" aria-label="Seventy-three prompts moved from right to wrong while forty-five moved from wrong to right">
+      <div class="move down">
+        <div class="count">73</div>
+        <div class="path">right at K = 1 &rarr; wrong at K = 40</div>
+      </div>
+      <div class="move up">
+        <div class="count">45</div>
+        <div class="path">wrong at K = 1 &rarr; right at K = 40</div>
+      </div>
+    </div>
+    <div class="mini-results">
+      <span>duplicate: &minus;37 points</span>
+      <span>agreement: &minus;21 points</span>
+      <span>punctuation: &minus;19 points</span>
+    </div>
+    <p class="note">These three operation-level declines survive Holm correction.
+      Operation-specific effect sizes remain exploratory.</p>
+  </div>
+</section>
+
+<section class="slide" id="s17" data-title="What this experiment does not prove">
+  <div class="wrap">
+    <p class="kicker">13 &middot; the scope</p>
+    <h2>What this experiment<br>does not prove</h2>
+    <ul class="points">
+      <li><strong>Not a universal limit.</strong> One model, one corpus and one rubric.</li>
+      <li><strong>Not a pure attention test.</strong> Metric count, prompt length and schema size grow together.</li>
+      <li><strong>Not forty human labels.</strong> One known edit is measured while the other metrics add load.</li>
+      <li><strong>Not a position effect.</strong> The measured target stays first throughout the ladder.</li>
+    </ul>
+    <p class="note">This is a precise measurement of one production-shaped setup.</p>
   </div>
 </section>
 
@@ -466,9 +695,9 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <p class="kicker">14 &middot; the defensible claim</p>
     <h2>What I will actually claim</h2>
     <ul class="points">
-      <li><strong>5 metrics:</strong> no measurable loss, 46% cheaper.</li>
-      <li><strong>40 metrics:</strong> recovery lower by 6.3 points.</li>
-      <li><strong>Between them:</strong> a gradual decline, not a cliff.</li>
+      <li><strong>At 5 metrics:</strong> no measurable loss, with a 46% observed cost reduction.</li>
+      <li><strong>At 40 metrics:</strong> recovery was 6.3 points lower.</li>
+      <li><strong>Between them:</strong> an exploratory fit suggests a gradual decline. I could not detect a cliff.</li>
     </ul>
   </div>
 </section>
@@ -478,7 +707,7 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     <p class="kicker">15 &middot; takeaway</p>
     <h2>If you run judges in production</h2>
     <ul class="points">
-      <li><strong>Pack about five metrics.</strong></li>
+      <li><strong>Test a small packed rubric first.</strong></li>
       <li><strong>Retest quality</strong> as you add more.</li>
       <li><strong>Anchor every scale point.</strong></li>
       <li><strong>Report the tie rate</strong> next to accuracy.</li>
@@ -490,6 +719,7 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
           Every number here recomputes from retained calls, no API key:
           <code>packing reproduce</code></p>
         <p class="qrurl">github.com/sattensil/multi-metric-judge</p>
+        <p class="signoff"><img src="assets/launchdarkly-mark-white.svg" alt=""> Scarlett Attensil &middot; LaunchDarkly</p>
       </div>
     </div>
   </div>
@@ -497,7 +727,6 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 
 </main>
 <nav id="dots" aria-label="Slide navigation"></nav>
-<div id="counter"><b id="cnum">1</b> / <span id="ctot">16</span></div>
 
 <script>
 (function () {
@@ -506,11 +735,8 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
   var dots = document.getElementById("dots");
   var bar = document.getElementById("progress");
-  var cnum = document.getElementById("cnum");
   var current = 0;
   var remote = false;
-
-  document.getElementById("ctot").textContent = String(slides.length);
 
   var bus = null;
   try { bus = new BroadcastChannel("deck-sync-packing-v1"); } catch (e) { bus = null; }
@@ -525,9 +751,44 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   });
   var buttons = Array.prototype.slice.call(dots.children);
 
+  var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function countUp(slide) {
+    slide.querySelectorAll(".move .count").forEach(function (el) {
+      var final = el.getAttribute("data-final") || el.textContent;
+      el.setAttribute("data-final", final);
+      if (calm) { el.textContent = final; return; }
+      var target = parseInt(final, 10);
+      var startedAt = null;
+      function step(t) {
+        if (startedAt === null) { startedAt = t; }
+        var p = Math.min(1, (t - startedAt) / 1100);
+        el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) { window.requestAnimationFrame(step); }
+      }
+      window.requestAnimationFrame(step);
+    });
+  }
+
+  // Restarting the class restarts the CSS animations, so revisiting a slide replays it.
+  function activate(i) {
+    slides.forEach(function (s, n) { if (n !== i) { s.classList.remove("is-active"); } });
+    var slide = slides[i];
+    slide.classList.remove("is-active");
+    void slide.offsetWidth;
+    slide.classList.add("is-active");
+    countUp(slide);
+  }
+
+  window.addEventListener("beforeprint", function () {
+    document.querySelectorAll(".move .count[data-final]").forEach(function (el) {
+      el.textContent = el.getAttribute("data-final");
+    });
+  });
+
   function paint(i) {
+    if (i !== current || !slides[i].classList.contains("is-active")) { activate(i); }
     current = i;
-    cnum.textContent = String(i + 1);
     bar.style.width = ((i + 1) / slides.length * 100) + "%";
     buttons.forEach(function (b, n) { b.setAttribute("aria-current", n === i ? "true" : "false"); });
     // Keep the address bar on the current slide so a reload resumes here.

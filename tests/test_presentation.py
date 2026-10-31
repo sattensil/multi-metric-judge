@@ -10,6 +10,7 @@ is baked into the markup rather than fetched.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from pathlib import Path
@@ -130,7 +131,7 @@ def test_dataset_and_experiment_design_are_visible_on_slides(index: str) -> None
     for title in (
         "The data: HelpSteer2",
         "Experiment one: one metric versus five",
-        "We built a synthetic corruption dataset",
+        "I built a synthetic corruption dataset",
         "How synthetic corruption supports forty metrics",
     ):
         assert f'data-title="{title}"' in index
@@ -176,7 +177,20 @@ def test_title_question_anchors_both_views(index: str, presenter: str) -> None:
     assert _unquote(_js_array(presenter, "TITLES")[0]) == TITLE
 
 
-def test_slide_timings_are_contiguous_and_land_at_thirty_minutes(
+def test_opening_script_introduces_scarlett_and_the_personal_motivation(
+    presenter: str,
+) -> None:
+    opening = _js_array(presenter, "NOTES")[0]
+    for needle in (
+        "Hi, I'm Scarlett Attensil",
+        "LaunchDarkly",
+        "data science",
+        "change the measurement along with the bill",
+    ):
+        assert needle in opening
+
+
+def test_slide_timings_are_contiguous_and_land_in_recording_window(
     presenter: str,
 ) -> None:
     windows = [_unquote(entry) for entry in _js_array(presenter, "WINDOWS")]
@@ -190,7 +204,7 @@ def test_slide_timings_are_contiguous_and_land_at_thirty_minutes(
     assert all(len(window) == 2 for window in parsed)
     assert parsed[0][0] == 0
     assert all(left[1] == right[0] for left, right in zip(parsed, parsed[1:]))
-    assert parsed[-1][1] == 30 * 60
+    assert 22 * 60 <= parsed[-1][1] <= 25 * 60
 
     ends = [int(entry) for entry in _js_array(presenter, "ENDS")]
     assert ends == [window[1] for window in parsed]
@@ -212,7 +226,7 @@ def test_presenter_notes_are_a_full_speakable_script(presenter: str) -> None:
         spoken = " ".join(re.findall(r'"((?:\\.|[^"\\])*)"', say.group(1)))
         spoken = re.sub(r"<[^>]+>", " ", spoken)
         words += len(re.findall(r"\b[\w%]+\b", spoken))
-    assert 2_100 <= words <= 2_900, f"presenter script is {words} words"
+    assert 2_400 <= words <= 3_400, f"presenter script is {words} words"
 
 
 def test_every_note_carries_say_and_dir(presenter: str) -> None:
@@ -339,3 +353,156 @@ def test_the_deck_reports_the_published_ladder_numbers() -> None:
     superseded = ("&minus;7.7", "6,289", "p = 0.0016")
     for stale in superseded:
         assert stale not in index, f"superseded value {stale!r} is still on a slide"
+
+
+def test_recording_hook_and_payoff_do_not_overclaim(index: str, presenter: str) -> None:
+    assert "10? 20? 40?" in index
+    assert "I couldn&rsquo;t find a cliff" in index
+    assert "there is no cliff" not in index.lower()
+    assert "If you guessed a number, you were wrong" not in presenter
+
+
+def test_human_pilot_claim_keeps_its_uncertainty(index: str) -> None:
+    assert 'data-title="At five metrics, no measurable loss"' in index
+    assert "No measurable loss" in index
+    assert "95% CI" in index
+    assert "packing is free" not in index.lower()
+
+
+def test_second_half_preserves_the_twist_then_the_scope(index: str) -> None:
+    titles = re.findall(r'<section class="slide"[^>]*data-title="([^"]*)"', index)
+    assert titles.index("At forty metrics, recovery falls") < titles.index(
+        "I could not find a cliff"
+    )
+    assert titles.index("I could not find a cliff") < titles.index(
+        "The average hides prompts moving both ways"
+    )
+    assert titles.index("The average hides prompts moving both ways") < titles.index(
+        "What this experiment does not prove"
+    )
+
+
+def test_new_visuals_show_the_evidence_instead_of_only_stat_cards(index: str) -> None:
+    for marker in (
+        'aria-label="Observed cost per thousand metrics',
+        'aria-label="Score histogram with no scores at one or three',
+        'class="corruption-example"',
+        'class="json-payload"',
+        'aria-label="Seventy-three prompts moved from right to wrong',
+    ):
+        assert marker in index
+
+
+def test_jev_is_current_context_not_support_for_the_main_claim(
+    index: str, presenter: str
+) -> None:
+    for needle in ("Jev", "346,009", "ten dollars", "doesn't generate text"):
+        assert needle in presenter
+    assert "Jev" in index
+    assert "not a direct comparison" in presenter
+    assert "jev-1.13.0" in presenter
+
+
+def test_cost_headline_uses_the_per_thousand_unit(index: str) -> None:
+    assert "A thousand metrics cost 59&cent; separately" in index
+    assert "Five metrics cost 59&cent;" not in index
+
+
+def test_audience_facing_claims_keep_the_registered_boundaries(
+    index: str, presenter: str
+) -> None:
+    for needle in (
+        "73",
+        "45",
+        "target stays first",
+        "One model",
+        "exploratory",
+    ):
+        assert needle in index
+    assert "roughly one percent lower odds" in presenter
+    assert "In my setup" in presenter
+    assert "every metric you add carries" not in presenter.lower()
+
+
+def test_projector_hides_the_slide_counter(index: str) -> None:
+    assert '<div id="counter"' not in index
+    assert 'id="cnum"' not in index
+    assert 'id="ctot"' not in index
+
+
+def test_code_on_slides_is_copied_verbatim_from_the_repo(index: str) -> None:
+    blocks = re.findall(r'<pre class="code"[^>]*>(.*?)</pre>', index, re.S)
+    assert len(blocks) >= 4
+    root = Path(__file__).resolve().parents[1]
+    for block in blocks:
+        path = re.search(r'<span class="file">([^<\s]+)', block)
+        assert path is not None, "every code block names its source file"
+        body = re.sub(r'<span class="file">.*?</span>', "", block, count=1, flags=re.S)
+        shown = html.unescape(re.sub(r"<[^>]+>", "", body)).split("\n")
+        source = (root / path.group(1)).read_text(encoding="utf-8").split("\n")
+        starts = [
+            i for i in range(len(source) - len(shown) + 1)
+            if source[i:i + len(shown)] == shown
+        ]
+        assert starts, f"code shown from {path.group(1)} does not match the repo"
+
+
+def _spoken(presenter: str) -> str:
+    parts = []
+    for entry in _js_array(presenter, "NOTES"):
+        say = re.search(r"say:\s*\[(.*?)\]\s*,\s*dir:", entry, re.S)
+        assert say is not None
+        parts.extend(re.findall(r'"((?:\\.|[^"\\])*)"', say.group(1)))
+    return re.sub(r"<[^>]+>", " ", " ".join(parts))
+
+
+def test_script_renders_as_teleprompter_paragraphs(presenter: str) -> None:
+    assert '<ul id="say">' not in presenter
+    assert '<div id="say">' in presenter
+    assert 'document.createElement("p")' in presenter
+
+
+def test_spoken_script_reads_aloud_without_statistics_jargon(presenter: str) -> None:
+    spoken = _spoken(presenter)
+    assert not re.findall(r"\d", spoken.replace("HelpSteer2", "")), (
+        "spoken script should spell out rounded numbers"
+    )
+    for jargon in (
+        "p value",
+        "Holm",
+        "log-odds",
+        "Wald",
+        "K equals",
+        "confidence interval",
+        "percentage points",
+        "exploratory",
+    ):
+        assert jargon not in spoken, f"{jargon!r} is hard to say on camera"
+
+
+def test_spoken_script_avoids_machine_writing_tells(presenter: str) -> None:
+    spoken = _spoken(presenter)
+    assert "\u2014" not in spoken
+    for tell in (
+        "delve",
+        "let's dive",
+        "crucially",
+        "it's worth noting",
+        "in conclusion",
+        "game-changing",
+        "unlock",
+        "leverage",
+    ):
+        assert tell not in spoken.lower(), f"{tell!r} reads as generated text"
+
+
+def test_spoken_script_keeps_the_honest_qualifiers(presenter: str) -> None:
+    spoken = _spoken(presenter)
+    for needle in (
+        "didn't measure a loss",
+        "couldn't find one",
+        "forty-five went the other way",
+        "always stays first",
+        "doesn't prove",
+    ):
+        assert needle in spoken

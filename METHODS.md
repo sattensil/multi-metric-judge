@@ -368,4 +368,6 @@ The following are explicitly exploratory:
   Language Model Evaluations.* arXiv:2411.00640.
 - Wang, Z. et al. (2024). *HelpSteer2: Open-source dataset for training
   top-performing reward models.* arXiv:2406.08673.
+- Deußer, T., Sparrenberg, L., & Sifa, R. (2026). *Evaluating and Benchmarking
+  the System One Model Jev.* arXiv:2609.37647.
 - *How to Correctly Report LLM-as-a-Judge Evaluations.* arXiv:2511.21140.
