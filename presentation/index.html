@@ -222,6 +222,64 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 .chips i{width:7px;height:16px;border-radius:3px;background:#2a3b46;flex:0 0 auto}
 .chips i.t{background:var(--lime)}
 
+.illo{position:absolute;top:0;right:0;width:clamp(110px,12vw,190px);height:auto;
+      pointer-events:none;filter:drop-shadow(0 10px 30px #0008)}
+.wrap{position:relative}
+.wrap>h2{max-width:calc(100% - clamp(130px,14vw,220px))}
+.hero{width:100%;max-width:380px;height:auto;justify-self:center}
+.side-illo{width:clamp(120px,13vw,200px);height:auto;display:block;margin:0 0 1rem}
+.cliff-side .stat{font-family:var(--font-mono);color:var(--lime);font-size:clamp(2.4rem,5vw,4rem);margin:0}
+.caption{color:var(--dim);font-size:.95rem;line-height:1.45;margin:.7rem 0 0}
+.split .code{font-size:clamp(.66rem,.82vw,.8rem);white-space:pre-wrap;overflow-wrap:anywhere}
+.findings-illo{display:block;width:clamp(90px,8vw,130px);margin:1rem 0 0 auto}
+.slide.is-active .findings-illo{animation:pop .6s 1s both}
+.term{margin:.9rem 0 0;background:#05080b;border:1px solid var(--line);border-radius:12px;
+      padding:.8rem 1rem;font-family:var(--font-mono);font-size:clamp(.7rem,.85vw,.82rem);
+      color:var(--lime);white-space:pre-wrap}
+
+.flow{display:grid;grid-template-columns:auto auto auto auto auto auto;gap:clamp(.8rem,2vw,1.6rem);
+      align-items:center;justify-content:start;margin:.6rem 0 0}
+.flow-col{display:grid;gap:.8rem}
+.resp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem 1.3rem;
+      font-family:var(--font-display);font-weight:600}
+.score-pill{font-family:var(--font-mono);font-size:.95rem;color:var(--dim);border:1px solid #23506a;
+            background:#0c1a22;border-radius:999px;padding:.7rem 1.1rem}
+.score-pill b{color:var(--cyan);font-size:1.4em;font-weight:500}
+.score-pill.human{border-color:#2e4a1f;background:#121b10}
+.score-pill.human b{color:var(--lime)}
+.flow-arrow{color:var(--faint);font-size:1.8rem}
+.verdict{font-family:var(--font-mono);font-size:1.8rem;color:var(--ink);line-height:1.3}
+.verdict span{font-size:.5em;color:var(--lime)}
+
+.gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.75rem .9rem}
+.tile b{font-family:var(--font-mono);font-weight:500;color:var(--cyan);font-size:.85rem}
+.tile i{font-style:normal;font-family:var(--font-mono);font-size:.7rem;color:var(--faint);
+        margin-left:.5rem;letter-spacing:.04em}
+.tile p{margin:.45rem 0 0;color:var(--dim);font-size:clamp(.78rem,.95vw,.92rem);line-height:1.4}
+.tile mark{background:#f0a35e2b;color:var(--warn);padding:.04em .2em;border-radius:3px}
+.tile.extra{border-style:dashed}
+
+.opchart{width:100%;height:auto}
+.opchart .name{font-family:var(--font-mono);font-size:13px;fill:var(--dim)}
+.opchart .val{font-family:var(--font-mono);font-size:13px;fill:var(--ink)}
+.opchart .zero{stroke:var(--faint);stroke-width:1.5;stroke-dasharray:4 4}
+.opchart .ob.neg{fill:var(--warn)} .opchart .ob.pos{fill:var(--lime)} .opchart .ob.flat{fill:#3c5260}
+.repeat{width:100%;height:auto}
+.repeat .axis{font-family:var(--font-mono);font-size:13px;fill:var(--faint)}
+.repeat .trace{fill:none;stroke:var(--cyan);stroke-width:2.5;stroke-opacity:.7}
+.repeat .node{fill:var(--bg);stroke:var(--cyan);stroke-width:2.5}
+
+.findings{display:grid;gap:.9rem;margin:.4rem 0 0}
+.findings div{display:grid;grid-template-columns:clamp(90px,9vw,140px) 1fr;align-items:center;gap:1.2rem;
+              background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem 1.3rem}
+.findings b{font-family:var(--font-mono);font-weight:500;color:var(--lime);font-size:clamp(1.6rem,3vw,2.4rem)}
+.findings p{margin:0;font-size:clamp(1rem,1.6vw,1.35rem);color:var(--dim)}
+.findings strong{color:var(--ink)}
+
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes barx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
 /* Motion only plays on the slide being shown. At rest, and in print, every
    element sits in its final state, so the PDF never captures a half-drawn slide. */
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
@@ -260,6 +318,28 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 .slide.is-active .stack i{animation:chip .35s both;animation-delay:calc(var(--d) * 90ms + .3s)}
 .slide.is-active .chips i{animation:chip .25s both;animation-delay:calc(var(--r) * 260ms + .4s)}
 .slide.is-active .code .hl{animation:glow 1.6s 1s 2}
+.slide.is-active .illo,.slide.is-active .side-illo{animation:pop .6s .2s cubic-bezier(.3,1.4,.5,1) both}
+.slide.is-active .hero.float{animation:rise .8s .3s both,bob 4s 1.2s ease-in-out infinite}
+.slide.is-active .tile{animation:rise .5s both}
+.slide.is-active .tile:nth-child(2){animation-delay:.15s}
+.slide.is-active .tile:nth-child(3){animation-delay:.3s}
+.slide.is-active .tile:nth-child(4){animation-delay:.45s}
+.slide.is-active .tile:nth-child(5){animation-delay:.6s}
+.slide.is-active .tile:nth-child(6){animation-delay:.75s}
+.slide.is-active .tile:nth-child(7){animation-delay:.9s}
+.slide.is-active .tile:nth-child(8){animation-delay:1.05s}
+.slide.is-active .tile:nth-child(9){animation-delay:1.2s}
+.slide.is-active .opchart .ob{transform-box:fill-box;animation:barx .7s both;
+                               animation-delay:calc(var(--i) * 120ms + .4s)}
+.slide.is-active .opchart .ob.neg{transform-origin:right}
+.slide.is-active .opchart .ob.pos,.slide.is-active .opchart .ob.flat{transform-origin:left}
+.slide.is-active .repeat .trace{stroke-dasharray:1;animation:draw 1.4s both;
+                                animation-delay:calc(var(--i) * 250ms + .3s)}
+.slide.is-active .findings div{animation:rise .6s both}
+.slide.is-active .findings div:nth-child(2){animation-delay:.35s}
+.slide.is-active .findings div:nth-child(3){animation-delay:.7s}
+.slide.is-active .verdict{animation:pop .5s 1s both}
+.slide.is-active .score-pill{animation:rise .5s .5s both}
 
 #dots{position:fixed;right:max(1.1rem,2.2vw);top:50%;transform:translateY(-50%);
       display:flex;flex-direction:column;gap:.55rem;z-index:5}
@@ -321,19 +401,13 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <span>Conf42 Platform Engineering 2026</span>
       </div>
     </div>
-    <div class="stack" role="img" aria-label="A judge call growing from one metric into a tall stack of metrics">
-      <p class="cap">one call &middot; more and more metrics</p>
-      <i class="t" style="--d:0"></i><i style="--d:1;--w:96%"></i><i style="--d:2;--w:88%"></i>
-      <i style="--d:3;--w:93%"></i><i style="--d:4;--w:82%"></i><i style="--d:5;--w:90%"></i>
-      <i style="--d:6;--w:78%"></i><i style="--d:7;--w:86%"></i><i style="--d:8;--w:72%"></i>
-      <i style="--d:9;--w:84%"></i><i style="--d:10;--w:76%"></i><i style="--d:11;--w:68%"></i>
-      <i style="--d:12;--w:80%"></i><i style="--d:13;--w:62%"></i>
-    </div>
+    <img class="hero float" src="assets/albert-hallucinating.png" alt="LaunchDarkly mascot looking dazed, seeing stars">
   </div>
 </section>
 
 <section class="slide" id="s2" data-title="A thousand metrics cost 59 cents separately and 32 cents packed">
   <div class="wrap">
+    <img class="illo" src="assets/fire-laptop.png" alt="">
     <p class="kicker">01 &middot; the cost structure</p>
     <h2>A thousand metrics cost 59&cent; separately.<br>Packed together, they cost 32&cent;.</h2>
     <div class="cost-layout">
@@ -341,20 +415,20 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <div class="cost-column">
           <div class="amount">59&cent;</div>
           <div class="cost-fill" style="--h:100%"></div>
-          <div class="label">K = 1</div>
+          <div class="label">1 metric per call</div>
         </div>
         <div class="cost-column packed">
           <div class="amount">32&cent;</div>
           <div class="cost-fill" style="--h:54%"></div>
-          <div class="label">K = 5</div>
+          <div class="label">5 metrics per call</div>
         </div>
       </div>
       <div>
-        <p class="lede"><strong>K means metrics per call.</strong> Packing cut
-          observed cost by 46% across 3,599 completed pilot calls.</p>
-        <p class="note" style="margin-top:1rem"><b>Jev is the useful alternative.</b>
-          If you need typed decisions rather than generated evidence, evaluate a
-          decision model before optimizing an LLM judge.</p>
+        <p class="lede"><strong>46% cheaper</strong> across 3,599 completed calls.
+          The judge reads the response once and reasons once.</p>
+        <p class="note" style="margin-top:1rem"><b>Only need labels?</b>
+          Jev answers typed questions without generating text. Try a decision
+          model before you optimize a generative judge.</p>
         <p class="source">Deu&szlig;er, Sparrenberg &amp; Sifa (2026) &middot;
           arXiv:2609.37647</p>
       </div>
@@ -364,42 +438,37 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 
 <section class="slide" id="s-data" data-title="The data: HelpSteer2">
   <div class="wrap">
-    <p class="kicker">02 &middot; the data</p>
-    <h2>Humans already scored<br>10,681 prompts</h2>
-    <div class="cols two">
-      <div class="card">
-        <h3>Response A</h3>
-        <p>Five scores from 0 to 4</p>
-        <div class="scale-rows" aria-hidden="true">
-          <div>helpfulness <b><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></b></div>
-          <div>correctness <b><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></b></div>
-          <div>coherence <b><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></b></div>
-          <div>complexity <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
-          <div>verbosity <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
-        </div>
+    <img class="illo" src="assets/albert-thinking.png" alt="">
+    <p class="kicker">02 &middot; the data and the score</p>
+    <h2>Score each response.<br>Then check the order.</h2>
+    <div class="flow" role="img" aria-label="The judge scores Response A a 3 and Response B a 1. People scored them 4 and 2. Same order, so the judge agrees.">
+      <div class="flow-col">
+        <div class="resp">Response A</div>
+        <div class="resp">Response B</div>
       </div>
-      <div class="card accent">
-        <h3>Response B</h3>
-        <p>The same five scores</p>
-        <div class="scale-rows" aria-hidden="true">
-          <div>helpfulness <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
-          <div>correctness <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
-          <div>coherence <b><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></b></div>
-          <div>complexity <b><i class="on"></i><i class="on"></i><i></i><i></i><i></i></b></div>
-          <div>verbosity <b><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></b></div>
-        </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-col">
+        <div class="score-pill">judge <b>3</b> / 4</div>
+        <div class="score-pill">judge <b>1</b> / 4</div>
       </div>
+      <div class="flow-col">
+        <div class="score-pill human">people <b>4</b> / 4</div>
+        <div class="score-pill human">people <b>2</b> / 4</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="verdict">A &gt; B<br><span>same order &#10003;</span></div>
     </div>
     <p class="note"><b>HelpSteer2:</b> 10,681 prompts &middot; two responses &middot;
-      five human-scored metrics &middot; at least three annotators &middot;
-      dots are illustrative</p>
+      five human-scored metrics &middot; each scored 0 to 4 by at least three people.
+      The judge scores one response per call, never side by side.</p>
   </div>
 </section>
 
 <section class="slide" id="s-design-human" data-title="Experiment one: one metric versus five">
   <div class="wrap">
+    <img class="illo" src="assets/albert-multiple.png" alt="">
     <p class="kicker">03 &middot; the first experiment</p>
-    <h2>Change the packing.<br>Keep the evidence fixed.</h2>
+    <h2>Change the packing.<br>Keep everything else.</h2>
     <div class="cols two" style="align-items:center">
       <div>
         <div class="cols two">
@@ -420,19 +489,51 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   <span class="key">"score"</span>: <span class="value">3</span>
 }</pre>
     </div>
-    <pre class="code" style="margin-top:1.2rem" aria-label="Output budget code from budget.py"><span class="file">src/packing/budget.py</span>    headroom = REASONING_HEADROOM_TOKENS <span class="k">if</span> reasoning <span class="k">else</span> <span class="n">0</span>
+    <pre class="code" aria-label="Code from src/packing/budget.py"><span class="file">src/packing/budget.py</span>    headroom = REASONING_HEADROOM_TOKENS <span class="k">if</span> reasoning <span class="k">else</span> 0
     <span class="hl">content = ENVELOPE_OVERHEAD_TOKENS + PER_CRITERION_OUTPUT_TOKENS * group_size</span></pre>
+  </div>
+</section>
+
+<section class="slide" id="s-assemble" data-title="How the judge call is assembled">
+  <div class="wrap">
+    <img class="illo" src="assets/albert-coding.png" alt="">
+    <p class="kicker">04 &middot; building the call</p>
+    <h2>One prompt template.<br>Any number of metrics.</h2>
+    <div class="split">
+      <div>
+        <pre class="code" aria-label="Code from src/packing/criteria.py"><span class="file">src/packing/criteria.py</span>    <span class="k">def</span> render(self) -&gt; str:
+        """Rubric block <span class="k">for</span> the judge prompt."""
+        lines = [f"### {self.label} ({self.key})", self.description, "", "Scale:"]
+        <span class="hl"><span class="k">for</span> value <span class="k">in</span> sorted(self.anchors):</span>
+            <span class="hl">lines.append(f"  {value} = {self.anchors[value]}")</span>
+        <span class="k">return</span> "\n".join(lines)</pre>
+        <p class="caption">Every metric renders the same way: name, definition, and a description for each score.</p>
+      </div>
+      <div>
+        <pre class="code" aria-label="Code from src/packing/prompt.py"><span class="file">src/packing/prompt.py</span>## Rubric ({len(group)} {plural})
+
+<span class="hl">{_rubric_block(group)}</span>
+
+## Task
+
+Score the response on each of the {len(group)} {plural} above, independently. \
+For each one, give a short verbatim quote as evidence, one or two sentences of \
+reasoning, and then the integer score.</pre>
+        <p class="caption">The rubric block grows. The instructions never change.</p>
+      </div>
+    </div>
   </div>
 </section>
 
 <section class="slide" id="s3" data-title="Two hypotheses, both plausible">
   <div class="wrap">
-    <p class="kicker">04 &middot; why this is not obvious</p>
-    <h2>Two hypotheses, both plausible</h2>
+    <img class="illo" src="assets/albert-flailing.png" alt="">
+    <p class="kicker">05 &middot; why this is not obvious</p>
+    <h2>Two hypotheses,<br>both plausible</h2>
     <div class="cols two">
       <div class="card rival">
         <h3>Packing hurts</h3>
-        <p><em class="hl">Divided attention.</em> One reasoning budget, now five
+        <p><em class="hl">Divided attention.</em> One pass, now five
           judgements.</p>
       </div>
       <div class="card accent">
@@ -440,14 +541,15 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
         <p><em class="hl">Criteria in context.</em> Verbose <em>relative to</em> helpful.</p>
       </div>
     </div>
-    <p class="note"><b>Pre-registered rival:</b> position in the prompt, not how many
-      share the call.</p>
+    <p class="note"><b>Written down in advance:</b> maybe position in the list matters
+      more than how many metrics share the call.</p>
   </div>
 </section>
 
 <section class="slide" id="s5" data-title="At five metrics, no measurable loss">
   <div class="wrap">
-    <p class="kicker">05 &middot; the result</p>
+    <img class="illo" src="assets/albert-proud.png" alt="">
+    <p class="kicker">06 &middot; the result</p>
     <h2>At five metrics,<br>no measurable loss</h2>
     <div class="cols two">
       <div class="card">
@@ -469,13 +571,13 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       <text x="510.9" y="76" text-anchor="middle">+4.3</text>
     </svg>
     <p class="note" style="border-color:var(--lime)"><b style="color:var(--lime)">
-      No measurable loss.</b> 95% CI &minus;3.4 to +4.3 points. The range crosses zero.</p>
+      No measurable loss.</b> 95% CI &minus;3.4 to +4.3 points across 144 paired prompts.</p>
   </div>
 </section>
 
 <section class="slide" id="s7" data-title="Packing did not increase ties">
   <div class="wrap">
-    <p class="kicker">06 &middot; reliability check</p>
+    <p class="kicker">07 &middot; reliability check</p>
     <h2>Packing did not increase ties</h2>
     <div class="cols two">
       <div class="card">
@@ -491,57 +593,51 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   </div>
 </section>
 
-<section class="slide" id="s9" data-title="Anchor every scale point or the judge invents a shorter one">
+<section class="slide" id="s12" data-title="Eight ways I broke an answer">
   <div class="wrap">
-    <p class="kicker">07 &middot; what it took to measure this</p>
-    <h2>Anchor every scale point,<br>or the judge invents a shorter one</h2>
-    <div class="cols two" style="align-items:end">
-      <div class="histogram" role="img" aria-label="Score histogram with no scores at one or three">
-        <div class="histbar"><div class="status">used</div><div class="used" style="--h:58%"></div><div class="score">0</div></div>
-        <div class="histbar empty"><div class="status">never</div><div class="used"></div><div class="score">1</div></div>
-        <div class="histbar"><div class="status">used</div><div class="used" style="--h:92%"></div><div class="score">2</div></div>
-        <div class="histbar empty"><div class="status">never</div><div class="used"></div><div class="score">3</div></div>
-        <div class="histbar"><div class="status">used</div><div class="used" style="--h:68%"></div><div class="score">4</div></div>
-      </div>
-      <div>
-        <p class="lede">The first rubric described 0, 2 and 4. The judge used
-          those values and skipped the rest. <strong>Never 1. Never 3.</strong></p>
-        <div class="mini-results">
-          <span>ties: 66% &rarr; 43%</span>
-          <span>usable / 100: 29 &rarr; 49</span>
-        </div>
-      </div>
+    <img class="illo" src="assets/albert-glitch.png" alt="">
+    <p class="kicker">08 &middot; beyond the human labels</p>
+    <h2>Eight ways I broke an answer</h2>
+    <div class="gallery">
+      <div class="tile"><b>duplicate</b><i>verbosity &uarr;</i><p>- Data Mining <mark>- Data Mining</mark></p></div>
+      <div class="tile"><b>filler</b><i>conciseness &darr;</i><p><mark>It should be borne in mind that</mark> here is a haiku about a banana</p></div>
+      <div class="tile"><b>agreement</b><i>grammar &darr;</i><p>I must inform you that I <mark>does</mark> not accept it</p></div>
+      <div class="tile"><b>depunct</b><i>punctuation &darr;</i><p>capture the texture<mark>&nbsp;</mark>detail and quality</p></div>
+      <div class="tile"><b>shuffle</b><i>coherence &darr;</i><p><mark>These solutions are found by&hellip;</mark> x = -a &hellip; The cubic equation you provided&hellip;</p></div>
+      <div class="tile"><b>truncate</b><i>completeness &darr;</i><p>With a wagging tail, / He greets us every morning, <mark>[end]</mark></p></div>
+      <div class="tile"><b>drop_answer</b><i>helpfulness &darr;</i><p><mark>[deleted: To fix this issue, you'll need to install&hellip;]</mark> You can do this by running&hellip;</p></div>
+      <div class="tile"><b>flatten</b><i>formatting &darr;</i><p>a question for you: **Question 1:** &hellip; <mark>**Score: 8/10**</mark> all on one line</p></div>
+      <div class="tile extra"><b>numbers</b><i>correctness &darr; &middot; separate check</i><p>movies which came out between <mark>4000</mark> and 2008</p></div>
     </div>
-    <pre class="code" style="margin-top:1.3rem" aria-label="Anchor check from criteria.py"><span class="file">src/packing/criteria.py</span>        missing = points - set(self.anchors)
-        <span class="k">if</span> missing:
-            <span class="k">raise</span> ValueError(
-                <span class="hl"><span class="s">f"{self.key}: every scale point needs an anchor; missing {sorted(missing)}. "</span></span>
-                <span class="s">f"A partially anchored scale becomes the scale -- see module docstring."</span>
-            )</pre>
-    <p class="source">Bars show which values appeared, not their relative frequency.</p>
+    <p class="source">Real edits from the retained dataset. Each targets one metric with a known direction.</p>
   </div>
 </section>
 
-<section class="slide" id="s12" data-title="I built a synthetic corruption dataset">
+<section class="slide" id="s-pair" data-title="How a broken answer becomes a test">
   <div class="wrap">
-    <p class="kicker">08 &middot; beyond the human labels</p>
-    <h2>To test past five metrics,<br>I broke answers on purpose</h2>
-    <div class="corruption-example">
-      <div class="example-text">
-        <strong>Clean HelpSteer2 response</strong>
-        Redeem rewards or points.
+    <p class="kicker">09 &middot; building the test set</p>
+    <h2>Every corruption declares<br>what it should break</h2>
+    <div class="split">
+      <div>
+        <pre class="code" aria-label="Code from src/packing/corrupt.py"><span class="file">src/packing/corrupt.py</span>    Corruption(
+        key="duplicate",
+        <span class="hl">targeted_criterion="verbosity",</span>
+        <span class="hl">direction=+1,</span>
+        default_severity=3,
+        description="Repeat sentences verbatim; adds no new claims.",
+        _apply=duplicate_sentences,
+    ),</pre>
+        <p class="caption">Target metric, expected direction, and how hard to push.</p>
       </div>
-      <div class="arrow">&rarr;</div>
-      <div class="example-text">
-        <strong>Recorded duplicate corruption</strong>
-        Redeem rewards or points. <mark>Redeem rewards or points.</mark>
+      <div>
+        <pre class="code" aria-label="Code from src/packing/ladder_dataset.py"><span class="file">src/packing/ladder_dataset.py</span>    side_seed = partition_seed(f"lad-side:{base.item_id}:{op_key}", 0, 0, seed)
+    <span class="hl">corrupt_is_b = random.Random(side_seed).random() &lt; 0.5</span>
+    first, second = (
+        (clean, result.text) <span class="k">if</span> corrupt_is_b <span class="k">else</span> (result.text, clean)
+    )</pre>
+        <p class="caption">A coin flip decides which side is broken, so a judge that favors the first answer gains nothing.</p>
       </div>
     </div>
-    <pre class="code" style="margin-top:1.3rem" aria-label="Duplicate corruption code from corrupt.py"><span class="file">src/packing/corrupt.py</span>    rng = random.Random(seed)
-    picks = [rng.choice(idx) <span class="k">for</span> _ <span class="k">in</span> range(max(<span class="n">1</span>, severity))]
-    rearranged = parts[:]
-    <span class="k">for</span> pick <span class="k">in</span> picks:
-        <span class="hl">rearranged[pick] = rearranged[pick].rstrip() + <span class="s">" "</span> + parts[pick].strip()</span></pre>
     <p class="note"><b>Every generated pair records:</b>
       operation + target + direction + seed.</p>
   </div>
@@ -549,7 +645,8 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 
 <section class="slide" id="s-synthetic-design" data-title="How synthetic corruption supports forty metrics">
   <div class="wrap">
-    <p class="kicker">09 &middot; the synthetic experiment</p>
+    <img class="illo" src="assets/albert-juggling.png" alt="">
+    <p class="kicker">10 &middot; the synthetic experiment</p>
     <h2>One metric is measured.<br>The other 39 add load.</h2>
     <div class="split">
       <div class="ladder" role="img" aria-label="Six rungs from 1 to 40 metrics per call. The measured target is the first chip in every row.">
@@ -561,8 +658,8 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       <div class="rung" style="--r:5"><span>K = 40</span><div class="chips"><i class="t"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
       </div>
       <div>
-        <pre class="code" aria-label="Ladder group construction from runner.py"><span class="file">src/packing/runner.py</span>        <span class="k">for</span> nominal_n <span class="k">in</span> levels:
-            <span class="hl">group = (target, *companions[: nominal_n - <span class="n">1</span>])</span></pre>
+        <pre class="code" aria-label="Code from src/packing/runner.py"><span class="file">src/packing/runner.py</span>        <span class="k">for</span> nominal_n <span class="k">in</span> levels:
+            <span class="hl">group = (target, *companions[: nominal_n - 1])</span></pre>
         <ul class="points tight" style="margin-top:1rem">
           <li><strong>1 measured target</strong> has a known direction.</li>
           <li><strong>39 load-only metrics</strong> make the call larger.</li>
@@ -577,12 +674,13 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
 
 <section class="slide" id="s15" data-title="At forty metrics, recovery falls">
   <div class="wrap">
-    <p class="kicker">10 &middot; the extension</p>
+    <img class="illo" src="assets/sad-laptop.png" alt="">
+    <p class="kicker">11 &middot; the extension</p>
     <h2>At forty metrics,<br>recovery falls</h2>
     <div class="cols two">
       <div class="card rival">
         <p class="stat">&minus;6.3<small> pts</small></p>
-        <p class="slab">recovery at K = 40</p>
+        <p class="slab">recovery at 40 metrics vs 1</p>
       </div>
       <div class="card">
         <p class="stat cy">&minus;10.7 to &minus;1.9</p>
@@ -598,18 +696,18 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
       <text x="77.6" y="76" text-anchor="middle">&minus;10.7</text>
       <text x="331.8" y="76" text-anchor="middle">&minus;1.9</text>
     </svg>
-    <p class="note"><b>Position stayed fixed.</b> 7,653 calls &middot; p = 0.0054.
+    <p class="note"><b>Target stayed first.</b> 7,653 calls &middot; p = 0.0054.
       Same scale as the five-metric result. This range never reaches zero.</p>
   </div>
 </section>
 
 <section class="slide" id="s18" data-title="I could not find a cliff">
   <div class="wrap">
-    <p class="kicker">11 &middot; where does it break</p>
+    <p class="kicker">12 &middot; where does it break</p>
     <h2>It bends.<br>I couldn&rsquo;t find a cliff.</h2>
     <div class="cols two" style="align-items:center">
       <div>
-        <svg class="chart" viewBox="0 0 600 260" role="img"
+<svg class="chart" viewBox="0 0 600 260" role="img"
              aria-label="Recovery against criteria per call. Fitted straight line falls from 0.781 at K equals 1 to 0.710 at K equals 40. Observed points at 0.760, 0.798, 0.760, 0.753, 0.734, 0.703 track it closely.">
           <line class="grid" x1="70" y1="30"  x2="560" y2="30"></line>
           <line class="grid" x1="70" y1="90"  x2="560" y2="90"></line>
@@ -640,91 +738,169 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
           <text class="series" x="72" y="18" fill="#8195a3">recovery</text>
         </svg>
       </div>
-      <div class="card accent">
-        <p class="stat">exploratory</p>
-        <p class="slab">roughly 1% lower odds per added metric</p>
+      <div class="cliff-side">
+        <img class="side-illo" src="assets/albert-flying.png" alt="">
+        <p class="stat">~1%</p>
+        <p class="slab">lower odds of catching the edit per metric added</p>
       </div>
     </div>
     <p class="note"><b>Zoomed y-axis: 69% to 81% recovery.</b>
-      The bump at K = 5 is sampling variation. A straight trend fits the
-      observed rungs without detectable nonlinearity. Dots are descriptive;
-      the endpoint interval is on the previous slide.</p>
+      The bump at 5 metrics is noise. A straight line fits every step.</p>
   </div>
 </section>
 
-<section class="slide" id="s16" data-title="The average hides prompts moving both ways">
+<section class="slide" id="s-ops" data-title="Some breaks got much harder to spot">
   <div class="wrap">
-    <p class="kicker">12 &middot; under the average</p>
-    <h2>The average hides<br>prompts moving both ways</h2>
-    <div class="movement" role="img" aria-label="Seventy-three prompts moved from right to wrong while forty-five moved from wrong to right">
-      <div class="move down">
-        <div class="count">73</div>
-        <div class="path">right at K = 1 &rarr; wrong at K = 40</div>
-      </div>
-      <div class="move up">
-        <div class="count">45</div>
-        <div class="path">wrong at K = 1 &rarr; right at K = 40</div>
+    <p class="kicker">13 &middot; under the average</p>
+    <h2>Some breaks got much<br>harder to spot</h2>
+    <div class="split" style="align-items:center">
+      <svg class="opchart" viewBox="-60 0 620 330" role="img" aria-label="Change in recovery from 1 to 40 metrics by corruption: duplicate minus 37, agreement minus 21, punctuation minus 19, formatting plus 2, missing answer plus 2, shuffle plus 3, filler plus 5, wrong numbers plus 12, truncation plus 14">
+<line x1="422.0" y1="6" x2="422.0" y2="318" class="zero"></line>
+<text class="name" x="150" y="29" text-anchor="end">repeated sentences</text>
+<rect class="ob neg" style="--i:0" x="219.6" y="14" width="202.4" height="20" rx="4"></rect>
+<text class="val" x="211.6" y="29" text-anchor="end">&minus;37</text>
+<text class="name" x="150" y="63" text-anchor="end">broken grammar</text>
+<rect class="ob neg" style="--i:1" x="305.9" y="48" width="116.1" height="20" rx="4"></rect>
+<text class="val" x="297.9" y="63" text-anchor="end">&minus;21</text>
+<text class="name" x="150" y="97" text-anchor="end">missing punctuation</text>
+<rect class="ob neg" style="--i:2" x="320.2" y="82" width="101.8" height="20" rx="4"></rect>
+<text class="val" x="312.2" y="97" text-anchor="end">&minus;18</text>
+<text class="name" x="150" y="131" text-anchor="end">flattened formatting</text>
+<rect class="ob flat" style="--i:3" x="422.0" y="116" width="9.3" height="20" rx="4"></rect>
+<text class="val" x="439.4" y="131" text-anchor="start">+2</text>
+<text class="name" x="150" y="165" text-anchor="end">deleted answer</text>
+<rect class="ob flat" style="--i:4" x="422.0" y="150" width="9.3" height="20" rx="4"></rect>
+<text class="val" x="439.4" y="165" text-anchor="start">+2</text>
+<text class="name" x="150" y="199" text-anchor="end">shuffled sentences</text>
+<rect class="ob flat" style="--i:5" x="422.0" y="184" width="18.7" height="20" rx="4"></rect>
+<text class="val" x="448.7" y="199" text-anchor="start">+3</text>
+<text class="name" x="150" y="233" text-anchor="end">filler phrases</text>
+<rect class="ob flat" style="--i:6" x="422.0" y="218" width="28.6" height="20" rx="4"></rect>
+<text class="val" x="458.6" y="233" text-anchor="start">+5</text>
+<text class="name" x="150" y="267" text-anchor="end">wrong numbers</text>
+<rect class="ob pos" style="--i:7" x="422.0" y="252" width="67.1" height="20" rx="4"></rect>
+<text class="val" x="497.1" y="267" text-anchor="start">+12</text>
+<text class="name" x="150" y="301" text-anchor="end">cut-off ending</text>
+<rect class="ob pos" style="--i:8" x="422.0" y="286" width="77.0" height="20" rx="4"></rect>
+<text class="val" x="507.0" y="301" text-anchor="start">+14</text>
+      </svg>
+      <div>
+        <div class="card rival">
+          <p class="stat">67% &rarr; 30%</p>
+          <p class="slab">repeated sentences caught, 1 vs 40 metrics</p>
+        </div>
+        <p class="caption" style="margin-top:1rem">Repetition, grammar and punctuation are
+          small, local edits. Cut-off endings and wrong numbers got easier to catch.</p>
       </div>
     </div>
-    <div class="mini-results">
-      <span>duplicate: &minus;37 points</span>
-      <span>agreement: &minus;21 points</span>
-      <span>punctuation: &minus;19 points</span>
+    <p class="source">Paired change in recovery, 1 vs 40 metrics. The three declines survive Holm correction.</p>
+  </div>
+</section>
+
+<section class="slide" id="s16" data-title="Every prompt is its own control">
+  <div class="wrap">
+    <p class="kicker">14 &middot; repeated measures</p>
+    <h2>Every prompt is<br>its own control</h2>
+    <div class="split" style="align-items:center">
+      <svg class="repeat" viewBox="0 0 560 230" role="img" aria-label="Illustration: each prompt is scored at all six metric counts, and the comparison is made within each prompt">
+<text class="axis" x="120" y="222" text-anchor="middle">1</text>
+<text class="axis" x="195" y="222" text-anchor="middle">5</text>
+<text class="axis" x="270" y="222" text-anchor="middle">10</text>
+<text class="axis" x="345" y="222" text-anchor="middle">20</text>
+<text class="axis" x="420" y="222" text-anchor="middle">30</text>
+<text class="axis" x="495" y="222" text-anchor="middle">40</text>
+<polyline class="trace" style="--i:0" points="120,60 195,58 270,62 345,66 420,70 495,78" pathLength="1"></polyline>
+<circle class="node" cx="120" cy="60" r="6"></circle>
+<circle class="node" cx="195" cy="58" r="6"></circle>
+<circle class="node" cx="270" cy="62" r="6"></circle>
+<circle class="node" cx="345" cy="66" r="6"></circle>
+<circle class="node" cx="420" cy="70" r="6"></circle>
+<circle class="node" cx="495" cy="78" r="6"></circle>
+<text class="axis" x="95" y="65" text-anchor="end">prompt 1</text>
+<polyline class="trace" style="--i:1" points="120,110 195,104 270,112 345,118 420,116 495,128" pathLength="1"></polyline>
+<circle class="node" cx="120" cy="110" r="6"></circle>
+<circle class="node" cx="195" cy="104" r="6"></circle>
+<circle class="node" cx="270" cy="112" r="6"></circle>
+<circle class="node" cx="345" cy="118" r="6"></circle>
+<circle class="node" cx="420" cy="116" r="6"></circle>
+<circle class="node" cx="495" cy="128" r="6"></circle>
+<text class="axis" x="95" y="115" text-anchor="end">prompt 2</text>
+<polyline class="trace" style="--i:2" points="120,150 195,152 270,148 345,156 420,162 495,170" pathLength="1"></polyline>
+<circle class="node" cx="120" cy="150" r="6"></circle>
+<circle class="node" cx="195" cy="152" r="6"></circle>
+<circle class="node" cx="270" cy="148" r="6"></circle>
+<circle class="node" cx="345" cy="156" r="6"></circle>
+<circle class="node" cx="420" cy="162" r="6"></circle>
+<circle class="node" cx="495" cy="170" r="6"></circle>
+<text class="axis" x="95" y="155" text-anchor="end">prompt 3</text>
+<polyline class="trace" style="--i:3" points="120,182 195,186 270,184 345,190 420,196 495,200" pathLength="1"></polyline>
+<circle class="node" cx="120" cy="182" r="6"></circle>
+<circle class="node" cx="195" cy="186" r="6"></circle>
+<circle class="node" cx="270" cy="184" r="6"></circle>
+<circle class="node" cx="345" cy="190" r="6"></circle>
+<circle class="node" cx="420" cy="196" r="6"></circle>
+<circle class="node" cx="495" cy="200" r="6"></circle>
+<text class="axis" x="95" y="187" text-anchor="end">prompt 4</text>
+<text class="axis" x="307" y="16" text-anchor="middle">same prompt, same edit, six sizes (illustrative)</text>
+      </svg>
+      <div>
+        <pre class="code" aria-label="Code from src/packing/analyze.py"><span class="file">src/packing/analyze.py</span>    paired = per_unit[[reference_size, comparison_size]].dropna()
+    <span class="k">if</span> paired.empty:
+        <span class="k">return</span> None
+    <span class="hl">diffs = (paired[comparison_size] - paired[reference_size]).rename("d")</span></pre>
+        <p class="caption">Each prompt is compared with itself at 1 and 40 metrics. Then each corruption type gets equal weight.</p>
+      </div>
     </div>
-    <p class="note">These three operation-level declines survive Holm correction.
-      Operation-specific effect sizes remain exploratory.</p>
   </div>
 </section>
 
-<section class="slide" id="s17" data-title="What this experiment does not prove">
+<section class="slide" id="s19" data-title="What I found">
   <div class="wrap">
-    <p class="kicker">13 &middot; the scope</p>
-    <h2>What this experiment<br>does not prove</h2>
-    <ul class="points">
-      <li><strong>Not a universal limit.</strong> One model, one corpus and one rubric.</li>
-      <li><strong>Not a pure attention test.</strong> Metric count, prompt length and schema size grow together.</li>
-      <li><strong>Not forty human labels.</strong> One known edit is measured while the other metrics add load.</li>
-      <li><strong>Not a position effect.</strong> The measured target stays first throughout the ladder.</li>
-    </ul>
-    <p class="note">This is a precise measurement of one production-shaped setup.</p>
-  </div>
-</section>
-
-<section class="slide" id="s19" data-title="What I will actually claim">
-  <div class="wrap">
-    <p class="kicker">14 &middot; the defensible claim</p>
-    <h2>What I will actually claim</h2>
-    <ul class="points">
-      <li><strong>At 5 metrics:</strong> no measurable loss, with a 46% observed cost reduction.</li>
-      <li><strong>At 40 metrics:</strong> recovery was 6.3 points lower.</li>
-      <li><strong>Between them:</strong> an exploratory fit suggests a gradual decline. I could not detect a cliff.</li>
-    </ul>
+    <p class="kicker">15 &middot; what I found</p>
+    <h2>What I found</h2>
+    <div class="findings">
+      <div><b>5</b><p>No measurable loss. <strong>46% cheaper.</strong></p></div>
+      <div><b>40</b><p>Recovery <strong>6.3 points lower</strong>, target still first.</p></div>
+      <div><b>1&ndash;40</b><p>A steady bend. <strong>No cliff.</strong> Small local edits suffer first.</p></div>
+    </div>
+    <img class="findings-illo" src="assets/star-orbit.png" alt="">
+    <p class="note">One model (gpt-5-mini), one dataset, one rubric style. The harness is built to rerun on yours.</p>
   </div>
 </section>
 
 <section class="slide" id="s20" data-title="If you run judges in production">
   <div class="wrap">
-    <p class="kicker">15 &middot; takeaway</p>
+    <img class="illo" src="assets/albert-hi.png" alt="">
+    <p class="kicker">16 &middot; takeaway</p>
     <h2>If you run judges in production</h2>
-    <ul class="points">
-      <li><strong>Test a small packed rubric first.</strong></li>
-      <li><strong>Retest quality</strong> as you add more.</li>
-      <li><strong>Anchor every scale point.</strong></li>
-      <li><strong>Report the tie rate</strong> next to accuracy.</li>
-    </ul>
-    <div class="qrrow" style="margin-top:1.6rem">
+    <div class="split">
+      <ul class="points">
+        <li><strong>Pack a small rubric.</strong> Five is a safe start.</li>
+        <li><strong>Retest as it grows</strong>, per metric type.</li>
+        <li><strong>Describe every score</strong> on the scale.</li>
+        <li><strong>Report ties</strong> next to accuracy.</li>
+      </ul>
+      <div>
+        <pre class="code" aria-label="Code from src/packing/cli.py"><span class="file">src/packing/cli.py</span>    results = compare(
+        claims, expected,
+        tolerance=FLOAT_TOLERANCE <span class="k">if</span> tolerance is None <span class="k">else</span> tolerance,
+    )
+    <span class="hl">failures = [r <span class="k">for</span> r <span class="k">in</span> results <span class="k">if</span> <span class="k">not</span> r.ok]</span></pre>
+        <pre class="term">$ uv run packing reproduce
+PASS: 40 published values recomputed from retained artifacts</pre>
+      </div>
+    </div>
+    <div class="qrrow" style="margin-top:1.4rem">
       <svg class="qr" viewBox="0 0 37 37" role="img" aria-label="QR code linking to https://github.com/sattensil/multi-metric-judge" shape-rendering="crispEdges"><rect width="37" height="37" fill="#e9eff3"/><path d="M0 0h7v1H0zM8 0h1v1H8zM10 0h2v1H10zM13 0h1v1H13zM15 0h1v1H15zM19 0h2v1H19zM22 0h2v1H22zM25 0h1v1H25zM30 0h7v1H30zM0 1h1v1H0zM6 1h1v1H6zM8 1h3v1H8zM12 1h1v1H12zM15 1h3v1H15zM23 1h2v1H23zM26 1h1v1H26zM30 1h1v1H30zM36 1h1v1H36zM0 2h1v1H0zM2 2h3v1H2zM6 2h1v1H6zM10 2h2v1H10zM13 2h3v1H13zM18 2h1v1H18zM21 2h1v1H21zM23 2h1v1H23zM26 2h3v1H26zM30 2h1v1H30zM32 2h3v1H32zM36 2h1v1H36zM0 3h1v1H0zM2 3h3v1H2zM6 3h1v1H6zM9 3h1v1H9zM11 3h3v1H11zM16 3h1v1H16zM18 3h1v1H18zM20 3h2v1H20zM23 3h3v1H23zM28 3h1v1H28zM30 3h1v1H30zM32 3h3v1H32zM36 3h1v1H36zM0 4h1v1H0zM2 4h3v1H2zM6 4h1v1H6zM9 4h1v1H9zM15 4h2v1H15zM19 4h2v1H19zM22 4h5v1H22zM30 4h1v1H30zM32 4h3v1H32zM36 4h1v1H36zM0 5h1v1H0zM6 5h1v1H6zM11 5h1v1H11zM13 5h1v1H13zM15 5h2v1H15zM19 5h1v1H19zM25 5h2v1H25zM28 5h1v1H28zM30 5h1v1H30zM36 5h1v1H36zM0 6h7v1H0zM8 6h1v1H8zM10 6h1v1H10zM12 6h1v1H12zM14 6h1v1H14zM16 6h1v1H16zM18 6h1v1H18zM20 6h1v1H20zM22 6h1v1H22zM24 6h1v1H24zM26 6h1v1H26zM28 6h1v1H28zM30 6h7v1H30zM9 7h1v1H9zM11 7h3v1H11zM16 7h1v1H16zM18 7h1v1H18zM22 7h4v1H22zM27 7h2v1H27zM1 8h1v1H1zM6 8h4v1H6zM11 8h5v1H11zM18 8h1v1H18zM22 8h1v1H22zM24 8h1v1H24zM26 8h1v1H26zM28 8h2v1H28zM35 8h2v1H35zM0 9h2v1H0zM3 9h1v1H3zM5 9h1v1H5zM7 9h2v1H7zM10 9h1v1H10zM15 9h5v1H15zM21 9h3v1H21zM25 9h2v1H25zM28 9h1v1H28zM30 9h2v1H30zM33 9h3v1H33zM1 10h2v1H1zM4 10h1v1H4zM6 10h1v1H6zM11 10h2v1H11zM14 10h2v1H14zM19 10h4v1H19zM25 10h4v1H25zM30 10h1v1H30zM32 10h1v1H32zM34 10h3v1H34zM0 11h6v1H0zM7 11h1v1H7zM12 11h8v1H12zM22 11h3v1H22zM26 11h1v1H26zM30 11h4v1H30zM35 11h2v1H35zM3 12h1v1H3zM6 12h1v1H6zM10 12h1v1H10zM12 12h1v1H12zM16 12h1v1H16zM18 12h1v1H18zM20 12h1v1H20zM23 12h2v1H23zM27 12h2v1H27zM30 12h2v1H30zM33 12h1v1H33zM0 13h2v1H0zM3 13h3v1H3zM7 13h1v1H7zM11 13h1v1H11zM14 13h1v1H14zM18 13h1v1H18zM23 13h1v1H23zM27 13h3v1H27zM31 13h1v1H31zM34 13h1v1H34zM0 14h1v1H0zM3 14h4v1H3zM8 14h2v1H8zM11 14h1v1H11zM13 14h2v1H13zM18 14h4v1H18zM24 14h1v1H24zM26 14h4v1H26zM33 14h1v1H33zM35 14h2v1H35zM0 15h3v1H0zM5 15h1v1H5zM7 15h7v1H7zM15 15h1v1H15zM17 15h1v1H17zM26 15h1v1H26zM29 15h1v1H29zM31 15h4v1H31zM0 16h1v1H0zM4 16h1v1H4zM6 16h1v1H6zM8 16h2v1H8zM11 16h4v1H11zM18 16h1v1H18zM21 16h1v1H21zM25 16h2v1H25zM28 16h3v1H28zM32 16h1v1H32zM34 16h2v1H34zM0 17h2v1H0zM4 17h2v1H4zM7 17h1v1H7zM9 17h1v1H9zM11 17h1v1H11zM13 17h2v1H13zM20 17h1v1H20zM22 17h1v1H22zM24 17h1v1H24zM27 17h3v1H27zM5 18h3v1H5zM9 18h2v1H9zM14 18h1v1H14zM16 18h1v1H16zM19 18h3v1H19zM23 18h1v1H23zM25 18h1v1H25zM27 18h1v1H27zM29 18h1v1H29zM32 18h1v1H32zM36 18h1v1H36zM0 19h1v1H0zM2 19h4v1H2zM8 19h2v1H8zM11 19h4v1H11zM18 19h1v1H18zM20 19h1v1H20zM22 19h1v1H22zM24 19h1v1H24zM29 19h5v1H29zM35 19h1v1H35zM6 20h1v1H6zM8 20h1v1H8zM10 20h1v1H10zM13 20h1v1H13zM16 20h1v1H16zM19 20h1v1H19zM22 20h1v1H22zM24 20h4v1H24zM30 20h6v1H30zM0 21h1v1H0zM4 21h1v1H4zM7 21h1v1H7zM10 21h1v1H10zM14 21h4v1H14zM20 21h4v1H20zM27 21h2v1H27zM31 21h4v1H31zM1 22h2v1H1zM6 22h4v1H6zM11 22h3v1H11zM16 22h3v1H16zM20 22h3v1H20zM27 22h1v1H27zM30 22h1v1H30zM35 22h2v1H35zM0 23h2v1H0zM4 23h2v1H4zM14 23h1v1H14zM20 23h1v1H20zM24 23h1v1H24zM26 23h2v1H26zM29 23h3v1H29zM33 23h1v1H33zM36 23h1v1H36zM1 24h2v1H1zM6 24h4v1H6zM11 24h1v1H11zM13 24h3v1H13zM17 24h2v1H17zM22 24h1v1H22zM25 24h2v1H25zM28 24h6v1H28zM36 24h1v1H36zM0 25h1v1H0zM2 25h1v1H2zM5 25h1v1H5zM8 25h2v1H8zM11 25h2v1H11zM15 25h2v1H15zM21 25h1v1H21zM23 25h1v1H23zM26 25h1v1H26zM28 25h3v1H28zM33 25h1v1H33zM0 26h1v1H0zM6 26h5v1H6zM14 26h3v1H14zM18 26h2v1H18zM24 26h3v1H24zM30 26h1v1H30zM35 26h2v1H35zM0 27h1v1H0zM2 27h3v1H2zM7 27h1v1H7zM9 27h2v1H9zM13 27h1v1H13zM17 27h1v1H17zM19 27h2v1H19zM22 27h2v1H22zM27 27h1v1H27zM29 27h1v1H29zM32 27h1v1H32zM34 27h2v1H34zM0 28h1v1H0zM2 28h1v1H2zM4 28h3v1H4zM8 28h1v1H8zM10 28h1v1H10zM14 28h1v1H14zM22 28h2v1H22zM25 28h2v1H25zM28 28h6v1H28zM35 28h1v1H35zM8 29h1v1H8zM10 29h2v1H10zM15 29h2v1H15zM18 29h6v1H18zM28 29h1v1H28zM32 29h2v1H32zM0 30h7v1H0zM8 30h1v1H8zM16 30h2v1H16zM23 30h1v1H23zM25 30h1v1H25zM28 30h1v1H28zM30 30h1v1H30zM32 30h5v1H32zM0 31h1v1H0zM6 31h1v1H6zM11 31h2v1H11zM14 31h1v1H14zM17 31h3v1H17zM21 31h1v1H21zM24 31h1v1H24zM26 31h3v1H26zM32 31h2v1H32zM0 32h1v1H0zM2 32h3v1H2zM6 32h1v1H6zM9 32h3v1H9zM14 32h1v1H14zM16 32h1v1H16zM20 32h13v1H20zM34 32h1v1H34zM36 32h1v1H36zM0 33h1v1H0zM2 33h3v1H2zM6 33h1v1H6zM11 33h4v1H11zM16 33h3v1H16zM20 33h1v1H20zM22 33h1v1H22zM26 33h3v1H26zM30 33h2v1H30zM33 33h1v1H33zM0 34h1v1H0zM2 34h3v1H2zM6 34h1v1H6zM9 34h3v1H9zM14 34h5v1H14zM20 34h6v1H20zM28 34h2v1H28zM31 34h1v1H31zM34 34h1v1H34zM36 34h1v1H36zM0 35h1v1H0zM6 35h1v1H6zM8 35h1v1H8zM12 35h1v1H12zM16 35h1v1H16zM18 35h1v1H18zM22 35h2v1H22zM28 35h1v1H28zM30 35h1v1H30zM33 35h1v1H33zM36 35h1v1H36zM0 36h7v1H0zM12 36h1v1H12zM15 36h6v1H15zM24 36h1v1H24zM28 36h1v1H28zM33 36h1v1H33zM36 36h1v1H36z" fill="#080b0f"/></svg>
       <div class="qrtext">
         <p class="note" style="border-color:var(--lime);margin:0"><b style="color:var(--lime)">Reproduce it.</b>
-          Every number here recomputes from retained calls, no API key:
-          <code>packing reproduce</code></p>
+          Data, code and every call are in the repo.</p>
         <p class="qrurl">github.com/sattensil/multi-metric-judge</p>
         <p class="signoff"><img src="assets/launchdarkly-mark-white.svg" alt=""> Scarlett Attensil &middot; LaunchDarkly</p>
       </div>
     </div>
   </div>
 </section>
-
 </main>
 <nav id="dots" aria-label="Slide navigation"></nav>
 
@@ -751,24 +927,6 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
   });
   var buttons = Array.prototype.slice.call(dots.children);
 
-  var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  function countUp(slide) {
-    slide.querySelectorAll(".move .count").forEach(function (el) {
-      var final = el.getAttribute("data-final") || el.textContent;
-      el.setAttribute("data-final", final);
-      if (calm) { el.textContent = final; return; }
-      var target = parseInt(final, 10);
-      var startedAt = null;
-      function step(t) {
-        if (startedAt === null) { startedAt = t; }
-        var p = Math.min(1, (t - startedAt) / 1100);
-        el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
-        if (p < 1) { window.requestAnimationFrame(step); }
-      }
-      window.requestAnimationFrame(step);
-    });
-  }
 
   // Restarting the class restarts the CSS animations, so revisiting a slide replays it.
   function activate(i) {
@@ -777,14 +935,7 @@ table.data td.num.up{color:var(--lime)} table.data td.num.down{color:var(--warn)
     slide.classList.remove("is-active");
     void slide.offsetWidth;
     slide.classList.add("is-active");
-    countUp(slide);
   }
-
-  window.addEventListener("beforeprint", function () {
-    document.querySelectorAll(".move .count[data-final]").forEach(function (el) {
-      el.textContent = el.getAttribute("data-final");
-    });
-  });
 
   function paint(i) {
     if (i !== current || !slides[i].classList.contains("is-active")) { activate(i); }

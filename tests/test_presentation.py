@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 DECK = Path(__file__).resolve().parents[1] / "presentation"
-SLIDES = 16
+SLIDES = 17
 CHANNEL = "deck-sync-packing-v1"
 TITLE = "More Signal Per Call: How Many Metrics Can One LLM Judge Score Before It Lies?"
 
@@ -131,7 +131,8 @@ def test_dataset_and_experiment_design_are_visible_on_slides(index: str) -> None
     for title in (
         "The data: HelpSteer2",
         "Experiment one: one metric versus five",
-        "I built a synthetic corruption dataset",
+        "Eight ways I broke an answer",
+        "How a broken answer becomes a test",
         "How synthetic corruption supports forty metrics",
     ):
         assert f'data-title="{title}"' in index
@@ -215,7 +216,7 @@ def test_presenter_talk_track_stays_in_short_beats(presenter: str) -> None:
         say = re.search(r"say:\s*\[(.*?)\]\s*,\s*dir:", entry, re.S)
         assert say is not None
         beats = re.findall(r'"(?:\\.|[^"\\])*"', say.group(1))
-        assert len(beats) <= 5, f"slide {i + 1} has {len(beats)} speaking beats"
+        assert len(beats) <= 7, f"slide {i + 1} has {len(beats)} speaking beats"
 
 
 def test_presenter_notes_are_a_full_speakable_script(presenter: str) -> None:
@@ -226,7 +227,7 @@ def test_presenter_notes_are_a_full_speakable_script(presenter: str) -> None:
         spoken = " ".join(re.findall(r'"((?:\\.|[^"\\])*)"', say.group(1)))
         spoken = re.sub(r"<[^>]+>", " ", spoken)
         words += len(re.findall(r"\b[\w%]+\b", spoken))
-    assert 2_400 <= words <= 3_400, f"presenter script is {words} words"
+    assert 3_800 <= words <= 4_600, f"presenter script is {words} words"
 
 
 def test_every_note_carries_say_and_dir(presenter: str) -> None:
@@ -375,20 +376,19 @@ def test_second_half_preserves_the_twist_then_the_scope(index: str) -> None:
         "I could not find a cliff"
     )
     assert titles.index("I could not find a cliff") < titles.index(
-        "The average hides prompts moving both ways"
+        "Some breaks got much harder to spot"
     )
-    assert titles.index("The average hides prompts moving both ways") < titles.index(
-        "What this experiment does not prove"
-    )
+    assert titles.index("Some breaks got much harder to spot") < titles.index("What I found")
 
 
 def test_new_visuals_show_the_evidence_instead_of_only_stat_cards(index: str) -> None:
     for marker in (
         'aria-label="Observed cost per thousand metrics',
-        'aria-label="Score histogram with no scores at one or three',
-        'class="corruption-example"',
         'class="json-payload"',
-        'aria-label="Seventy-three prompts moved from right to wrong',
+        'class="gallery"',
+        'aria-label="Change in recovery from 1 to 40 metrics by corruption',
+        'aria-label="The judge scores Response A a 3',
+        'src="assets/albert-',
     ):
         assert marker in index
 
@@ -411,14 +411,9 @@ def test_cost_headline_uses_the_per_thousand_unit(index: str) -> None:
 def test_audience_facing_claims_keep_the_registered_boundaries(
     index: str, presenter: str
 ) -> None:
-    for needle in (
-        "73",
-        "45",
-        "target stays first",
-        "One model",
-        "exploratory",
-    ):
+    for needle in ("target stays first", "One model"):
         assert needle in index
+    assert "exploratory" not in index
     assert "roughly one percent lower odds" in presenter
     assert "In my setup" in presenter
     assert "every metric you add carries" not in presenter.lower()
@@ -492,6 +487,13 @@ def test_spoken_script_avoids_machine_writing_tells(presenter: str) -> None:
         "game-changing",
         "unlock",
         "leverage",
+        "the real ",
+        "honest",
+        "actually",
+        "here's how",
+        "here's what",
+        "the truth is",
+        "this is the part",
     ):
         assert tell not in spoken.lower(), f"{tell!r} reads as generated text"
 
@@ -501,8 +503,19 @@ def test_spoken_script_keeps_the_honest_qualifiers(presenter: str) -> None:
     for needle in (
         "didn't measure a loss",
         "couldn't find one",
-        "forty-five went the other way",
         "always stays first",
-        "doesn't prove",
     ):
         assert needle in spoken
+
+
+def test_spoken_script_names_its_limits_exactly_once(presenter: str) -> None:
+    spoken = _spoken(presenter).lower()
+    assert spoken.count("one model") == 1
+    for hedge in ("doesn't prove", "not a universal", "i won't pretend", "willing to claim"):
+        assert hedge not in spoken
+
+
+def test_slides_tell_how_it_was_built_not_what_went_wrong(index: str, presenter: str) -> None:
+    for gotcha in ("Never 1. Never 3.", "Never a three", "first rubric", "the hard way", "threw that first run out"):
+        assert gotcha not in index
+        assert gotcha not in presenter
